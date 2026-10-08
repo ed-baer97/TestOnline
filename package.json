@@ -8,14 +8,6 @@
     "build": "npm run build --prefix client",
     "start": "npm run start --prefix server"
   },
-  "dependencies": {
-    "cookie-parser": "^1.4.7",
-    "dotenv": "^16.6.1",
-    "exceljs": "^4.4.0",
-    "express": "^4.21.2",
-    "pg": "^8.23.1",
-    "socket.io": "^4.8.1"
-  },
   "devDependencies": {
     "concurrently": "^9.1.2"
   },

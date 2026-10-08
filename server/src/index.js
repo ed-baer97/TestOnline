@@ -329,10 +329,12 @@ export function createApp() {
   return { app, httpServer, io }
 }
 
-const isMain = !process.env.VERCEL && process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
-if (isMain) {
-  const { httpServer } = createApp()
-  httpServer.listen(PORT, '0.0.0.0', () => {
+const runtime = createApp()
+export default runtime.app
+
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+if (isMain && !process.env.VERCEL) {
+  runtime.httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`TestOnline API http://localhost:${PORT}`)
   })
 }
