@@ -105,6 +105,19 @@ export function createApp() {
     maxHttpBufferSize: 1e5,
   })
 
+  if (process.env.VERCEL) {
+    app.use((req, _res, next) => {
+      const url = req.url || '/'
+      if (url.startsWith('/socket.io') || url.startsWith('/api/') || url === '/api' || url.startsWith('/api?')) return next()
+      const query = url.indexOf('?')
+      const path = query === -1 ? url : url.slice(0, query)
+      const search = query === -1 ? '' : url.slice(query)
+      const suffix = path.startsWith('/') ? path : `/${path}`
+      req.url = `/api${suffix}${search}`
+      next()
+    })
+  }
+
   app.use(cookieParser())
   app.use(express.json({ limit: '256kb' }))
 
@@ -333,7 +346,7 @@ const runtime = createApp()
 export default runtime.app
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
-if (isMain && !process.env.VERCEL) {
+if (isMain || process.env.VERCEL === '1') {
   runtime.httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`TestOnline API http://localhost:${PORT}`)
   })
