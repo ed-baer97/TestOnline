@@ -1,0 +1,320 @@
+import crypto from 'node:crypto'
+import os from 'node:os'
+import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import cookieParser from 'cookie-parser'
+import dotenv from 'dotenv'
+import express from 'express'
+import { createServer } from 'node:http'
+import { Server } from 'socket.io'
+import { authenticate, createQuiz, deleteQuiz, getQuiz, getUser, listQuizzes, listResults, quizStats, registerUser, statsOverview, updateQuiz } from './db.js'
+import { normalizeAccount, normalizeQuiz } from './domain.js'
+import { questionsFromXlsx, templateWorkbook } from './excel.js'
+import {
+  advance,
+  createRoom,
+  getRoom,
+  joinPlayer,
+  markOffline,
+  publicInfo,
+  push,
+  submitAnswer,
+  watch,
+} from './rooms.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+dotenv.config({ path: path.join(__dirname, '..', '.env') })
+
+const SECRET = process.env.SESSION_SECRET || 'testonline-dev-secret'
+const PORT = Number(process.env.PORT || 3001)
+
+function signSession(userId) {
+  const data = Buffer.from(JSON.stringify({ userId, exp: Date.now() + 14 * 24 * 60 * 60 * 1000 })).toString('base64url')
+  const sig = crypto.createHmac('sha256', SECRET).update(data).digest('base64url')
+  return `${data}.${sig}`
+}
+
+function readSession(token) {
+  if (!token || !token.includes('.')) return null
+  const [data, sig] = token.split('.')
+  const expected = crypto.createHmac('sha256', SECRET).update(data).digest('base64url')
+  const left = Buffer.from(sig)
+  const right = Buffer.from(expected)
+  if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) return null
+  try {
+    const payload = JSON.parse(Buffer.from(data, 'base64url').toString())
+    if (!payload?.exp || payload.exp < Date.now()) return null
+    return payload
+  } catch {
+    return null
+  }
+}
+
+function requireAdmin(req, res, next) {
+  const session = readSession(req.cookies.session)
+  if (!session?.userId) {
+    res.status(401).json({ error: 'Нужен вход' })
+    return
+  }
+  req.userId = session.userId
+  next()
+}
+
+function sendSession(res, user, status = 200) {
+  res.cookie('session', signSession(user.id), { httpOnly: true, sameSite: 'lax', path: '/' })
+  res.status(status).json({ ok: true, login: user.login })
+}
+function lanAddresses() {
+  const found = []
+  for (const nets of Object.values(os.networkInterfaces())) {
+    for (const net of nets || []) {
+      const family = net.family === 'IPv4' || net.family === 4
+      if (!family || net.internal) continue
+      found.push(net.address)
+    }
+  }
+  const rank = (ip) => {
+    if (ip.startsWith('192.168.')) return 3
+    if (ip.startsWith('10.')) return 2
+    if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(ip)) return 1
+    return 0
+  }
+  return found.sort((a, b) => rank(b) - rank(a))
+}
+
+export function createApp() {
+  const app = express()
+  const httpServer = createServer(app)
+  const io = new Server(httpServer, {
+    pingInterval: 10000,
+    pingTimeout: 20000,
+    maxHttpBufferSize: 1e5,
+  })
+
+  app.use(cookieParser())
+  app.use(express.json({ limit: '256kb' }))
+
+  app.get('/api/health', (_req, res) => {
+    res.json({ ok: true })
+  })
+
+  app.get('/api/network', (_req, res) => {
+    res.json({ addresses: lanAddresses() })
+  })
+
+  app.post('/api/register', (req, res) => {
+    try {
+      const user = registerUser(normalizeAccount(req.body || {}))
+      sendSession(res, user, 201)
+    } catch (error) {
+      res.status(error.status || 400).json({ error: error.message })
+    }
+  })
+
+  app.post('/api/login', (req, res) => {
+    const user = authenticate(req.body?.login, req.body?.password)
+    if (!user) {
+      res.status(401).json({ error: 'Неверный логин или пароль' })
+      return
+    }
+    sendSession(res, user)
+  })
+
+  app.post('/api/logout', (_req, res) => {
+    res.clearCookie('session', { path: '/' })
+    res.json({ ok: true })
+  })
+
+  app.get('/api/me', (req, res) => {
+    const session = readSession(req.cookies.session)
+    const user = session?.userId ? getUser(session.userId) : null
+    res.json(user ? { ok: true, login: user.login } : { ok: false })
+  })
+
+  app.get('/api/stats', requireAdmin, (req, res) => {
+    res.json(statsOverview(req.userId))
+  })
+
+  app.get('/api/quizzes/:id/stats', requireAdmin, (req, res) => {
+    const stats = quizStats(req.userId, req.params.id)
+    if (!stats) {
+      res.status(404).json({ error: 'Квиз не найден' })
+      return
+    }
+    res.json(stats)
+  })
+
+  app.get('/api/template', requireAdmin, async (_req, res) => {
+    const buffer = await templateWorkbook()
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', 'attachment; filename="testonline-shablon.xlsx"')
+    res.send(Buffer.from(buffer))
+  })
+
+  app.get('/api/quizzes', requireAdmin, (req, res) => {
+    res.json({ quizzes: listQuizzes(req.userId) })
+  })
+
+  app.get('/api/quizzes/:id', requireAdmin, (req, res) => {
+    const quiz = getQuiz(req.params.id, req.userId)
+    if (!quiz) {
+      res.status(404).json({ error: 'Квиз не найден' })
+      return
+    }
+    res.json(quiz)
+  })
+
+  app.post('/api/import', requireAdmin, express.raw({ type: 'application/octet-stream', limit: '2mb' }), async (req, res) => {
+    try {
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+        res.status(400).json({ error: 'Файл пустой' })
+        return
+      }
+      res.json({ questions: await questionsFromXlsx(req.body) })
+    } catch (error) {
+      res.status(error.status || 400).json({
+        error: error.status ? error.message : 'Не удалось прочитать файл. Нужен Excel .xlsx',
+      })
+    }
+  })
+
+  app.post('/api/quizzes', requireAdmin, (req, res) => {
+    try {
+      res.status(201).json(createQuiz(req.userId, normalizeQuiz(req.body)))
+    } catch (error) {
+      res.status(400).json({ error: error.message })
+    }
+  })
+
+  app.put('/api/quizzes/:id', requireAdmin, (req, res) => {
+    try {
+      const quiz = updateQuiz(req.params.id, req.userId, normalizeQuiz(req.body))
+      if (!quiz) {
+        res.status(404).json({ error: 'Квиз не найден' })
+        return
+      }
+      res.json(quiz)
+    } catch (error) {
+      res.status(400).json({ error: error.message })
+    }
+  })
+
+  app.delete('/api/quizzes/:id', requireAdmin, (req, res) => {
+    if (!deleteQuiz(req.params.id, req.userId)) {
+      res.status(404).json({ error: 'Квиз не найден' })
+      return
+    }
+    res.json({ ok: true })
+  })
+
+  app.get('/api/results', requireAdmin, (req, res) => {
+    res.json({ results: listResults(req.userId) })
+  })
+
+  app.post('/api/rooms', requireAdmin, (req, res) => {
+    const quiz = getQuiz(req.body?.quizId, req.userId)
+    if (!quiz) {
+      res.status(404).json({ error: 'Квиз не найден' })
+      return
+    }
+    const room = createRoom(quiz)
+    res.status(201).json({ code: room.code, hostToken: room.hostToken, title: room.quiz.title })
+  })
+
+  app.get('/api/rooms/:code', (req, res) => {
+    const room = getRoom(req.params.code)
+    if (!room) {
+      res.status(404).json({ error: 'Комната не найдена' })
+      return
+    }
+    res.json(publicInfo(room))
+  })
+
+  io.on('connection', (socket) => {
+    watch(socket)
+
+    socket.on('host:join', ({ code, hostToken } = {}, ack) => {
+      const room = getRoom(code)
+      if (!room || room.hostToken !== hostToken) {
+        ack?.({ error: 'Комната не найдена или сессия ведущего устарела' })
+        return
+      }
+      socket.data.role = 'host'
+      socket.data.code = room.code
+      socket.join(room.code)
+      ack?.({ ok: true })
+      push(io, room)
+    })
+
+    socket.on('player:join', ({ code, name, playerToken } = {}, ack) => {
+      const room = getRoom(code)
+      if (!room) {
+        ack?.({ error: 'Комната не найдена' })
+        return
+      }
+      const result = joinPlayer(room, { name, playerToken })
+      if (result.error) {
+        ack?.({ error: result.error })
+        return
+      }
+      result.player.online = true
+      result.player.socketId = socket.id
+      socket.data.role = 'player'
+      socket.data.code = room.code
+      socket.data.playerId = result.player.id
+      socket.join(room.code)
+      ack?.({ ok: true, name: result.player.name })
+      push(io, room)
+    })
+
+    socket.on('host:advance', (ack) => {
+      const room = getRoom(socket.data.code)
+      if (socket.data.role !== 'host' || !room) {
+        ack?.({ error: 'Нет доступа' })
+        return
+      }
+      if (!advance(room, io)) {
+        ack?.({ error: 'Сейчас это действие недоступно' })
+        return
+      }
+      ack?.({ ok: true, status: room.status })
+      push(io, room)
+    })
+
+    socket.on('player:answer', ({ optionIndex } = {}, ack) => {
+      const room = getRoom(socket.data.code)
+      if (socket.data.role !== 'player' || !room) {
+        ack?.({ error: 'Вы не в комнате' })
+        return
+      }
+      const result = submitAnswer(room, socket.data.playerId, optionIndex)
+      ack?.(result)
+      if (result.ok) push(io, room)
+    })
+
+    socket.on('disconnect', () => {
+      const room = getRoom(socket.data.code)
+      if (!room || socket.data.role !== 'player') return
+      if (markOffline(room, socket.data.playerId, socket.id)) push(io, room)
+    })
+  })
+
+  const clientDist = path.join(__dirname, '..', '..', 'client', 'dist')
+  app.use(express.static(clientDist))
+  app.get(/^(?!\/api|\/socket\.io).*/, (req, res, next) => {
+    if (req.method !== 'GET') return next()
+    res.sendFile(path.join(clientDist, 'index.html'), (error) => {
+      if (error) next()
+    })
+  })
+
+  return { app, httpServer, io }
+}
+
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+if (isMain) {
+  const { httpServer } = createApp()
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`TestOnline API http://localhost:${PORT}`)
+  })
+}
