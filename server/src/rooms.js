@@ -263,7 +263,7 @@ function finish(room) {
   room.podiumAt = Date.now()
   if (room.saved) return
   room.saved = true
-  saveResult({
+  void saveResult({
     userId: room.quiz.userId,
     quizId: room.quiz.id,
     quizTitle: room.quiz.title,
@@ -275,6 +275,9 @@ function finish(room) {
       rank: entry.rank,
       answers: room.players.get(entry.id)?.answers || [],
     })),
+  }).catch((error) => {
+    room.saved = false
+    console.error('Не удалось сохранить итог игры', error)
   })
 }
 

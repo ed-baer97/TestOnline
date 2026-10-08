@@ -10,8 +10,8 @@ process.env.SESSION_SECRET = 'test-secret'
 
 test('сводка считает запуски, средний балл и долю верных ответов', async () => {
   const { createQuiz, quizStats, registerUser, saveResult, statsOverview } = await import('./db.js')
-  const user = registerUser({ login: 'stat', password: 'secret1' })
-  const quiz = createQuiz(user.id, {
+  const user = await registerUser({ login: 'stat', password: 'secret1' })
+  const quiz = await createQuiz(user.id, {
     title: 'География',
     questions: [{
       id: 'q1',
@@ -21,7 +21,7 @@ test('сводка считает запуски, средний балл и д�
       options: [{ text: 'Париж' }, { text: 'Рим' }],
     }],
   })
-  saveResult({
+  await saveResult({
     userId: user.id,
     quizId: quiz.id,
     quizTitle: quiz.title,
@@ -43,7 +43,7 @@ test('сводка считает запуски, средний балл и д�
     ],
   })
 
-  const overview = statsOverview(user.id)
+  const overview = await statsOverview(user.id)
   assert.equal(overview.runs, 1)
   assert.equal(overview.participants, 2)
   assert.equal(overview.averageScore, 500)
@@ -51,11 +51,11 @@ test('сводка считает запуски, средний балл и д�
   assert.equal(overview.history.length, 1)
   assert.equal(overview.history[0].title, 'География')
 
-  const detail = quizStats(user.id, quiz.id)
+  const detail = await quizStats(user.id, quiz.id)
   assert.equal(detail.questions[0].rate, 50)
   assert.equal(detail.questions[0].correct, 1)
   assert.equal(detail.sessions[0].players[1].answers[0].chosen, 'Рим')
   assert.equal(detail.sessions[0].playerCount, 2)
   assert.equal(detail.sessions[0].startedAt, '2026-10-09T08:30:00.000Z')
-  assert.equal(quizStats(user.id, 'missing'), null)
+  assert.equal(await quizStats(user.id, 'missing'), null)
 })

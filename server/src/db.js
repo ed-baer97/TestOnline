@@ -2,48 +2,113 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import dotenv from 'dotenv'
 import { DatabaseSync } from 'node:sqlite'
 import { hashPassword, verifyPassword } from './passwords.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const dataDir = path.join(__dirname, '..', 'data')
-const dbFile = process.env.DB_PATH || path.join(dataDir, 'testonline.sqlite')
-fs.mkdirSync(path.dirname(dbFile), { recursive: true })
+dotenv.config({ path: path.join(__dirname, '..', '.env') })
 
-const db = new DatabaseSync(dbFile)
-db.exec(`
-  PRAGMA journal_mode = WAL;
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    login TEXT NOT NULL COLLATE NOCASE UNIQUE,
-    password_hash TEXT NOT NULL,
-    created_at TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS quizzes (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    questions TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS results (
-    id TEXT PRIMARY KEY,
-    quiz_id TEXT,
-    quiz_title TEXT NOT NULL,
-    code TEXT NOT NULL,
-    players TEXT NOT NULL,
-    finished_at TEXT NOT NULL
-  );
-`)
+const postgresUrl = process.env.DB_PATH
+  ? ''
+  : (process.env.POSTGRES_URL || process.env.DATABASE_URL || '')
 
-function ensureColumn(table, column, statement) {
-  const columns = db.prepare(`PRAGMA table_info(${table})`).all()
-  if (!columns.some((item) => item.name === column)) db.exec(statement)
+function toPg(sql) {
+  let index = 0
+  return sql.replace(/\?/g, () => `$${++index}`)
 }
 
-ensureColumn('quizzes', 'user_id', 'ALTER TABLE quizzes ADD COLUMN user_id TEXT')
-ensureColumn('results', 'user_id', 'ALTER TABLE results ADD COLUMN user_id TEXT')
-ensureColumn('results', 'started_at', 'ALTER TABLE results ADD COLUMN started_at TEXT')
+function isUnique(error) {
+  return error?.code === '23505' || String(error?.message || '').includes('UNIQUE')
+}
+
+async function openDatabase() {
+  if (!postgresUrl) return openSqlite()
+  const { Pool } = await import('pg')
+  const local = /localhost|127\.0\.0\.1/.test(postgresUrl)
+  const pool = new Pool({
+    connectionString: postgresUrl,
+    max: 3,
+    ssl: local ? false : { rejectUnauthorized: false },
+  })
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      login TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS users_login_lower ON users (lower(login));
+    CREATE TABLE IF NOT EXISTS quizzes (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      title TEXT NOT NULL,
+      questions TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS results (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      quiz_id TEXT,
+      quiz_title TEXT NOT NULL,
+      code TEXT NOT NULL,
+      players TEXT NOT NULL,
+      started_at TEXT,
+      finished_at TEXT NOT NULL
+    );
+  `)
+  return {
+    get: async (sql, ...params) => (await pool.query(toPg(sql), params)).rows[0],
+    all: async (sql, ...params) => (await pool.query(toPg(sql), params)).rows,
+    run: async (sql, ...params) => ({ changes: (await pool.query(toPg(sql), params)).rowCount }),
+  }
+}
+
+function openSqlite() {
+  const dataDir = path.join(__dirname, '..', 'data')
+  const dbFile = process.env.DB_PATH || path.join(dataDir, 'testonline.sqlite')
+  fs.mkdirSync(path.dirname(dbFile), { recursive: true })
+  const db = new DatabaseSync(dbFile)
+  db.exec(`
+    PRAGMA journal_mode = WAL;
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      login TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS quizzes (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      questions TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS results (
+      id TEXT PRIMARY KEY,
+      quiz_id TEXT,
+      quiz_title TEXT NOT NULL,
+      code TEXT NOT NULL,
+      players TEXT NOT NULL,
+      finished_at TEXT NOT NULL
+    );
+  `)
+  const ensureColumn = (table, column, statement) => {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all()
+    if (!columns.some((item) => item.name === column)) db.exec(statement)
+  }
+  ensureColumn('quizzes', 'user_id', 'ALTER TABLE quizzes ADD COLUMN user_id TEXT')
+  ensureColumn('results', 'user_id', 'ALTER TABLE results ADD COLUMN user_id TEXT')
+  ensureColumn('results', 'started_at', 'ALTER TABLE results ADD COLUMN started_at TEXT')
+  return {
+    get: async (sql, ...params) => db.prepare(sql).get(...params),
+    all: async (sql, ...params) => db.prepare(sql).all(...params),
+    run: async (sql, ...params) => db.prepare(sql).run(...params),
+  }
+}
+
+const db = await openDatabase()
 
 const DEMO = [
   {
@@ -89,10 +154,11 @@ function mapQuiz(row) {
   }
 }
 
-function insertDemo(userId) {
+async function insertDemo(userId) {
   const now = new Date().toISOString()
   const questions = DEMO.map((question) => ({ ...question, id: crypto.randomUUID() }))
-  db.prepare('INSERT INTO quizzes (id, user_id, title, questions, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+  await db.run(
+    'INSERT INTO quizzes (id, user_id, title, questions, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
     crypto.randomUUID(),
     userId,
     'Демо: общий кругозор',
@@ -102,18 +168,19 @@ function insertDemo(userId) {
   )
 }
 
-export function registerUser({ login, password }) {
-  const first = db.prepare('SELECT COUNT(*) AS n FROM users').get().n === 0
+export async function registerUser({ login, password }) {
+  const first = Number((await db.get('SELECT COUNT(*) AS n FROM users')).n) === 0
   const id = crypto.randomUUID()
   try {
-    db.prepare('INSERT INTO users (id, login, password_hash, created_at) VALUES (?, ?, ?, ?)').run(
+    await db.run(
+      'INSERT INTO users (id, login, password_hash, created_at) VALUES (?, ?, ?, ?)',
       id,
       login,
       hashPassword(password),
       new Date().toISOString(),
     )
   } catch (error) {
-    if (String(error.message).includes('UNIQUE')) {
+    if (isUnique(error)) {
       const conflict = new Error('Такой логин уже занят')
       conflict.status = 409
       throw conflict
@@ -121,27 +188,28 @@ export function registerUser({ login, password }) {
     throw error
   }
   if (first) {
-    db.prepare('UPDATE quizzes SET user_id = ? WHERE user_id IS NULL').run(id)
-    db.prepare('UPDATE results SET user_id = ? WHERE user_id IS NULL').run(id)
+    await db.run('UPDATE quizzes SET user_id = ? WHERE user_id IS NULL', id)
+    await db.run('UPDATE results SET user_id = ? WHERE user_id IS NULL', id)
   }
-  const owned = db.prepare('SELECT COUNT(*) AS n FROM quizzes WHERE user_id = ?').get(id)
-  if (owned.n === 0) insertDemo(id)
+  const owned = await db.get('SELECT COUNT(*) AS n FROM quizzes WHERE user_id = ?', id)
+  if (Number(owned.n) === 0) await insertDemo(id)
   return { id, login }
 }
 
-export function authenticate(login, password) {
-  const row = db.prepare('SELECT id, login, password_hash FROM users WHERE login = ?').get(String(login || '').trim())
+export async function authenticate(login, password) {
+  const row = await db.get('SELECT id, login, password_hash FROM users WHERE lower(login) = lower(?)', String(login || '').trim())
   if (!row || !verifyPassword(password, row.password_hash)) return null
   return { id: row.id, login: row.login }
 }
 
-export function getUser(id) {
-  const row = db.prepare('SELECT id, login FROM users WHERE id = ?').get(id)
+export async function getUser(id) {
+  const row = await db.get('SELECT id, login FROM users WHERE id = ?', id)
   return row ? { id: row.id, login: row.login } : null
 }
 
-export function listQuizzes(userId) {
-  return db.prepare('SELECT id, title, questions, updated_at FROM quizzes WHERE user_id = ? ORDER BY updated_at DESC').all(userId).map((row) => ({
+export async function listQuizzes(userId) {
+  const rows = await db.all('SELECT id, title, questions, updated_at FROM quizzes WHERE user_id = ? ORDER BY updated_at DESC', userId)
+  return rows.map((row) => ({
     id: row.id,
     title: row.title,
     questionCount: JSON.parse(row.questions).length,
@@ -149,15 +217,16 @@ export function listQuizzes(userId) {
   }))
 }
 
-export function getQuiz(id, userId) {
-  const row = db.prepare('SELECT * FROM quizzes WHERE id = ? AND user_id = ?').get(id, userId)
+export async function getQuiz(id, userId) {
+  const row = await db.get('SELECT * FROM quizzes WHERE id = ? AND user_id = ?', id, userId)
   return row ? mapQuiz(row) : null
 }
 
-export function createQuiz(userId, quiz) {
+export async function createQuiz(userId, quiz) {
   const now = new Date().toISOString()
   const id = crypto.randomUUID()
-  db.prepare('INSERT INTO quizzes (id, user_id, title, questions, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+  await db.run(
+    'INSERT INTO quizzes (id, user_id, title, questions, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
     id,
     userId,
     quiz.title,
@@ -168,9 +237,10 @@ export function createQuiz(userId, quiz) {
   return getQuiz(id, userId)
 }
 
-export function updateQuiz(id, userId, quiz) {
+export async function updateQuiz(id, userId, quiz) {
   const now = new Date().toISOString()
-  const result = db.prepare('UPDATE quizzes SET title = ?, questions = ?, updated_at = ? WHERE id = ? AND user_id = ?').run(
+  const result = await db.run(
+    'UPDATE quizzes SET title = ?, questions = ?, updated_at = ? WHERE id = ? AND user_id = ?',
     quiz.title,
     JSON.stringify(quiz.questions),
     now,
@@ -181,13 +251,14 @@ export function updateQuiz(id, userId, quiz) {
   return getQuiz(id, userId)
 }
 
-export function deleteQuiz(id, userId) {
-  const result = db.prepare('DELETE FROM quizzes WHERE id = ? AND user_id = ?').run(id, userId)
+export async function deleteQuiz(id, userId) {
+  const result = await db.run('DELETE FROM quizzes WHERE id = ? AND user_id = ?', id, userId)
   return result.changes > 0
 }
 
-export function saveResult({ userId, quizId, quizTitle, code, players, startedAt }) {
-  db.prepare('INSERT INTO results (id, user_id, quiz_id, quiz_title, code, players, started_at, finished_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+export async function saveResult({ userId, quizId, quizTitle, code, players, startedAt }) {
+  await db.run(
+    'INSERT INTO results (id, user_id, quiz_id, quiz_title, code, players, started_at, finished_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     crypto.randomUUID(),
     userId,
     quizId,
@@ -217,11 +288,11 @@ function averageScore(players) {
   return Math.round(total / players.length)
 }
 
-function loadResults(userId, quizId) {
+async function loadResults(userId, quizId) {
   const sql = quizId
     ? 'SELECT id, quiz_id, quiz_title, code, players, started_at, finished_at FROM results WHERE user_id = ? AND quiz_id = ? ORDER BY finished_at DESC'
     : 'SELECT id, quiz_id, quiz_title, code, players, started_at, finished_at FROM results WHERE user_id = ? ORDER BY finished_at DESC'
-  const rows = quizId ? db.prepare(sql).all(userId, quizId) : db.prepare(sql).all(userId)
+  const rows = quizId ? await db.all(sql, userId, quizId) : await db.all(sql, userId)
   return rows.map(mapResult)
 }
 
@@ -239,9 +310,9 @@ function summarizeResult(result) {
   }
 }
 
-export function statsOverview(userId) {
-  const quizzes = listQuizzes(userId)
-  const results = loadResults(userId)
+export async function statsOverview(userId) {
+  const quizzes = await listQuizzes(userId)
+  const results = await loadResults(userId)
   const scores = results.flatMap((result) => result.players.map((player) => Number(player.score) || 0))
   const byQuiz = new Map(quizzes.map((quiz) => [quiz.id, {
     quizId: quiz.id,
@@ -281,10 +352,10 @@ export function statsOverview(userId) {
   }
 }
 
-export function quizStats(userId, quizId) {
-  const quiz = getQuiz(quizId, userId)
+export async function quizStats(userId, quizId) {
+  const quiz = await getQuiz(quizId, userId)
   if (!quiz) return null
-  const results = loadResults(userId, quizId)
+  const results = await loadResults(userId, quizId)
   const questions = new Map()
   const order = []
   const bucketFor = (key, text) => {
@@ -339,8 +410,9 @@ export function quizStats(userId, quizId) {
   }
 }
 
-export function listResults(userId) {
-  return db.prepare('SELECT quiz_title, code, players, finished_at FROM results WHERE user_id = ? ORDER BY finished_at DESC LIMIT 8').all(userId).map((row) => ({
+export async function listResults(userId) {
+  const rows = await db.all('SELECT quiz_title, code, players, finished_at FROM results WHERE user_id = ? ORDER BY finished_at DESC LIMIT 8', userId)
+  return rows.map((row) => ({
     title: row.quiz_title,
     code: row.code,
     players: JSON.parse(row.players),

@@ -60,6 +60,15 @@ function requireAdmin(req, res, next) {
   next()
 }
 
+function route(handler) {
+  return (req, res) => {
+    Promise.resolve(handler(req, res)).catch((error) => {
+      console.error(error)
+      if (!res.headersSent) res.status(error.status || 500).json({ error: error.status ? error.message : 'Ошибка сервера' })
+    })
+  }
+}
+
 function sendSession(res, user, status = 200) {
   res.cookie('session', signSession(user.id), { httpOnly: true, sameSite: 'lax', path: '/' })
   res.status(status).json({ ok: true, login: user.login })
@@ -102,47 +111,47 @@ export function createApp() {
     res.json({ addresses: lanAddresses() })
   })
 
-  app.post('/api/register', (req, res) => {
+  app.post('/api/register', route(async (req, res) => {
     try {
-      const user = registerUser(normalizeAccount(req.body || {}))
+      const user = await registerUser(normalizeAccount(req.body || {}))
       sendSession(res, user, 201)
     } catch (error) {
       res.status(error.status || 400).json({ error: error.message })
     }
-  })
+  }))
 
-  app.post('/api/login', (req, res) => {
-    const user = authenticate(req.body?.login, req.body?.password)
+  app.post('/api/login', route(async (req, res) => {
+    const user = await authenticate(req.body?.login, req.body?.password)
     if (!user) {
       res.status(401).json({ error: 'Неверный логин или пароль' })
       return
     }
     sendSession(res, user)
-  })
+  }))
 
   app.post('/api/logout', (_req, res) => {
     res.clearCookie('session', { path: '/' })
     res.json({ ok: true })
   })
 
-  app.get('/api/me', (req, res) => {
+  app.get('/api/me', route(async (req, res) => {
     const session = readSession(req.cookies.session)
-    const user = session?.userId ? getUser(session.userId) : null
+    const user = session?.userId ? await getUser(session.userId) : null
     res.json(user ? { ok: true, login: user.login } : { ok: false })
-  })
+  }))
 
-  app.get('/api/stats', requireAdmin, (req, res) => {
-    res.json(statsOverview(req.userId))
-  })
+  app.get('/api/stats', requireAdmin, route(async (req, res) => {
+    res.json(await statsOverview(req.userId))
+  }))
 
-  app.get('/api/quizzes/:id/stats', requireAdmin, (req, res) => {
-    const stats = quizStats(req.userId, req.params.id)
+  app.get('/api/quizzes/:id/stats', requireAdmin, route(async (req, res) => {
+    const stats = await quizStats(req.userId, req.params.id)
     if (!stats) {
       res.status(404).json({ error: 'Квиз не найден' })
       return
     }
     res.json(stats)
-  })
+  }))
 
   app.get('/api/template', requireAdmin, async (_req, res) => {
     const buffer = await templateWorkbook()
@@ -151,18 +160,18 @@ export function createApp() {
     res.send(Buffer.from(buffer))
   })
 
-  app.get('/api/quizzes', requireAdmin, (req, res) => {
-    res.json({ quizzes: listQuizzes(req.userId) })
-  })
+  app.get('/api/quizzes', requireAdmin, route(async (req, res) => {
+    res.json({ quizzes: await listQuizzes(req.userId) })
+  }))
 
-  app.get('/api/quizzes/:id', requireAdmin, (req, res) => {
-    const quiz = getQuiz(req.params.id, req.userId)
+  app.get('/api/quizzes/:id', requireAdmin, route(async (req, res) => {
+    const quiz = await getQuiz(req.params.id, req.userId)
     if (!quiz) {
       res.status(404).json({ error: 'Квиз не найден' })
       return
     }
     res.json(quiz)
-  })
+  }))
 
   app.post('/api/import', requireAdmin, express.raw({ type: 'application/octet-stream', limit: '2mb' }), async (req, res) => {
     try {
@@ -178,17 +187,17 @@ export function createApp() {
     }
   })
 
-  app.post('/api/quizzes', requireAdmin, (req, res) => {
+  app.post('/api/quizzes', requireAdmin, route(async (req, res) => {
     try {
-      res.status(201).json(createQuiz(req.userId, normalizeQuiz(req.body)))
+      res.status(201).json(await createQuiz(req.userId, normalizeQuiz(req.body)))
     } catch (error) {
       res.status(400).json({ error: error.message })
     }
-  })
+  }))
 
-  app.put('/api/quizzes/:id', requireAdmin, (req, res) => {
+  app.put('/api/quizzes/:id', requireAdmin, route(async (req, res) => {
     try {
-      const quiz = updateQuiz(req.params.id, req.userId, normalizeQuiz(req.body))
+      const quiz = await updateQuiz(req.params.id, req.userId, normalizeQuiz(req.body))
       if (!quiz) {
         res.status(404).json({ error: 'Квиз не найден' })
         return
@@ -197,29 +206,29 @@ export function createApp() {
     } catch (error) {
       res.status(400).json({ error: error.message })
     }
-  })
+  }))
 
-  app.delete('/api/quizzes/:id', requireAdmin, (req, res) => {
-    if (!deleteQuiz(req.params.id, req.userId)) {
+  app.delete('/api/quizzes/:id', requireAdmin, route(async (req, res) => {
+    if (!(await deleteQuiz(req.params.id, req.userId))) {
       res.status(404).json({ error: 'Квиз не найден' })
       return
     }
     res.json({ ok: true })
-  })
+  }))
 
-  app.get('/api/results', requireAdmin, (req, res) => {
-    res.json({ results: listResults(req.userId) })
-  })
+  app.get('/api/results', requireAdmin, route(async (req, res) => {
+    res.json({ results: await listResults(req.userId) })
+  }))
 
-  app.post('/api/rooms', requireAdmin, (req, res) => {
-    const quiz = getQuiz(req.body?.quizId, req.userId)
+  app.post('/api/rooms', requireAdmin, route(async (req, res) => {
+    const quiz = await getQuiz(req.body?.quizId, req.userId)
     if (!quiz) {
       res.status(404).json({ error: 'Квиз не найден' })
       return
     }
     const room = createRoom(quiz)
     res.status(201).json({ code: room.code, hostToken: room.hostToken, title: room.quiz.title })
-  })
+  }))
 
   app.get('/api/rooms/:code', (req, res) => {
     const room = getRoom(req.params.code)
