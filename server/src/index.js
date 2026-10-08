@@ -103,6 +103,7 @@ export function createApp() {
     pingInterval: 10000,
     pingTimeout: 20000,
     maxHttpBufferSize: 1e5,
+    addTrailingSlash: false,
   })
 
   if (process.env.VERCEL) {

@@ -23,7 +23,7 @@ export default function Play() {
 
   useEffect(() => {
     if (!identity) return undefined
-    const socket = io({ transports: ['polling', 'websocket'] })
+    const socket = io({ transports: ['polling', 'websocket'], addTrailingSlash: false })
     socketRef.current = socket
     let stopped = false
     const join = () => {

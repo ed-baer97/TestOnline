@@ -22,7 +22,7 @@ export default function HostRoom() {
       setError('Откройте комнату кнопкой «Запустить» в панели ведущего.')
       return undefined
     }
-    const next = io({ transports: ['polling', 'websocket'] })
+    const next = io({ transports: ['polling', 'websocket'], addTrailingSlash: false })
     let stopped = false
     const join = () => {
       if (stopped) return
