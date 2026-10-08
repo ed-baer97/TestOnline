@@ -23,7 +23,7 @@ export default function Play() {
 
   useEffect(() => {
     if (!identity) return undefined
-    const socket = io({ transports: ['websocket', 'polling'] })
+    const socket = io({ transports: ['polling', 'websocket'] })
     socketRef.current = socket
     let stopped = false
     const join = () => {
@@ -42,6 +42,9 @@ export default function Play() {
     socket.on('connect', () => {
       setOnline(true)
       join()
+    })
+    socket.on('connect_error', () => {
+      if (!stopped) setError('Не удалось подключиться к комнате. Обновите страницу.')
     })
     socket.on('disconnect', () => setOnline(false))
     socket.on('sync', setState)

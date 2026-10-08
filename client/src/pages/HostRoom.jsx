@@ -22,7 +22,7 @@ export default function HostRoom() {
       setError('Откройте комнату кнопкой «Запустить» в панели ведущего.')
       return undefined
     }
-    const next = io({ transports: ['websocket', 'polling'] })
+    const next = io({ transports: ['polling', 'websocket'] })
     let stopped = false
     const join = () => {
       if (stopped) return
@@ -38,6 +38,9 @@ export default function HostRoom() {
     next.on('connect', () => {
       setOnline(true)
       join()
+    })
+    next.on('connect_error', () => {
+      if (!stopped) setError('Не удалось подключиться к комнате. Обновите страницу.')
     })
     next.on('disconnect', () => setOnline(false))
     next.on('sync', (nextState) => {

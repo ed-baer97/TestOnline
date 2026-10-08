@@ -112,11 +112,21 @@ export function createApp() {
       const query = url.indexOf('?')
       const path = query === -1 ? url : url.slice(0, query)
       const search = query === -1 ? '' : url.slice(query)
+      if (/[?&]EIO=/.test(search) || /[?&]transport=(polling|websocket)/.test(search)) {
+        const suffix = path === '/' ? '' : (path.startsWith('/') ? path : `/${path}`)
+        req.url = `/socket.io${suffix}${search}`
+        return next()
+      }
       const suffix = path.startsWith('/') ? path : `/${path}`
       req.url = `/api${suffix}${search}`
       next()
     })
   }
+
+  app.use((req, res, next) => {
+    if (!(req.url || '').startsWith('/socket.io')) return next()
+    io.engine.handleRequest(req, res)
+  })
 
   app.use(cookieParser())
   app.use(express.json({ limit: '256kb' }))
