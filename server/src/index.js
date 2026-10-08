@@ -14,10 +14,15 @@ import {
   advance,
   createRoom,
   getRoom,
+  hostView,
   joinPlayer,
   markOffline,
+  openRoom,
+  playerByToken,
+  playerView,
   publicInfo,
   push,
+  remember,
   submitAnswer,
   watch,
 } from './rooms.js'
@@ -255,24 +260,100 @@ export function createApp() {
       res.status(404).json({ error: 'Квиз не найден' })
       return
     }
-    const room = createRoom(quiz)
+    const room = await createRoom(quiz)
     res.status(201).json({ code: room.code, hostToken: room.hostToken, title: room.quiz.title })
   }))
 
-  app.get('/api/rooms/:code', (req, res) => {
-    const room = getRoom(req.params.code)
+  app.get('/api/rooms/:code/host', route(async (req, res) => {
+    const room = await openRoom(req.params.code)
+    if (!room || room.hostToken !== req.query.token) {
+      res.status(404).json({ error: 'Комната не найдена' })
+      return
+    }
+    res.json(hostView(room))
+  }))
+
+  app.post('/api/rooms/:code/advance', route(async (req, res) => {
+    const room = await openRoom(req.params.code)
+    if (!room || room.hostToken !== req.body?.hostToken) {
+      res.status(404).json({ error: 'Комната не найдена' })
+      return
+    }
+    if (!advance(room, io)) {
+      res.status(400).json({ error: 'Сейчас это действие недоступно' })
+      return
+    }
+    await remember(room)
+    push(io, room)
+    res.json(hostView(room))
+  }))
+
+  app.post('/api/rooms/:code/join', route(async (req, res) => {
+    const room = await openRoom(req.params.code)
+    if (!room) {
+      res.status(404).json({ error: 'Комната не найдена' })
+      return
+    }
+    const result = joinPlayer(room, { name: req.body?.name, playerToken: req.body?.playerToken })
+    if (result.error) {
+      res.status(400).json({ error: result.error })
+      return
+    }
+    result.player.online = true
+    await remember(room)
+    push(io, room)
+    res.json(playerView(room, result.player.id))
+  }))
+
+  app.get('/api/rooms/:code/play', route(async (req, res) => {
+    const room = await openRoom(req.params.code)
+    if (!room) {
+      res.status(404).json({ error: 'Комната не найдена' })
+      return
+    }
+    const player = playerByToken(room, req.query.token)
+    if (!player) {
+      res.status(404).json({ error: 'Вы не в комнате' })
+      return
+    }
+    res.json(playerView(room, player.id))
+  }))
+
+  app.post('/api/rooms/:code/answer', route(async (req, res) => {
+    const room = await openRoom(req.params.code)
+    if (!room) {
+      res.status(404).json({ error: 'Комната не найдена' })
+      return
+    }
+    const player = playerByToken(room, req.body?.playerToken)
+    if (!player) {
+      res.status(404).json({ error: 'Вы не в комнате' })
+      return
+    }
+    const result = submitAnswer(room, player.id, req.body?.optionIndex)
+    if (result.error) {
+      res.status(400).json({ error: result.error })
+      return
+    }
+    await remember(room)
+    push(io, room)
+    res.json(result)
+  }))
+
+  app.get('/api/rooms/:code', route(async (req, res) => {
+    const room = await openRoom(req.params.code)
     if (!room) {
       res.status(404).json({ error: 'Комната не найдена' })
       return
     }
     res.json(publicInfo(room))
-  })
+  }))
 
   io.on('connection', (socket) => {
     watch(socket)
 
-    socket.on('host:join', ({ code, hostToken } = {}, ack) => {
-      const room = getRoom(code)
+    socket.on('host:join', async ({ code, hostToken } = {}, ack) => {
+      const room = getRoom(code) || await openRoom(code)
       if (!room || room.hostToken !== hostToken) {
         ack?.({ error: 'Комната не найдена или сессия ведущего устарела' })
         return
@@ -284,8 +365,8 @@ export function createApp() {
       push(io, room)
     })
 
-    socket.on('player:join', ({ code, name, playerToken } = {}, ack) => {
-      const room = getRoom(code)
+    socket.on('player:join', async ({ code, name, playerToken } = {}, ack) => {
+      const room = getRoom(code) || await openRoom(code)
       if (!room) {
         ack?.({ error: 'Комната не найдена' })
         return
@@ -301,12 +382,13 @@ export function createApp() {
       socket.data.code = room.code
       socket.data.playerId = result.player.id
       socket.join(room.code)
+      await remember(room)
       ack?.({ ok: true, name: result.player.name })
       push(io, room)
     })
 
-    socket.on('host:advance', (ack) => {
-      const room = getRoom(socket.data.code)
+    socket.on('host:advance', async (ack) => {
+      const room = getRoom(socket.data.code) || await openRoom(socket.data.code)
       if (socket.data.role !== 'host' || !room) {
         ack?.({ error: 'Нет доступа' })
         return
@@ -315,17 +397,19 @@ export function createApp() {
         ack?.({ error: 'Сейчас это действие недоступно' })
         return
       }
+      await remember(room)
       ack?.({ ok: true, status: room.status })
       push(io, room)
     })
 
-    socket.on('player:answer', ({ optionIndex } = {}, ack) => {
-      const room = getRoom(socket.data.code)
+    socket.on('player:answer', async ({ optionIndex } = {}, ack) => {
+      const room = getRoom(socket.data.code) || await openRoom(socket.data.code)
       if (socket.data.role !== 'player' || !room) {
         ack?.({ error: 'Вы не в комнате' })
         return
       }
       const result = submitAnswer(room, socket.data.playerId, optionIndex)
+      if (result.ok) await remember(room)
       ack?.(result)
       if (result.ok) push(io, room)
     })

@@ -68,6 +68,11 @@ async function openDatabase() {
       started_at TEXT,
       finished_at TEXT NOT NULL
     )`,
+    `CREATE TABLE IF NOT EXISTS live_rooms (
+      code TEXT PRIMARY KEY,
+      payload TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`,
   ]
   for (const statement of statements) await pool.query(statement)
   return {
@@ -105,6 +110,11 @@ async function openSqlite() {
       code TEXT NOT NULL,
       players TEXT NOT NULL,
       finished_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS live_rooms (
+      code TEXT PRIMARY KEY,
+      payload TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
   `)
   const ensureColumn = (table, column, statement) => {
@@ -446,4 +456,24 @@ export async function listResults(userId) {
     players: JSON.parse(row.players),
     finishedAt: row.finished_at,
   }))
+}
+
+export async function saveLiveRoom(code, payload) {
+  const now = new Date().toISOString()
+  await db.run(
+    `INSERT INTO live_rooms (code, payload, updated_at) VALUES (?, ?, ?)
+     ON CONFLICT(code) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at`,
+    code,
+    payload,
+    now,
+  )
+}
+
+export async function readLiveRoom(code) {
+  const row = await db.get('SELECT payload FROM live_rooms WHERE code = ?', code)
+  return row?.payload || null
+}
+
+export async function deleteLiveRoom(code) {
+  await db.run('DELETE FROM live_rooms WHERE code = ?', code)
 }

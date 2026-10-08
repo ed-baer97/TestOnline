@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { io } from 'socket.io-client'
 import { api, newId, playerKey } from '../api.js'
 import { COLOR_NAMES, SHAPES, Shape } from '../shapes.jsx'
 import { useCountdown } from '../useCountdown.js'
 
 export default function Play() {
   const { code } = useParams()
-  const socketRef = useRef(null)
   const [info, setInfo] = useState(null)
   const [missing, setMissing] = useState(false)
   const [name, setName] = useState('')
@@ -23,35 +21,28 @@ export default function Play() {
 
   useEffect(() => {
     if (!identity) return undefined
-    const socket = io({ transports: ['polling', 'websocket'], addTrailingSlash: false })
-    socketRef.current = socket
     let stopped = false
-    const join = () => {
+    api.joinRoom(code, { name, playerToken: identity }).catch((err) => {
       if (stopped) return
-      socket.emit('player:join', { code, name, playerToken: identity }, (res) => {
+      sessionStorage.removeItem(playerKey(code))
+      setIdentity('')
+      setError(err.message)
+    })
+    async function pull() {
+      try {
+        const next = await api.playRoom(code, identity)
         if (stopped) return
-        if (res?.error) {
-          stopped = true
-          sessionStorage.removeItem(playerKey(code))
-          setIdentity('')
-          setError(res.error)
-          socket.disconnect()
-        }
-      })
+        setState(next)
+        setOnline(true)
+      } catch {
+        if (!stopped) setOnline(false)
+      }
     }
-    socket.on('connect', () => {
-      setOnline(true)
-      join()
-    })
-    socket.on('connect_error', () => {
-      if (!stopped) setError('Не удалось подключиться к комнате. Обновите страницу.')
-    })
-    socket.on('disconnect', () => setOnline(false))
-    socket.on('sync', setState)
+    pull()
+    const timer = setInterval(pull, 1000)
     return () => {
       stopped = true
-      socketRef.current = null
-      socket.disconnect()
+      clearInterval(timer)
     }
   }, [code, identity, name])
 
@@ -97,12 +88,12 @@ export default function Play() {
     )
   }
 
-  if (!state) return <p className="center muted">Подключаемся…</p>
+  if (!state) return <p className="center muted">{error || 'Подключаемся…'}</p>
 
-  return <PlayerStage socketRef={socketRef} state={state} seconds={seconds} online={online} />
+  return <PlayerStage state={state} seconds={seconds} online={online} onAnswer={(optionIndex) => api.answerRoom(code, identity, optionIndex)} />
 }
 
-function PlayerStage({ socketRef, state, seconds, online }) {
+function PlayerStage({ state, seconds, online, onAnswer }) {
   const [socketError, setSocketError] = useState('')
   const [pendingIndex, setPendingIndex] = useState(null)
   const sent = useRef(false)
@@ -116,15 +107,18 @@ function PlayerStage({ socketRef, state, seconds, online }) {
 
   function send(optionIndex) {
     if (state.status !== 'question' || state.me?.answered || sent.current) return
-    const socket = socketRef.current
-    if (!socket || !state.question) return
+    if (!state.question) return
     sent.current = true
     setPendingIndex(optionIndex)
-    socket.emit('player:answer', { optionIndex }, (res) => {
+    onAnswer(optionIndex).then((res) => {
       if (res?.ok) return
       sent.current = false
       setPendingIndex(null)
       if (res?.error && res.error !== 'Ответ уже принят') setSocketError(res.error)
+    }).catch((err) => {
+      sent.current = false
+      setPendingIndex(null)
+      if (err.message !== 'Ответ уже принят') setSocketError(err.message)
     })
   }
 

@@ -1,16 +1,16 @@
 import crypto from 'node:crypto'
 import { cleanName, scorePoints } from './domain.js'
-import { saveResult } from './db.js'
+import { deleteLiveRoom, readLiveRoom, saveLiveRoom, saveResult } from './db.js'
 
 const rooms = new Map()
 const ROOM_TTL_MS = 4 * 60 * 60 * 1000
 const PODIUM_TTL_MS = 30 * 60 * 1000
 
-export function createRoom(quiz) {
+export async function createRoom(quiz) {
   let code = ''
   do {
     code = String(Math.floor(100000 + Math.random() * 900000))
-  } while (rooms.has(code))
+  } while (rooms.has(code) || await readLiveRoom(code))
 
   const room = {
     code,
@@ -38,6 +38,62 @@ export function createRoom(quiz) {
     podiumAt: null,
   }
   rooms.set(code, room)
+  await remember(room)
+  return room
+}
+
+function freeze(room) {
+  return {
+    code: room.code,
+    hostToken: room.hostToken,
+    quiz: room.quiz,
+    status: room.status,
+    questionIndex: room.questionIndex,
+    questionStartedAt: room.questionStartedAt,
+    endsAt: room.endsAt,
+    saved: room.saved,
+    players: [...room.players.values()].map(({ socketId, ...player }) => player),
+    createdAt: room.createdAt,
+    podiumAt: room.podiumAt,
+    startedAt: room.startedAt || null,
+  }
+}
+
+function thaw(data) {
+  return {
+    ...data,
+    timer: null,
+    players: new Map((data.players || []).map((player) => [player.id, { ...player, socketId: null }])),
+  }
+}
+
+export async function remember(room) {
+  await saveLiveRoom(room.code, JSON.stringify(freeze(room)))
+}
+
+function expired(room, now = Date.now()) {
+  const finished = room.status === 'podium' && room.podiumAt && now - room.podiumAt > PODIUM_TTL_MS
+  return finished || now - room.createdAt > ROOM_TTL_MS
+}
+
+export async function openRoom(code) {
+  const key = String(code || '')
+  const payload = await readLiveRoom(key)
+  const room = payload ? thaw(JSON.parse(payload)) : rooms.get(key)
+  if (!room) return null
+  if (expired(room)) {
+    clearTimer(room)
+    rooms.delete(key)
+    await deleteLiveRoom(key)
+    return null
+  }
+  const previous = rooms.get(key)
+  if (previous && previous !== room) clearTimer(previous)
+  rooms.set(key, room)
+  if (room.status === 'question' && room.endsAt && Date.now() >= room.endsAt) {
+    closeQuestion(room)
+    await remember(room)
+  }
   return room
 }
 
@@ -154,6 +210,18 @@ export function viewFor(room, socket) {
     question: showQuestion && question ? questionPayload(question, reveal) : null,
     leaderboard: top,
   }
+}
+
+export function hostView(room) {
+  return viewFor(room, { data: { role: 'host' } })
+}
+
+export function playerView(room, playerId) {
+  return viewFor(room, { data: { role: 'player', playerId } })
+}
+
+export function playerByToken(room, token) {
+  return findByToken(room, token)
 }
 
 const watchers = new Set()
@@ -345,6 +413,7 @@ setInterval(() => {
     if (finished || expired) {
       clearTimer(room)
       rooms.delete(code)
+      void deleteLiveRoom(code)
     }
   }
 }, 60 * 1000).unref?.()
