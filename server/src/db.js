@@ -22,6 +22,11 @@ function isUnique(error) {
   return error?.code === '23505' || String(error?.message || '').includes('UNIQUE')
 }
 
+function postgresConnectionString(url) {
+  if (/[?&]sslmode=/i.test(url)) return url.replace(/([?&])sslmode=[^&]*/gi, '$1sslmode=no-verify')
+  return `${url}${url.includes('?') ? '&' : '?'}sslmode=no-verify`
+}
+
 async function openDatabase() {
   if (!postgresUrl) {
     if (process.env.VERCEL) {
@@ -33,7 +38,7 @@ async function openDatabase() {
   }
   const local = /localhost|127\.0\.0\.1/.test(postgresUrl)
   const pool = new pg.Pool({
-    connectionString: postgresUrl,
+    connectionString: local ? postgresUrl : postgresConnectionString(postgresUrl),
     max: process.env.VERCEL ? 1 : 3,
     ssl: local ? false : { rejectUnauthorized: false },
   })
