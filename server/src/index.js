@@ -70,7 +70,12 @@ function route(handler) {
 }
 
 function sendSession(res, user, status = 200) {
-  res.cookie('session', signSession(user.id), { httpOnly: true, sameSite: 'lax', path: '/' })
+  res.cookie('session', signSession(user.id), {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.VERCEL === '1',
+    path: '/',
+  })
   res.status(status).json({ ok: true, login: user.login })
 }
 function lanAddresses() {
@@ -308,6 +313,10 @@ export function createApp() {
     })
   })
 
+  app.use('/api', (_req, res) => {
+    res.status(404).json({ error: 'Такого запроса нет' })
+  })
+
   const clientDist = path.join(__dirname, '..', '..', 'client', 'dist')
   app.use(express.static(clientDist))
   app.get(/^(?!\/api|\/socket\.io).*/, (req, res, next) => {
@@ -320,7 +329,7 @@ export function createApp() {
   return { app, httpServer, io }
 }
 
-const isMain = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+const isMain = !process.env.VERCEL && process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 if (isMain) {
   const { httpServer } = createApp()
   httpServer.listen(PORT, '0.0.0.0', () => {

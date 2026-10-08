@@ -3,7 +3,7 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
-import { DatabaseSync } from 'node:sqlite'
+import pg from 'pg'
 import { hashPassword, verifyPassword } from './passwords.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -11,7 +11,7 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') })
 
 const postgresUrl = process.env.DB_PATH
   ? ''
-  : (process.env.POSTGRES_URL || process.env.DATABASE_URL || '')
+  : (process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || '')
 
 function toPg(sql) {
   let index = 0
@@ -23,31 +23,37 @@ function isUnique(error) {
 }
 
 async function openDatabase() {
-  if (!postgresUrl) return openSqlite()
-  const { Pool } = await import('pg')
+  if (!postgresUrl) {
+    if (process.env.VERCEL) {
+      const error = new Error('База не подключена: в проекте Vercel нет POSTGRES_URL')
+      error.status = 500
+      throw error
+    }
+    return openSqlite()
+  }
   const local = /localhost|127\.0\.0\.1/.test(postgresUrl)
-  const pool = new Pool({
+  const pool = new pg.Pool({
     connectionString: postgresUrl,
-    max: 3,
+    max: process.env.VERCEL ? 1 : 3,
     ssl: local ? false : { rejectUnauthorized: false },
   })
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS users (
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       login TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       created_at TEXT NOT NULL
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS users_login_lower ON users (lower(login));
-    CREATE TABLE IF NOT EXISTS quizzes (
+    )`,
+    'CREATE UNIQUE INDEX IF NOT EXISTS users_login_lower ON users (lower(login))',
+    `CREATE TABLE IF NOT EXISTS quizzes (
       id TEXT PRIMARY KEY,
       user_id TEXT,
       title TEXT NOT NULL,
       questions TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS results (
+    )`,
+    `CREATE TABLE IF NOT EXISTS results (
       id TEXT PRIMARY KEY,
       user_id TEXT,
       quiz_id TEXT,
@@ -56,8 +62,9 @@ async function openDatabase() {
       players TEXT NOT NULL,
       started_at TEXT,
       finished_at TEXT NOT NULL
-    );
-  `)
+    )`,
+  ]
+  for (const statement of statements) await pool.query(statement)
   return {
     get: async (sql, ...params) => (await pool.query(toPg(sql), params)).rows[0],
     all: async (sql, ...params) => (await pool.query(toPg(sql), params)).rows,
@@ -65,7 +72,8 @@ async function openDatabase() {
   }
 }
 
-function openSqlite() {
+async function openSqlite() {
+  const { DatabaseSync } = await import('node:sqlite')
   const dataDir = path.join(__dirname, '..', 'data')
   const dbFile = process.env.DB_PATH || path.join(dataDir, 'testonline.sqlite')
   fs.mkdirSync(path.dirname(dbFile), { recursive: true })
@@ -108,7 +116,22 @@ function openSqlite() {
   }
 }
 
-const db = await openDatabase()
+let opened
+function ready() {
+  if (!opened) {
+    opened = openDatabase().catch((error) => {
+      opened = null
+      throw error
+    })
+  }
+  return opened
+}
+
+const db = {
+  get: async (...args) => (await ready()).get(...args),
+  all: async (...args) => (await ready()).all(...args),
+  run: async (...args) => (await ready()).run(...args),
+}
 
 const DEMO = [
   {

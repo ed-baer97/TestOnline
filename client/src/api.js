@@ -5,7 +5,8 @@ async function request(url, options = {}) {
     ...options,
   })
   const data = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(data.error || 'Ошибка запроса')
+  const message = typeof data.error === 'string' ? data.error : ''
+  if (!response.ok) throw new Error(message || `Ошибка запроса (${response.status})`)
   return data
 }
 
