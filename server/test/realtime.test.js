@@ -105,6 +105,7 @@ test('realtime: ошибки событий, подтверждения, пуш 
   await call(base, `/api/rooms/${code}/answer`, { method: 'POST', json: { playerToken: 'player-token-borya-0001', optionIndex: 1 } })
   assert.deepEqual((await restAnswer).players.map((item) => item.answered), [false, true])
 
+  assert.deepEqual(await emit(back, 'player:answer', { optionIndex: null }), { error: 'Нет такого варианта' })
   const answered = await emit(back, 'player:answer', { optionIndex: 0 })
   assert.equal(answered.ok, true)
   assert.deepEqual(await emit(back, 'player:answer', { optionIndex: 1 }), { error: 'Ответ уже принят' })

@@ -158,7 +158,7 @@ export function submitAnswer(room, playerId, optionIndex) {
   if (!player) return { error: 'Вы не в комнате' }
   if (player.answered) return { error: 'Ответ уже принят' }
   const question = room.quiz.questions[room.questionIndex]
-  const index = Number(optionIndex)
+  const index = typeof optionIndex === 'string' && /^\d+$/.test(optionIndex) ? Number(optionIndex) : optionIndex
   if (!Number.isInteger(index) || index < 0 || index >= question.options.length) {
     return { error: 'Нет такого варианта' }
   }
