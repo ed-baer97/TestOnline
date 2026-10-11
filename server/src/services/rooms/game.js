@@ -55,7 +55,7 @@ export function joinPlayer(room, { name, playerToken }) {
   return { player }
 }
 
-function armTimer(room) {
+export function armTimer(room) {
   clearTimer(room)
   const delay = Math.max(0, room.endsAt - Date.now())
   room.timer = setTimeout(() => {
@@ -63,6 +63,7 @@ function armTimer(room) {
     if (!closeQuestion(room)) return
     publishRoom(room)
   }, delay)
+  room.timer.unref?.()
 }
 
 function openNext(room) {

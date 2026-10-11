@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { deleteLiveRoom, readLiveRoom, saveLiveRoom } from '../../repositories/liveRooms.js'
-import { clearTimer, closeQuestion } from './game.js'
+import { armTimer, clearTimer, closeQuestion } from './game.js'
 
 const rooms = new Map()
 const ROOM_TTL_MS = 4 * 60 * 60 * 1000
@@ -88,11 +88,22 @@ export async function openRoom(code) {
     return null
   }
   const previous = rooms.get(key)
-  if (previous && previous !== room) clearTimer(previous)
+  if (previous && previous !== room) {
+    clearTimer(previous)
+    // Сокеты живут в памяти процесса, а отключение не пишет снимок: связь с игроком берётся из прежнего объекта.
+    for (const player of room.players.values()) {
+      const before = previous.players.get(player.id)
+      if (!before) continue
+      player.socketId = before.socketId
+      player.online = before.online
+    }
+  }
   rooms.set(key, room)
   if (room.status === 'question' && room.endsAt && Date.now() >= room.endsAt) {
     closeQuestion(room)
     await remember(room)
+  } else if (room.status === 'question' && room.endsAt && !room.timer) {
+    armTimer(room)
   }
   return room
 }
