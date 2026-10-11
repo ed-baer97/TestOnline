@@ -11,6 +11,10 @@ export default runtime.app
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 if (isMain) {
+  if (!config.postgresUrl) {
+    console.error('Не задан POSTGRES_URL: укажите строку подключения к Postgres в server/.env (образец — server/.env.example)')
+    process.exit(1)
+  }
   runtime.httpServer.listen(config.port, '0.0.0.0', () => {
     console.log(`TestOnline API http://localhost:${config.port}`)
   })

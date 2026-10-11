@@ -1,14 +1,13 @@
 import { config } from '../config.js'
 import { openPostgres } from './postgres.js'
-import { openSqlite } from './sqlite.js'
 
-// Одна точка доступа к базе: Postgres, если задан POSTGRES_URL / DATABASE_URL, иначе SQLite.
-// Обе реализации отдают get / all / run с плейсхолдерами `?`; соединение открывается при первом запросе.
+// Одна точка доступа к Postgres: get / all / run принимают плейсхолдеры `?`; пул открывается при первом запросе.
 let opened
 function ready() {
   if (!opened) {
     const postgresUrl = config.postgresUrl
-    opened = (postgresUrl ? openPostgres(postgresUrl) : openSqlite(config.sqliteFile)).catch((error) => {
+    if (!postgresUrl) throw new Error('Не задан POSTGRES_URL: укажите строку подключения к Postgres (образец — server/.env.example)')
+    opened = openPostgres(postgresUrl).catch((error) => {
       opened = null
       throw error
     })
@@ -22,6 +21,12 @@ export const db = {
   run: async (...args) => (await ready()).run(...args),
 }
 
+export async function closeDb() {
+  const current = opened
+  opened = null
+  if (current) await (await current).close()
+}
+
 export function isUniqueViolation(error) {
-  return error?.code === '23505' || String(error?.message || '').includes('UNIQUE')
+  return error?.code === '23505'
 }
