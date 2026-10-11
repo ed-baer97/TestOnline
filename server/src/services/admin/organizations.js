@@ -26,10 +26,12 @@ export async function listOrganizations(actor) {
     }))
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
 }
+
 async function assertUniqueOrg(regionId, name, exceptId) {
   const rows = await organizationsRepo.listOrganizationNames(regionId)
   if (rows.some((row) => row.id !== exceptId && sameText(row.name, name))) fail('Такая организация в регионе уже есть', 409)
 }
+
 async function assertGroupsFree(orgId, groups) {
   const classes = await classesRepo.listBands(orgId)
   for (const row of classes) {
@@ -38,6 +40,7 @@ async function assertGroupsFree(orgId, groups) {
   const tracks = await tracksRepo.countTracks(orgId)
   if (tracks && !groups.students) fail('Нельзя снять группу, в которой уже есть классы')
 }
+
 export async function createOrganization(actor, input) {
   assertRole(actor, 'regional')
   const name = cleanLabel(input?.name, 2, 120, 'Название организации')
@@ -47,6 +50,7 @@ export async function createOrganization(actor, input) {
   await organizationsRepo.insertOrganization({ id, regionId: actor.regionId, name, groups, createdAt: new Date().toISOString() })
   return mustOrg(id)
 }
+
 export async function updateOrganization(actor, id, input) {
   assertRole(actor, 'regional')
   await orgInRegion(id, actor.regionId)
@@ -57,6 +61,7 @@ export async function updateOrganization(actor, id, input) {
   await organizationsRepo.updateOrganization(id, { name, groups })
   return mustOrg(id)
 }
+
 export async function deleteOrganization(actor, id) {
   assertRole(actor, 'regional')
   await orgInRegion(id, actor.regionId)
@@ -67,6 +72,7 @@ export async function deleteOrganization(actor, id) {
   if (admins || classes || tracks || learners) fail('Сначала удалите администраторов, классы и тестируемых')
   await organizationsRepo.deleteOrganization(id)
 }
+
 export async function listOrgAdmins(actor) {
   assertRole(actor, 'regional')
   const rows = await usersRepo.listOrgAdminsInRegion(actor.regionId)
@@ -80,6 +86,7 @@ export async function listOrgAdmins(actor) {
     }))
     .sort((a, b) => a.organizationName.localeCompare(b.organizationName, 'ru') || a.displayName.localeCompare(b.displayName, 'ru'))
 }
+
 export async function createOrgAdmin(actor, input) {
   assertRole(actor, 'regional')
   const org = await orgInRegion(input?.organizationId, actor.regionId)
@@ -92,6 +99,7 @@ export async function createOrgAdmin(actor, input) {
     organizationId: org.id,
   })
 }
+
 export async function updateOrgAdmin(actor, id, input) {
   assertRole(actor, 'regional')
   const current = await usersRepo.findOrgAdminInRegion(id, actor.regionId)
@@ -102,6 +110,7 @@ export async function updateOrgAdmin(actor, id, input) {
   await changePassword(id, input?.password)
   return profile(id)
 }
+
 export async function deleteOrgAdmin(actor, id) {
   assertRole(actor, 'regional')
   const current = await usersRepo.findOrgAdminInRegion(id, actor.regionId)

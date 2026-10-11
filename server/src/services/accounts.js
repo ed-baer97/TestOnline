@@ -54,6 +54,7 @@ export async function profile(id) {
     band: klass?.band || null,
   }
 }
+
 export async function ensureSuperAdmin() {
   const existing = await usersRepo.findSuperAdmin()
   if (existing) return profile(existing.id)
@@ -72,6 +73,7 @@ export async function ensureSuperAdmin() {
   })
   return profile(id)
 }
+
 export async function createAccount({ role, login, password, displayName, regionId, organizationId, classId }) {
   const account = normalizeAccount({ login, password })
   const id = crypto.randomUUID()
@@ -94,6 +96,7 @@ export async function createAccount({ role, login, password, displayName, region
   }
   return profile(id)
 }
+
 export async function changePassword(id, password) {
   const next = readPassword(password)
   if (!next) return

@@ -44,9 +44,11 @@ export async function structure(actor) {
   }
   return { organization: org, sections }
 }
+
 function assertUniqueClass(rows, name, exceptId) {
   if (rows.some((row) => row.id !== exceptId && sameText(row.name, name))) fail('Такой класс уже есть', 409)
 }
+
 export async function createTrack(actor, input) {
   assertRole(actor, 'org')
   const org = await mustOrg(actor.organizationId)
@@ -58,6 +60,7 @@ export async function createTrack(actor, input) {
   await tracksRepo.insertTrack({ id, organizationId: org.id, name, createdAt: new Date().toISOString() })
   return { id, name }
 }
+
 export async function updateTrack(actor, id, input) {
   assertRole(actor, 'org')
   const current = await tracksRepo.findTrack(id, actor.organizationId)
@@ -68,6 +71,7 @@ export async function updateTrack(actor, id, input) {
   await tracksRepo.renameTrack(id, name)
   return { id, name }
 }
+
 export async function deleteTrack(actor, id) {
   assertRole(actor, 'org')
   const current = await tracksRepo.findTrack(id, actor.organizationId)
@@ -76,6 +80,7 @@ export async function deleteTrack(actor, id) {
   if (classes) fail('Сначала удалите группы этого курса')
   await tracksRepo.deleteTrack(id)
 }
+
 export async function createClass(actor, input) {
   assertRole(actor, 'org')
   const org = await mustOrg(actor.organizationId)
@@ -98,6 +103,7 @@ export async function createClass(actor, input) {
   await classesRepo.insertGradeClass({ id, organizationId: org.id, band: band.id, grade, name, createdAt: new Date().toISOString() })
   return { id, name, band: band.id, grade }
 }
+
 export async function updateClass(actor, id, input) {
   assertRole(actor, 'org')
   const current = await classesRepo.findClass(id, actor.organizationId)
@@ -108,6 +114,7 @@ export async function updateClass(actor, id, input) {
   await classesRepo.renameClass(id, name)
   return { id, name }
 }
+
 export async function deleteClass(actor, id) {
   assertRole(actor, 'org')
   const current = await classesRepo.findClassId(id, actor.organizationId)

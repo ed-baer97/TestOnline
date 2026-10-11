@@ -14,6 +14,7 @@ function chart(caption, items, order = 'value') {
     items: list.sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, 'ru')),
   }
 }
+
 function bandItems(classes, orgs) {
   const enabled = new Set()
   for (const org of orgs) {
@@ -27,6 +28,7 @@ function bandItems(classes, orgs) {
     value: totals.get(band.id) || 0,
   }))
 }
+
 function gradeItems(classes) {
   const buckets = new Map()
   for (const item of classes) {
@@ -41,12 +43,14 @@ function gradeItems(classes) {
     .sort((a, b) => a.sort - b.sort || a.label.localeCompare(b.label, 'ru'))
     .map(({ key, label, value }) => ({ key, label, value }))
 }
+
 export async function dashboard(actor) {
   if (actor.role === 'super') return superDashboard()
   if (actor.role === 'regional') return regionDashboard(actor.regionId)
   if (actor.role === 'org') return orgDashboard(actor.organizationId)
   fail('Недостаточно прав', 403)
 }
+
 async function superDashboard() {
   const regions = await listRegions({ role: 'super' })
   const organizations = await organizationsRepo.countOrganizations()
@@ -75,6 +79,7 @@ async function superDashboard() {
     },
   }
 }
+
 async function regionDashboard(regionId) {
   const region = await mustRegion(regionId)
   const orgs = await organizationsRepo.listOrganizations(regionId)
@@ -118,6 +123,7 @@ async function regionDashboard(regionId) {
     },
   }
 }
+
 async function orgDashboard(organizationId) {
   const org = await mustOrg(organizationId)
   const rows = await classesRepo.listClassesWithLearners([org.id])

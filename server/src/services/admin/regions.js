@@ -20,6 +20,7 @@ export async function listRegions(actor) {
   }
   return result.sort((a, b) => a.name.localeCompare(b.name, 'ru'))
 }
+
 export async function createRegion(actor, input) {
   assertRole(actor, 'super')
   const name = cleanLabel(input?.name, 2, 80, 'Название региона')
@@ -29,6 +30,7 @@ export async function createRegion(actor, input) {
   await regionsRepo.insertRegion({ id, name, createdAt: new Date().toISOString() })
   return mustRegion(id)
 }
+
 export async function updateRegion(actor, id, input) {
   assertRole(actor, 'super')
   await mustRegion(id)
@@ -38,6 +40,7 @@ export async function updateRegion(actor, id, input) {
   await regionsRepo.renameRegion(id, name)
   return mustRegion(id)
 }
+
 export async function deleteRegion(actor, id) {
   assertRole(actor, 'super')
   await mustRegion(id)
@@ -46,6 +49,7 @@ export async function deleteRegion(actor, id) {
   if (organizations || admins) fail('Сначала удалите организации и администраторов этого региона')
   await regionsRepo.deleteRegion(id)
 }
+
 export async function listRegionalAdmins(actor) {
   assertRole(actor, 'super')
   const rows = await usersRepo.listRegionalAdmins()
@@ -59,6 +63,7 @@ export async function listRegionalAdmins(actor) {
     }))
     .sort((a, b) => a.regionName.localeCompare(b.regionName, 'ru') || a.displayName.localeCompare(b.displayName, 'ru'))
 }
+
 export async function createRegionalAdmin(actor, input) {
   assertRole(actor, 'super')
   const region = await mustRegion(input?.regionId)
@@ -71,6 +76,7 @@ export async function createRegionalAdmin(actor, input) {
     regionId: region.id,
   })
 }
+
 export async function updateRegionalAdmin(actor, id, input) {
   assertRole(actor, 'super')
   const current = await usersRepo.findRegionalAdmin(id)
@@ -81,6 +87,7 @@ export async function updateRegionalAdmin(actor, id, input) {
   await changePassword(id, input?.password)
   return profile(id)
 }
+
 export async function deleteRegionalAdmin(actor, id) {
   assertRole(actor, 'super')
   const changes = await usersRepo.deleteRegionalAdmin(id)

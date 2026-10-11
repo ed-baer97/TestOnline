@@ -24,6 +24,7 @@ export async function learnersTemplate() {
   sheet.getRow(1).font = { bold: true }
   return workbook.xlsx.writeBuffer()
 }
+
 function cellText(value) {
   if (value == null) return ''
   if (typeof value === 'object') {
@@ -34,6 +35,7 @@ function cellText(value) {
   }
   return cleanText(value)
 }
+
 export async function importLearners(actor, buffer) {
   assertRole(actor, 'org')
   const bytes = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer || [])

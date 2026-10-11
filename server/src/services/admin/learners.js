@@ -15,6 +15,7 @@ function mapLearner(row) {
     classLabel: classCaption(row),
   }
 }
+
 const LEARNERS_PAGE = 100
 
 export async function listLearners(actor, query = {}) {
@@ -28,6 +29,7 @@ export async function listLearners(actor, query = {}) {
   const rows = await usersRepo.listLearners(filter, { limit, offset })
   return { learners: rows.map(mapLearner), total, offset, limit }
 }
+
 export async function createLearner(actor, input) {
   assertRole(actor, 'org')
   const klass = await classInOrg(input?.classId, actor.organizationId)
@@ -42,6 +44,7 @@ export async function createLearner(actor, input) {
   })
   return { ...user, classLabel: classCaption(klass) }
 }
+
 export async function updateLearner(actor, id, input) {
   assertRole(actor, 'org')
   const current = await usersRepo.findLearner(id, actor.organizationId)
@@ -53,6 +56,7 @@ export async function updateLearner(actor, id, input) {
   const user = await profile(id)
   return { ...user, classLabel: classCaption(klass) }
 }
+
 export async function deleteLearner(actor, id) {
   assertRole(actor, 'org')
   const changes = await usersRepo.deleteLearner(id, actor.organizationId)
