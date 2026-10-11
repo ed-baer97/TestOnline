@@ -9,10 +9,17 @@ import * as resultsRepo from '../repositories/results.js'
 import * as usersRepo from '../repositories/users.js'
 import { addDemoQuiz } from './quizzes.js'
 
+// Уникальный индекс SQLite (COLLATE NOCASE) приравнивает регистр только у латиницы и пропускает логины,
+// которые отличаются регистром кириллицы. Их ловит эта проверка; в Postgres то же делает индекс по lower(login).
+async function assertLoginFree(login) {
+  if (await usersRepo.findByLogin(login)) fail('Такой логин уже занят', 409)
+}
+
 // Ведущих заводят из кода (тесты, старые базы): HTTP-маршрута регистрации нет.
 // Первый ведущий забирает квизы и итоги, которые лежали в базе без владельца.
 export async function registerUser({ login, password }) {
   const first = (await usersRepo.countUsers()) === 0
+  await assertLoginFree(login)
   const id = crypto.randomUUID()
   const passwordHash = await hashPassword(password)
   try {
@@ -76,6 +83,7 @@ export async function ensureSuperAdmin() {
 
 export async function createAccount({ role, login, password, displayName, regionId, organizationId, classId }) {
   const account = normalizeAccount({ login, password })
+  await assertLoginFree(account.login)
   const id = crypto.randomUUID()
   const passwordHash = await hashPassword(account.password)
   try {

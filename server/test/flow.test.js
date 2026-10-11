@@ -17,6 +17,8 @@ test('комната: QR-вход, вопрос без правильного о
   const { registerUser } = await import('../src/services/accounts.js')
   await registerUser({ login: 'host', password: 'secret1' })
   await assert.rejects(() => registerUser({ login: 'host', password: 'secret1' }), (error) => error.status === 409)
+  await registerUser({ login: 'Ведущий', password: 'secret1' })
+  await assert.rejects(() => registerUser({ login: 'ВЕДУЩИЙ', password: 'secret1' }), (error) => error.status === 409 && error.message === 'Такой логин уже занят')
   const session = await fetch(`${base}/api/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

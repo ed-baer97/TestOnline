@@ -5,6 +5,9 @@ export async function openSqlite(dbFile) {
   const { DatabaseSync } = await import('node:sqlite')
   fs.mkdirSync(path.dirname(dbFile), { recursive: true })
   const db = new DatabaseSync(dbFile)
+  // Встроенная lower() в SQLite меняет регистр только у латиницы, а запросы к users сравнивают логины
+  // и ищут тестируемых через lower(). Замена работает как lower() в Postgres, в том числе для кириллицы.
+  db.function('lower', { deterministic: true }, (value) => (value == null ? null : String(value).toLowerCase()))
   db.exec(`
     PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS users (
