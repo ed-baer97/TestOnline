@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api } from '../../api/index.js'
 import { formatCode, formatWhen, shortWhen } from '../../lib/format.js'
 import { BarChart, RateList } from '../../components/charts.jsx'
+import { useQuizStats } from '../../state/host/stats.js'
 
 function launchWhen(session) {
   return session.startedAt || session.finishedAt
@@ -43,12 +42,7 @@ function scoreText(value) {
 
 export default function Stats({ onLogout }) {
   const { id, resultId, player } = useParams()
-  const [stats, setStats] = useState(null)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    api.quizStats(id).then(setStats).catch((err) => setError(err.message))
-  }, [id])
+  const { stats, error } = useQuizStats(id)
 
   if (error) {
     return (

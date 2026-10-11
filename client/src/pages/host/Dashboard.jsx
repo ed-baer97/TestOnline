@@ -1,21 +1,9 @@
-import { useEffect, useState } from 'react'
-import { api } from '../../api/index.js'
 import { BarChart } from '../../components/charts.jsx'
 import { HostFrame } from '../../components/layout/HostFrame.jsx'
+import { useHostStats } from '../../state/host/stats.js'
 
 export default function Dashboard({ onLogout }) {
-  const [stats, setStats] = useState(null)
-  const [account, setAccount] = useState('')
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    Promise.all([api.stats(), api.me()])
-      .then(([statsData, me]) => {
-        setStats(statsData)
-        setAccount(me.login || '')
-      })
-      .catch((err) => setError(err.message))
-  }, [])
+  const { stats, account, error } = useHostStats()
 
   return (
     <HostFrame onLogout={onLogout} account={account} title="Обзор">

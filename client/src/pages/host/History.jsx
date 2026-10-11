@@ -1,28 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../../api/index.js'
 import { formatWhen } from '../../lib/format.js'
 import { HostFrame } from '../../components/layout/HostFrame.jsx'
+import { useHostStats } from '../../state/host/stats.js'
 
 function when(result) {
   return Date.parse(result.startedAt || result.finishedAt) || 0
 }
 
 export default function History({ onLogout }) {
-  const [stats, setStats] = useState(null)
-  const [account, setAccount] = useState('')
-  const [error, setError] = useState('')
+  const { stats, account, error } = useHostStats()
   const [sort, setSort] = useState('date')
   const [ascending, setAscending] = useState(false)
-
-  useEffect(() => {
-    Promise.all([api.stats(), api.me()])
-      .then(([statsData, me]) => {
-        setStats(statsData)
-        setAccount(me.login || '')
-      })
-      .catch((err) => setError(err.message))
-  }, [])
 
   const games = useMemo(() => {
     const list = [...(stats?.history || [])]

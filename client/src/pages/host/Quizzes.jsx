@@ -1,40 +1,13 @@
-import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { api } from '../../api/index.js'
-import { saveHostToken } from '../../state/roomTokens.js'
+import { useQuizList } from '../../state/host/quizzes.js'
 import { HostFrame } from '../../components/layout/HostFrame.jsx'
 
 export default function Quizzes({ onLogout }) {
   const navigate = useNavigate()
-  const [quizzes, setQuizzes] = useState(null)
-  const [account, setAccount] = useState('')
-  const [error, setError] = useState('')
+  const { quizzes, account, error, start, remove } = useQuizList(navigate)
 
-  async function load() {
-    const [quizData, me] = await Promise.all([api.quizzes(), api.me()])
-    setQuizzes(quizData.quizzes)
-    setAccount(me.login || '')
-  }
-
-  useEffect(() => {
-    load().catch((err) => setError(err.message))
-  }, [])
-
-  async function start(id) {
-    setError('')
-    try {
-      const room = await api.createRoom(id)
-      saveHostToken(room.code, room.hostToken)
-      navigate(`/host/room/${room.code}`)
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function remove(quiz) {
-    if (!window.confirm(`Удалить «${quiz.title}»?`)) return
-    await api.deleteQuiz(quiz.id)
-    await load()
+  function confirmRemove(quiz) {
+    if (window.confirm(`Удалить «${quiz.title}»?`)) remove(quiz)
   }
 
   return (
@@ -53,7 +26,7 @@ export default function Quizzes({ onLogout }) {
               <button className="primary" type="button" data-testid="start-quiz" onClick={() => start(quiz.id)}>Запустить</button>
               <Link to={`/host/quiz/${quiz.id}/stats`}>Статистика</Link>
               <Link to={`/host/quiz/${quiz.id}`}>Править</Link>
-              <button className="ghost" type="button" onClick={() => remove(quiz)}>Удалить</button>
+              <button className="ghost" type="button" onClick={() => confirmRemove(quiz)}>Удалить</button>
             </div>
           </article>
         ))}
