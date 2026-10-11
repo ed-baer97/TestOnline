@@ -5,8 +5,13 @@ import cookieParser from 'cookie-parser'
 import express from 'express'
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
+import { config } from './infrastructure/config.js'
+import { lanAddresses } from './infrastructure/network.js'
+import { readSession, signSession } from './infrastructure/session.js'
+import { checkLesson, createLesson, deleteLesson, getLesson, importPptx, listLessons, openLessonFile, openLessonMedia, saveLessonVideo, updateLesson } from './lessons.js'
+import { questionsFromXlsx, templateWorkbook } from './excel.js'
+import { authenticate, profile } from './services/accounts.js'
 import {
-  bootAdmin,
   createClass,
   createLearner,
   createOrgAdmin,
@@ -29,7 +34,6 @@ import {
   listOrganizations,
   listRegionalAdmins,
   listRegions,
-  profile,
   structure,
   updateClass,
   updateLearner,
@@ -38,13 +42,8 @@ import {
   updateRegion,
   updateRegionalAdmin,
   updateTrack,
-} from './admin.js'
-import { config } from './infrastructure/config.js'
-import { lanAddresses } from './infrastructure/network.js'
-import { readSession, signSession } from './infrastructure/session.js'
-import { checkLesson, createLesson, deleteLesson, getLesson, importPptx, listLessons, openLessonFile, openLessonMedia, saveLessonVideo, updateLesson } from './lessons.js'
-import { questionsFromXlsx, templateWorkbook } from './excel.js'
-import { authenticate } from './services/accounts.js'
+} from './services/admin/index.js'
+import { bootAdmin } from './services/bootstrap.js'
 import { createQuiz, deleteQuiz, getQuiz, listQuizzes, updateQuiz } from './services/quizzes.js'
 import {
   advance,

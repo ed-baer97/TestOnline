@@ -8,8 +8,9 @@ process.env.SUPER_LOGIN = 'root'
 process.env.SUPER_PASSWORD = 'rootpass'
 
 test('регион видит своих, организация собирает классы', async () => {
-  const admin = await import('../src/admin.js')
-  const root = await admin.ensureSuperAdmin()
+  const admin = await import('../src/services/admin/index.js')
+  const { ensureSuperAdmin } = await import('../src/services/accounts.js')
+  const root = await ensureSuperAdmin()
   assert.equal(root.role, 'super')
 
   const region = await admin.createRegion(root, { name: 'Мангыстауская область' })

@@ -11,9 +11,10 @@ process.env.SUPER_PASSWORD = 'rootpass'
 const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
 test('урок: презентация, тест и видимость по группе', async () => {
-  const admin = await import('../src/admin.js')
+  const admin = await import('../src/services/admin/index.js')
   const lessons = await import('../src/lessons.js')
-  const root = await admin.ensureSuperAdmin()
+  const { ensureSuperAdmin } = await import('../src/services/accounts.js')
+  const root = await ensureSuperAdmin()
   const demoId = await lessons.ensureDemoLesson()
   assert.equal(await lessons.ensureDemoLesson(), demoId)
 
