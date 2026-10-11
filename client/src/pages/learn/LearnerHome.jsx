@@ -1,25 +1,10 @@
-import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../../api/index.js'
 import { LearnFrame } from '../../components/layout/LearnFrame.jsx'
+import { useLearnerHome } from '../../state/learnerHome.js'
 import LessonView from '../lessons/LessonView.jsx'
 
 export default function LearnerHome({ onLogout }) {
-  const [me, setMe] = useState(null)
-  const [lessons, setLessons] = useState(null)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    Promise.all([api.me(), api.lessons()])
-      .then(([profile, data]) => {
-        if (!profile.ok) setError('Нужен вход')
-        else {
-          setMe(profile)
-          setLessons(data.lessons)
-        }
-      })
-      .catch((err) => setError(err.message))
-  }, [])
+  const { me, lessons, error } = useLearnerHome()
 
   return (
     <LearnFrame onLogout={onLogout}>
