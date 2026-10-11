@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, newId } from '../../api.js'
 import { EMPTY_GROUPS, groupLabels } from '../../bands.js'
+import { useI18n } from '../../i18n.jsx'
 import { GroupChecks, Notice } from './ui.jsx'
 
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg']
@@ -27,6 +28,7 @@ function blankQuestion() {
 }
 
 export function MaterialList() {
+  const { t } = useI18n()
   const [lessons, setLessons] = useState(null)
   const [error, setError] = useState('')
 
@@ -37,22 +39,22 @@ export function MaterialList() {
   return (
     <section className="stack">
       <div className="section-head">
-        <h1>Материалы</h1>
-        <Link className="primary" to="/admin/materials/new">Новый урок</Link>
+        <h1>{t('Материалы')}</h1>
+        <Link className="primary" to="/admin/materials/new">{t('Новый урок')}</Link>
       </div>
-      {error && <p className="form-error">{error}</p>}
-      {lessons === null && !error && <p className="muted">Загрузка…</p>}
+      {error && <p className="form-error">{t(error)}</p>}
+      {lessons === null && !error && <p className="muted">{t('Загрузка…')}</p>}
       <div className="stack">
         {lessons?.map((lesson) => (
           <article className="lesson-card" key={lesson.id}>
             <div>
               <h2>{lesson.title}</h2>
-              <p className="muted">{groupLabels(lesson.groups)}</p>
-              <p className="muted">{lesson.format === 'video' ? `Видео · ${lesson.questionCount} вопр.` : `Презентация · ${lesson.slideCount} сл. · ${lesson.questionCount} вопр.`}</p>
+              <p className="muted">{groupLabels(lesson.groups, t)}</p>
+              <p className="muted">{lesson.format === 'video' ? t('Видео · {count} вопр.', { count: lesson.questionCount }) : t('Презентация · {slides} сл. · {count} вопр.', { slides: lesson.slideCount, count: lesson.questionCount })}</p>
             </div>
             <div className="row-actions">
-              <Link className="primary" to={`/admin/materials/${lesson.id}/play`}>Открыть</Link>
-              <Link className="ghost" to={`/admin/materials/${lesson.id}`}>Изменить</Link>
+              <Link className="primary" to={`/admin/materials/${lesson.id}/play`}>{t('Открыть')}</Link>
+              <Link className="ghost" to={`/admin/materials/${lesson.id}`}>{t('Изменить')}</Link>
             </div>
           </article>
         ))}
@@ -62,6 +64,7 @@ export function MaterialList() {
 }
 
 export function LessonEditor() {
+  const { t } = useI18n()
   const { id } = useParams()
   const isNew = !id
   const navigate = useNavigate()
@@ -131,7 +134,7 @@ export function LessonEditor() {
       if (!next.length) throw new Error('В презентации нет слайдов')
       setSlides(next)
       setTitle((current) => current.trim() || next.find((slide) => slide.title)?.title || current)
-      setNotice(data.truncated ? `В урок вошли первые ${next.length} слайдов` : `Загружено слайдов: ${next.length}`)
+      setNotice(data.truncated ? t('В урок вошли первые {count} слайдов', { count: next.length }) : t('Загружено слайдов: {count}', { count: next.length }))
     } catch (err) {
       setError(err.message)
     }
@@ -143,11 +146,11 @@ export function LessonEditor() {
     if (!file) return
     const type = (file.type || '').split(';')[0].toLowerCase()
     if (!VIDEO_TYPES.includes(type)) {
-      setError('Нужен ролик MP4, WebM, MOV или OGG')
+      setError(t('Нужен ролик MP4, WebM, MOV или OGG'))
       return
     }
     if (file.size > 80 * 1024 * 1024) {
-      setError('Видео больше 80 МБ')
+      setError(t('Видео больше 80 МБ'))
       return
     }
     setError('')
@@ -162,7 +165,7 @@ export function LessonEditor() {
     setError('')
     setNotice('')
     if (format === 'video' && !videoFile && !videoName) {
-      setError('Загрузите видео')
+      setError(t('Загрузите видео'))
       return
     }
     const body = {
@@ -190,7 +193,7 @@ export function LessonEditor() {
       savedId.current = lesson.id
       if (format === 'video' && videoFile) await api.uploadLessonVideo(lesson.id, videoFile)
       setVideoFile(null)
-      setNotice('Урок сохранён')
+      setNotice(t('Урок сохранён'))
       if (isNew) navigate(`/admin/materials/${lesson.id}`, { replace: true })
     } catch (err) {
       setError(err.message)
@@ -198,7 +201,7 @@ export function LessonEditor() {
   }
 
   async function remove() {
-    if (!window.confirm(`Удалить урок «${title}»?`)) return
+    if (!window.confirm(t('Удалить урок «{name}»?', { name: title }))) return
     try {
       await api.deleteLesson(id)
       navigate('/admin/materials')
@@ -207,33 +210,33 @@ export function LessonEditor() {
     }
   }
 
-  if (!ready && !error) return <p className="muted">Загрузка…</p>
+  if (!ready && !error) return <p className="muted">{t('Загрузка…')}</p>
 
   return (
     <form className="stack" onSubmit={save}>
       <div className="section-head">
-        <h1>{isNew ? 'Новый урок' : 'Урок'}</h1>
+        <h1>{isNew ? t('Новый урок') : t('Урок')}</h1>
         <div className="row-actions">
-          {!isNew && <Link className="ghost" to={`/admin/materials/${id}/play`}>Открыть</Link>}
-          {!isNew && <button className="ghost" type="button" onClick={remove}>Удалить</button>}
+          {!isNew && <Link className="ghost" to={`/admin/materials/${id}/play`}>{t('Открыть')}</Link>}
+          {!isNew && <button className="ghost" type="button" onClick={remove}>{t('Удалить')}</button>}
         </div>
       </div>
       <Notice error={error} notice={notice} />
       <label>
-        Название
-        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Солнечная система" />
+        {t('Название')}
+        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t('Солнечная система')} />
       </label>
       <GroupChecks groups={groups} onChange={setGroups} />
       <div className="tone-row">
-        <button className={`ghost ${format === 'slides' ? 'on' : ''}`} type="button" onClick={() => setFormat('slides')}>Презентация</button>
-        <button className={`ghost ${format === 'video' ? 'on' : ''}`} type="button" onClick={() => setFormat('video')}>Видео</button>
+        <button className={`ghost ${format === 'slides' ? 'on' : ''}`} type="button" onClick={() => setFormat('slides')}>{t('Презентация')}</button>
+        <button className={`ghost ${format === 'video' ? 'on' : ''}`} type="button" onClick={() => setFormat('video')}>{t('Видео')}</button>
       </div>
       {format === 'video' ? (
         <section className="stack">
           <div className="section-head">
-            <h2>Видео</h2>
+            <h2>{t('Видео')}</h2>
             <label className="primary file-button">
-              {videoName ? 'Заменить ролик' : 'Загрузить ролик'}
+              {videoName ? t('Заменить ролик') : t('Загрузить ролик')}
               <input className="sr-only" type="file" accept="video/mp4,video/webm,video/quicktime,video/ogg" onChange={pickVideo} />
             </label>
           </div>
@@ -243,11 +246,11 @@ export function LessonEditor() {
       ) : (
       <section className="stack">
         <div className="section-head">
-          <h2>Презентация</h2>
+          <h2>{t('Презентация')}</h2>
           <div className="row-actions">
-            <button className="ghost" type="button" onClick={() => setSlides((current) => [...current, blankFrame()])}>Текстовый слайд</button>
+            <button className="ghost" type="button" onClick={() => setSlides((current) => [...current, blankFrame()])}>{t('Текстовый слайд')}</button>
             <label className="primary file-button">
-              Загрузить презентацию
+              {t('Загрузить презентацию')}
               <input className="sr-only" type="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" onChange={upload} />
             </label>
           </div>
@@ -255,18 +258,18 @@ export function LessonEditor() {
         {slides.map((slide, index) => (
           <article className="question-card slide-editor" key={slide.id}>
             <header>
-              <strong>Слайд {index + 1}</strong>
+              <strong>{t('Слайд {n}', { n: index + 1 })}</strong>
               <div className="row-actions">
-                <button className="ghost" type="button" onClick={() => moveSlide(slide.id, -1)}>Выше</button>
-                <button className="ghost" type="button" onClick={() => moveSlide(slide.id, 1)}>Ниже</button>
-                <button className="ghost" type="button" onClick={() => setSlides((current) => current.filter((item) => item.id !== slide.id))}>Удалить</button>
+                <button className="ghost" type="button" onClick={() => moveSlide(slide.id, -1)}>{t('Выше')}</button>
+                <button className="ghost" type="button" onClick={() => moveSlide(slide.id, 1)}>{t('Ниже')}</button>
+                <button className="ghost" type="button" onClick={() => setSlides((current) => current.filter((item) => item.id !== slide.id))}>{t('Удалить')}</button>
               </div>
             </header>
             {slide.kind === 'image' ? (
               <>
                 {(slide.dataUrl || slide.imageUrl) && <img src={slide.dataUrl || slide.imageUrl} alt="" style={{ width: '100%', maxHeight: 220, objectFit: 'contain', borderRadius: 16 }} />}
                 <label>
-                  Подпись
+                  {t('Подпись')}
                   <input value={slide.caption || ''} onChange={(event) => patchSlide(slide.id, { caption: event.target.value })} />
                 </label>
               </>
@@ -280,20 +283,20 @@ export function LessonEditor() {
                       type="button"
                       onClick={() => patchSlide(slide.id, { tone: tone.id })}
                     >
-                      {tone.label}
+                      {t(tone.label)}
                     </button>
                   ))}
                 </div>
                 <label>
-                  Подпись
-                  <input value={slide.kicker || ''} onChange={(event) => patchSlide(slide.id, { kicker: event.target.value })} placeholder="Слайд 1" />
+                  {t('Подпись')}
+                  <input value={slide.kicker || ''} onChange={(event) => patchSlide(slide.id, { kicker: event.target.value })} placeholder={t('Слайд 1')} />
                 </label>
                 <label>
-                  Заголовок
+                  {t('Заголовок')}
                   <input value={slide.title} onChange={(event) => patchSlide(slide.id, { title: event.target.value })} />
                 </label>
                 <label>
-                  Текст, каждая строка отдельно
+                  {t('Текст, каждая строка отдельно')}
                   <textarea
                     value={slide.lines.join('\n')}
                     onChange={(event) => patchSlide(slide.id, { lines: event.target.value.split('\n') })}
@@ -308,17 +311,17 @@ export function LessonEditor() {
       )}
       <section className="stack">
         <div className="section-head">
-          <h2>Тест</h2>
-          <button className="ghost" type="button" onClick={() => setQuestions((current) => [...current, blankQuestion()])}>Вопрос</button>
+          <h2>{t('Тест')}</h2>
+          <button className="ghost" type="button" onClick={() => setQuestions((current) => [...current, blankQuestion()])}>{t('Вопрос')}</button>
         </div>
         {questions.map((question, questionIndex) => (
           <article className="question-card" key={question.id}>
             <header>
-              <strong>Вопрос {questionIndex + 1}</strong>
-              <button className="ghost" type="button" onClick={() => setQuestions((current) => current.filter((item) => item.id !== question.id))}>Удалить</button>
+              <strong>{t('Вопрос {n}', { n: questionIndex + 1 })}</strong>
+              <button className="ghost" type="button" onClick={() => setQuestions((current) => current.filter((item) => item.id !== question.id))}>{t('Удалить')}</button>
             </header>
             <label>
-              Текст
+              {t('Текст')}
               <textarea
                 rows={3}
                 value={question.text}
@@ -340,7 +343,7 @@ export function LessonEditor() {
                   />
                   <input
                     value={option.text}
-                    placeholder={`Вариант ${optionIndex + 1}`}
+                    placeholder={t('Вариант {n}', { n: optionIndex + 1 })}
                     onChange={(event) => setQuestions((current) => current.map((item) => {
                       if (item.id !== question.id) return item
                       const options = item.options.map((choice, index) => (
@@ -355,7 +358,7 @@ export function LessonEditor() {
           </article>
         ))}
       </section>
-      <button className="primary add" type="submit">Сохранить урок</button>
+      <button className="primary add" type="submit">{t('Сохранить урок')}</button>
     </form>
   )
 }

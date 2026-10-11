@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { api } from '../api.js'
+import { useI18n } from '../i18n.jsx'
 import { AdminFrame } from './AdminFrame.jsx'
 import { Classes, Learners } from './admin/OrgPanels.jsx'
 import { Organizations, OrgStaff } from './admin/RegionalPanels.jsx'
@@ -33,6 +34,7 @@ function tabsFor(role) {
 }
 
 function Overview() {
+  const { t } = useI18n()
   const [stats, setStats] = useState(null)
   const [error, setError] = useState('')
 
@@ -42,14 +44,15 @@ function Overview() {
 
   return (
     <section className="stack">
-      <div className="section-head"><h1>Обзор</h1></div>
-      {error && <p className="form-error">{error}</p>}
+      <div className="section-head"><h1>{t('Обзор')}</h1></div>
+      {error && <p className="form-error">{t(error)}</p>}
       <DashboardView stats={stats} />
     </section>
   )
 }
 
 export default function Admin({ onLogout }) {
+  const { t } = useI18n()
   const [me, setMe] = useState(null)
   const [error, setError] = useState('')
 
@@ -60,8 +63,8 @@ export default function Admin({ onLogout }) {
     }).catch((err) => setError(err.message))
   }, [])
 
-  if (error) return <p className="center form-error">{error}</p>
-  if (!me) return <p className="center muted">Загрузка…</p>
+  if (error) return <p className="center form-error">{t(error)}</p>
+  if (!me) return <p className="center muted">{t('Загрузка…')}</p>
 
   return (
     <AdminFrame me={me} onLogout={onLogout} tabs={tabsFor(me.role)}>

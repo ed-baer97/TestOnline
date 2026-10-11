@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api.js'
+import { useI18n } from '../../i18n.jsx'
 import { Notice } from './ui.jsx'
 
 export function Regions() {
+  const { t } = useI18n()
   const [regions, setRegions] = useState(null)
   const [name, setName] = useState('')
   const [drafts, setDrafts] = useState({})
@@ -48,7 +50,7 @@ export function Regions() {
   }
 
   async function remove(region) {
-    if (!window.confirm(`Удалить регион «${region.name}»?`)) return
+    if (!window.confirm(t('Удалить регион «{name}»?', { name: region.name }))) return
     setError('')
     setNotice('')
     try {
@@ -61,31 +63,31 @@ export function Regions() {
 
   return (
     <section className="stack">
-      <div className="section-head"><h1>Регионы</h1></div>
+      <div className="section-head"><h1>{t('Регионы')}</h1></div>
       <Notice error={error} notice={notice} />
       <form className="admin-form" onSubmit={create}>
         <label>
-          Новый регион
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Мангыстауская область" />
+          {t('Новый регион')}
+          <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Мангыстауская область')} />
         </label>
-        <button className="primary add" type="submit">Создать регион</button>
+        <button className="primary add" type="submit">{t('Создать регион')}</button>
       </form>
-      {regions === null && !error && <p className="muted">Загрузка…</p>}
+      {regions === null && !error && <p className="muted">{t('Загрузка…')}</p>}
       <div className="stack">
         {regions?.map((region) => (
           <article className="person" key={region.id}>
             <form onSubmit={(event) => rename(event, region.id)}>
               <input
-                aria-label={`Название ${region.name}`}
+                aria-label={t('Название {name}', { name: region.name })}
                 value={drafts[region.id] || ''}
                 onChange={(event) => setDrafts((current) => ({ ...current, [region.id]: event.target.value }))}
               />
-              <button className="ghost" type="submit">Сохранить</button>
+              <button className="ghost" type="submit">{t('Сохранить')}</button>
             </form>
             <p className="muted">
-              {region.organizations} орг. · {region.admins} адм. · {region.learners} тест.
+              {t('{organizations} орг. · {admins} адм. · {learners} тест.', { organizations: region.organizations, admins: region.admins, learners: region.learners })}
             </p>
-            <button className="ghost" type="button" onClick={() => remove(region)}>Удалить</button>
+            <button className="ghost" type="button" onClick={() => remove(region)}>{t('Удалить')}</button>
           </article>
         ))}
       </div>
@@ -94,6 +96,7 @@ export function Regions() {
 }
 
 export function RegionalStaff() {
+  const { t } = useI18n()
   const [admins, setAdmins] = useState(null)
   const [regions, setRegions] = useState([])
   const [form, setForm] = useState({ displayName: '', login: '', password: '', regionId: '' })
@@ -132,7 +135,7 @@ export function RegionalStaff() {
   }
 
   async function remove(person) {
-    if (!window.confirm(`Удалить администратора ${person.displayName}?`)) return
+    if (!window.confirm(t('Удалить администратора {name}?', { name: person.displayName }))) return
     setError('')
     setNotice('')
     try {
@@ -145,29 +148,29 @@ export function RegionalStaff() {
 
   return (
     <section className="stack">
-      <div className="section-head"><h1>Админы областей</h1></div>
+      <div className="section-head"><h1>{t('Админы областей')}</h1></div>
       <Notice error={error} notice={notice} />
       <form className="admin-form" onSubmit={create}>
         <label>
-          Имя
+          {t('Имя')}
           <input name="displayName" value={form.displayName} onChange={patch} />
         </label>
         <label>
-          Логин
+          {t('Логин')}
           <input name="login" autoComplete="off" value={form.login} onChange={patch} />
         </label>
         <label>
-          Пароль
+          {t('Пароль')}
           <input name="password" type="password" autoComplete="new-password" value={form.password} onChange={patch} />
         </label>
         <label>
-          Регион
+          {t('Регион')}
           <select name="regionId" value={form.regionId} onChange={patch}>
-            {regions.length === 0 && <option value="">Сначала создайте регион</option>}
+            {regions.length === 0 && <option value="">{t('Сначала создайте регион')}</option>}
             {regions.map((region) => <option key={region.id} value={region.id}>{region.name}</option>)}
           </select>
         </label>
-        <button className="primary add" type="submit" disabled={!regions.length}>Создать администратора</button>
+        <button className="primary add" type="submit" disabled={!regions.length}>{t('Создать администратора')}</button>
       </form>
       <div className="stack">
         {admins?.map((person) => (
@@ -179,6 +182,7 @@ export function RegionalStaff() {
 }
 
 function RegionAdminRow({ person, regions, onChanged, onDelete, onError }) {
+  const { t } = useI18n()
   const [displayName, setDisplayName] = useState(person.displayName)
   const [regionId, setRegionId] = useState(person.regionId)
   const [password, setPassword] = useState('')
@@ -198,22 +202,22 @@ function RegionAdminRow({ person, regions, onChanged, onDelete, onError }) {
   return (
     <article className="person">
       <form onSubmit={save}>
-        <input aria-label="Имя" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-        <select aria-label="Регион" value={regionId} onChange={(event) => setRegionId(event.target.value)}>
+        <input aria-label={t('Имя')} value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+        <select aria-label={t('Регион')} value={regionId} onChange={(event) => setRegionId(event.target.value)}>
           {regions.map((region) => <option key={region.id} value={region.id}>{region.name}</option>)}
         </select>
         <input
-          aria-label="Новый пароль"
+          aria-label={t('Новый пароль')}
           type="password"
           autoComplete="new-password"
-          placeholder="Новый пароль"
+          placeholder={t('Новый пароль')}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
-        <button className="ghost" type="submit">Сохранить</button>
+        <button className="ghost" type="submit">{t('Сохранить')}</button>
       </form>
       <span className="muted">{person.login}</span>
-      <button className="ghost" type="button" onClick={onDelete}>Удалить</button>
+      <button className="ghost" type="button" onClick={onDelete}>{t('Удалить')}</button>
     </article>
   )
 }

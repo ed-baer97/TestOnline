@@ -7,6 +7,6 @@ export const BANDS = [
 
 export const EMPTY_GROUPS = Object.fromEntries(BANDS.map((band) => [band.id, false]))
 
-export function groupLabels(groups) {
-  return BANDS.filter((band) => groups?.[band.id]).map((band) => band.label).join(', ')
+export function groupLabels(groups, translate = (label) => label) {
+  return BANDS.filter((band) => groups?.[band.id]).map((band) => translate(band.label)).join(', ')
 }

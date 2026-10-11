@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api.js'
+import { useI18n } from '../i18n.jsx'
 import { TopbarExtra } from '../topbar.jsx'
 
 export default function LessonView({ backTo }) {
+  const { t } = useI18n()
   const { id } = useParams()
   const [lesson, setLesson] = useState(null)
   const [error, setError] = useState('')
@@ -60,7 +62,7 @@ export default function LessonView({ backTo }) {
     event.preventDefault()
     if (!lesson || pending || locked) return
     if (lesson.questions.some((question) => answers[question.id] == null)) {
-      setError('Ответьте на все вопросы')
+      setError(t('Ответьте на все вопросы'))
       return
     }
     setError('')
@@ -89,19 +91,19 @@ export default function LessonView({ backTo }) {
   return (
     <section className="lesson">
       <TopbarExtra>
-        <Link className="ghost" to={backTo}>К списку</Link>
+        <Link className="ghost" to={backTo}>{t('К списку')}</Link>
       </TopbarExtra>
       <div className="section-head">
-        <h1>{lesson?.title || 'Урок'}</h1>
+        <h1>{lesson?.title || t('Урок')}</h1>
       </div>
-      {error && <p className="form-error">{error}</p>}
-      {!lesson && !error && <p className="muted">Загрузка…</p>}
+      {error && <p className="form-error">{t(error)}</p>}
+      {!lesson && !error && <p className="muted">{t('Загрузка…')}</p>}
       {slide && (
         <div className="deck">
           <Slide slide={slide} />
           <div className="deck-bar">
             <button className="ghost" type="button" onClick={() => showSlide(Math.max(0, index - 1))} disabled={index === 0}>
-              Назад
+              {t('Назад')}
             </button>
             <div className="deck-dots">
               {lesson.slides.map((item, dot) => (
@@ -109,14 +111,14 @@ export default function LessonView({ backTo }) {
                   key={item.id}
                   type="button"
                   className={dot === index ? 'on' : ''}
-                  aria-label={`Слайд ${dot + 1}`}
+                  aria-label={t('Слайд {n}', { n: dot + 1 })}
                   onClick={() => showSlide(dot)}
                 />
               ))}
             </div>
             {index < last ? (
               <button className="ghost" type="button" onClick={() => showSlide(index + 1)}>
-                Дальше
+                {t('Дальше')}
               </button>
             ) : (
               <button
@@ -125,11 +127,11 @@ export default function LessonView({ backTo }) {
                 disabled={!watched}
                 onClick={() => testRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
               >
-                К тесту
+                {t('К тесту')}
               </button>
             )}
           </div>
-          {!watched && <p className="muted deck-note">Тест откроется после просмотра всех слайдов.</p>}
+          {!watched && <p className="muted deck-note">{t('Тест откроется после просмотра всех слайдов.')}</p>}
         </div>
       )}
       {isVideo && (
@@ -147,20 +149,20 @@ export default function LessonView({ backTo }) {
               }}
             />
           ) : (
-            <p className="muted">Ролик ещё не загружен.</p>
+            <p className="muted">{t('Ролик ещё не загружен.')}</p>
           )}
           {watched ? (
             <button className="primary add" type="button" onClick={() => testRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
-              К тесту
+              {t('К тесту')}
             </button>
           ) : (
-            <p className="muted deck-note">Тест откроется после просмотра ролика.</p>
+            <p className="muted deck-note">{t('Тест откроется после просмотра ролика.')}</p>
           )}
         </div>
       )}
       {lesson && watched && (
         <form className="lesson-test" ref={testRef} onSubmit={submit}>
-          <h2>Тест</h2>
+          <h2>{t('Тест')}</h2>
           {lesson.questions.map((question, questionIndex) => {
             const verdict = byQuestion.get(question.id)
             return (
@@ -197,19 +199,19 @@ export default function LessonView({ backTo }) {
           })}
           {result && (
             <p className="saved">
-              Результат: {result.score} из {result.total}
-              {result.repeated ? ' · показан сохранённый результат' : ''}
+              {t('Результат: {score} из {total}', { score: result.score, total: result.total })}
+              {result.repeated ? t(' · показан сохранённый результат') : ''}
             </p>
           )}
           {locked ? (
-            <p className="muted">Тест пройден. Повторная отправка не предусмотрена.</p>
+            <p className="muted">{t('Тест пройден. Повторная отправка не предусмотрена.')}</p>
           ) : (
             <>
               {attemptsLeft != null && attemptsLeft > 0 && lesson.attempts && (
-                <p className="muted">Осталось попыток: {attemptsLeft}</p>
+                <p className="muted">{t('Осталось попыток: {count}', { count: attemptsLeft })}</p>
               )}
               <button className="primary add" type="submit" disabled={pending}>
-                {pending ? 'Отправка…' : result ? 'Проверить снова' : 'Проверить'}
+                {pending ? t('Отправка…') : result ? t('Проверить снова') : t('Проверить')}
               </button>
             </>
           )}
@@ -251,11 +253,12 @@ function FitLegend({ children }) {
 }
 
 function Slide({ slide }) {
+  const { t } = useI18n()
   const picture = slide.imageUrl || slide.dataUrl
   if (slide.kind === 'image') {
     return (
       <figure className="slide slide-image">
-        {picture && <img src={picture} alt={slide.caption || 'Слайд'} />}
+        {picture && <img src={picture} alt={slide.caption || t('Слайд')} />}
         {slide.caption && <figcaption>{slide.caption}</figcaption>}
       </figure>
     )

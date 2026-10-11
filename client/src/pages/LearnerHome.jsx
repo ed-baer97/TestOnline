@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api.js'
+import { useI18n } from '../i18n.jsx'
 import { TopbarSlot, TopbarSlots } from '../topbar.jsx'
 import LessonView from './LessonView.jsx'
 
 export function LearnFrame({ onLogout, children }) {
+  const { t } = useI18n()
   return (
     <TopbarSlots>
       <main className="sheet admin-sheet">
@@ -12,7 +14,7 @@ export function LearnFrame({ onLogout, children }) {
           <Link className="brand" to="/learn">TestOnline</Link>
           <div className="top-actions">
             <TopbarSlot />
-            <button className="ghost" type="button" onClick={onLogout}>Выйти</button>
+            <button className="ghost" type="button" onClick={onLogout}>{t('Выйти')}</button>
           </div>
         </header>
         {children}
@@ -22,6 +24,7 @@ export function LearnFrame({ onLogout, children }) {
 }
 
 export default function LearnerHome({ onLogout }) {
+  const { t } = useI18n()
   const [me, setMe] = useState(null)
   const [lessons, setLessons] = useState(null)
   const [error, setError] = useState('')
@@ -40,21 +43,21 @@ export default function LearnerHome({ onLogout }) {
 
   return (
     <LearnFrame onLogout={onLogout}>
-      {error && <p className="form-error">{error}</p>}
-      {!me && !error && <p className="muted">Загрузка…</p>}
+      {error && <p className="form-error">{t(error)}</p>}
+      {!me && !error && <p className="muted">{t('Загрузка…')}</p>}
       {me && (
         <>
           <div className="section-head"><h1>{me.displayName}</h1></div>
           <p className="muted">{me.organizationName} · {me.classLabel || me.className}</p>
           <div className="stack">
-            {lessons?.length === 0 && <p className="muted">Для вашего класса пока нет уроков.</p>}
+            {lessons?.length === 0 && <p className="muted">{t('Для вашего класса пока нет уроков.')}</p>}
             {lessons?.map((lesson) => (
               <Link className="lesson-card" key={lesson.id} to={`/learn/lessons/${lesson.id}`}>
                 <div>
                   <h2>{lesson.title}</h2>
-                  <p className="muted">{lesson.format === 'video' ? `Видео · ${lesson.questionCount} вопр.` : `Презентация · ${lesson.slideCount} сл. · ${lesson.questionCount} вопр.`}</p>
+                  <p className="muted">{lesson.format === 'video' ? t('Видео · {count} вопр.', { count: lesson.questionCount }) : t('Презентация · {slides} сл. · {count} вопр.', { slides: lesson.slideCount, count: lesson.questionCount })}</p>
                 </div>
-                <span>{lesson.best ? `${lesson.best.score} из ${lesson.best.total}` : 'Открыть'}</span>
+                <span>{lesson.best ? t('{score} из {total}', { score: lesson.best.score, total: lesson.best.total }) : t('Открыть')}</span>
               </Link>
             ))}
           </div>

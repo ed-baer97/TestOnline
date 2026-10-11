@@ -13,16 +13,18 @@ import Login from './pages/Login.jsx'
 import Play from './pages/Play.jsx'
 import Quizzes from './pages/Quizzes.jsx'
 import Stats from './pages/Stats.jsx'
+import { LanguageToggle, useI18n } from './i18n.jsx'
 import { ThemeToggle } from './theme.jsx'
 
 function RequireAuth({ roles, children }) {
+  const { t } = useI18n()
   const [me, setMe] = useState(undefined)
 
   useEffect(() => {
     api.me().then((data) => setMe(data.ok ? data : null)).catch(() => setMe(null))
   }, [])
 
-  if (me === undefined) return <p className="center muted">Загрузка…</p>
+  if (me === undefined) return <p className="center muted">{t('Загрузка…')}</p>
   if (!me) return <Navigate to="/login" replace />
   if (roles && !roles.includes(me.role)) return <Navigate to={homeFor(me.role)} replace />
   return children
@@ -38,7 +40,10 @@ export default function App() {
 
   return (
     <>
-    <ThemeToggle />
+    <div className="corner-controls">
+      <LanguageToggle />
+      <ThemeToggle />
+    </div>
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />

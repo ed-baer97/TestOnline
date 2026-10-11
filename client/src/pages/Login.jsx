@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api.js'
+import { useI18n } from '../i18n.jsx'
 import { homeFor } from '../roles.js'
 
 export default function Login() {
+  const { t } = useI18n()
   const navigate = useNavigate()
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
@@ -34,10 +36,10 @@ export default function Login() {
     <main className="auth">
       <form className="card" onSubmit={submit}>
         <p className="brand">TestOnline</p>
-        <h1>Вход</h1>
-        <p className="muted">Логин и пароль выдаёт администратор.</p>
+        <h1>{t('Вход')}</h1>
+        <p className="muted">{t('Логин и пароль выдаёт администратор.')}</p>
         <label>
-          Логин
+          {t('Логин')}
           <input
             autoFocus
             autoComplete="username"
@@ -46,7 +48,7 @@ export default function Login() {
           />
         </label>
         <label>
-          Пароль
+          {t('Пароль')}
           <input
             type="password"
             autoComplete="current-password"
@@ -54,9 +56,9 @@ export default function Login() {
             onChange={(event) => setPassword(event.target.value)}
           />
         </label>
-        {error && <p className="form-error">{error}</p>}
-        <button className="primary" type="submit" disabled={pending}>Войти</button>
-        <Link className="text-link" to="/">На главную</Link>
+        {error && <p className="form-error">{t(error)}</p>}
+        <button className="primary" type="submit" disabled={pending}>{t('Войти')}</button>
+        <Link className="text-link" to="/">{t('На главную')}</Link>
       </form>
     </main>
   )

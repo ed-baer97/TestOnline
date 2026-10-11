@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, hostKey, newId } from '../api.js'
+import { useI18n } from '../i18n.jsx'
 
 function blankQuestion() {
   return {
@@ -13,6 +14,7 @@ function blankQuestion() {
 }
 
 export default function Editor({ onLogout }) {
+  const { t } = useI18n()
   const { id } = useParams()
   const navigate = useNavigate()
   const isNew = id === 'new'
@@ -92,7 +94,7 @@ export default function Editor({ onLogout }) {
         const name = file.name.replace(/\.xlsx$/i, '').trim().slice(0, 80)
         if (name.length >= 2) setTitle(name)
       }
-      setSaved(`Загружено вопросов: ${data.questions.length}. Время ответа — 20 секунд, его можно изменить.`)
+      setSaved('Загружено вопросов: {count}. Время ответа — 20 секунд, его можно изменить.'.replace('{count}', data.questions.length))
     } catch (err) {
       setError(err.message)
     } finally {
@@ -108,48 +110,48 @@ export default function Editor({ onLogout }) {
     navigate(`/host/room/${room.code}`)
   }
 
-  if (!ready && !error) return <p className="center muted">Загрузка…</p>
+  if (!ready && !error) return <p className="center muted">{t('Загрузка…')}</p>
 
   return (
     <main className="sheet editor">
       <header className="topbar">
         <Link className="brand" to="/host">TestOnline</Link>
         <div className="top-actions">
-          <button className="ghost" type="button" onClick={save}>Сохранить</button>
-          <button className="primary" type="button" onClick={saveAndStart}>Запустить</button>
-          <button className="ghost" type="button" onClick={onLogout}>Выйти</button>
+          <button className="ghost" type="button" onClick={save}>{t('Сохранить')}</button>
+          <button className="primary" type="button" onClick={saveAndStart}>{t('Запустить')}</button>
+          <button className="ghost" type="button" onClick={onLogout}>{t('Выйти')}</button>
         </div>
       </header>
       <label className="title-field">
-        Название квиза
-        <input value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} placeholder="География, 7 класс" />
+        {t('Название квиза')}
+        <input value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} placeholder={t('География, 7 класс')} />
       </label>
       <div className="import-row">
           <label className="excel file-button">
-            {importing ? 'Читаем файл…' : 'Загрузить Excel'}
+            {importing ? t('Читаем файл…') : t('Загрузить Excel')}
             <input className="sr-only" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={loadExcel} />
           </label>
-          <a className="excel" href="/api/template">Скачать шаблон</a>
-        <p className="muted">Каждая строка — вопрос. Первый столбец — текст, дальше варианты. Залейте правильный ответ любым цветом, кроме белого.</p>
+          <a className="excel" href="/api/template">{t('Скачать шаблон')}</a>
+        <p className="muted">{t('Каждая строка — вопрос. Первый столбец — текст, дальше варианты. Залейте правильный ответ любым цветом, кроме белого.')}</p>
       </div>
-      {error && <p className="form-error">{error}</p>}
-      {saved && <p className="saved">{saved}</p>}
+      {error && <p className="form-error">{t(error)}</p>}
+      {saved && <p className="saved">{t(saved)}</p>}
       {questions.map((question, index) => (
         <section className="card question-card" key={question.id}>
           <header>
-            <h2>Вопрос {index + 1}</h2>
+            <h2>{t('Вопрос {n}', { n: index + 1 })}</h2>
             <div className="top-actions">
-              <button className="ghost" type="button" onClick={() => move(index, -1)} disabled={index === 0}>Выше</button>
-              <button className="ghost" type="button" onClick={() => move(index, 1)} disabled={index === questions.length - 1}>Ниже</button>
-              <button className="ghost" type="button" onClick={() => setQuestions((current) => current.filter((item) => item.id !== question.id))} disabled={questions.length === 1}>Удалить</button>
+              <button className="ghost" type="button" onClick={() => move(index, -1)} disabled={index === 0}>{t('Выше')}</button>
+              <button className="ghost" type="button" onClick={() => move(index, 1)} disabled={index === questions.length - 1}>{t('Ниже')}</button>
+              <button className="ghost" type="button" onClick={() => setQuestions((current) => current.filter((item) => item.id !== question.id))} disabled={questions.length === 1}>{t('Удалить')}</button>
             </div>
           </header>
           <label>
-            Текст
+            {t('Текст')}
             <textarea value={question.text} maxLength={200} onChange={(event) => updateQuestion(index, { text: event.target.value })} />
           </label>
           <label>
-            Секунд на ответ
+            {t('Секунд на ответ')}
             <select value={question.timeLimit} onChange={(event) => updateQuestion(index, { timeLimit: Number(event.target.value) })}>
               {[10, 20, 30, 60].map((seconds) => <option key={seconds} value={seconds}>{seconds}</option>)}
             </select>
@@ -166,16 +168,16 @@ export default function Editor({ onLogout }) {
                 <input
                   value={option.text}
                   maxLength={80}
-                  placeholder={`Вариант ${optionIndex + 1}`}
+                  placeholder={t('Вариант {n}', { n: optionIndex + 1 })}
                   onChange={(event) => updateOption(index, optionIndex, event.target.value)}
                 />
               </label>
             ))}
           </div>
-          <p className="muted">Отметьте кружком правильный ответ. Пустые поля не попадут в игру.</p>
+          <p className="muted">{t('Отметьте кружком правильный ответ. Пустые поля не попадут в игру.')}</p>
         </section>
       ))}
-      <button className="ghost add" type="button" onClick={() => setQuestions((current) => [...current, blankQuestion()])}>Добавить вопрос</button>
+      <button className="ghost add" type="button" onClick={() => setQuestions((current) => [...current, blankQuestion()])}>{t('Добавить вопрос')}</button>
     </main>
   )
 }

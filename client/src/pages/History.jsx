@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api.js'
+import { getLang, useI18n } from '../i18n.jsx'
 import { HostFrame } from './HostFrame.jsx'
 
 function formatWhen(value) {
-  return new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
+  return new Intl.DateTimeFormat(getLang() === 'kk' ? 'kk' : 'ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
 }
 
 function when(result) {
@@ -12,6 +13,7 @@ function when(result) {
 }
 
 export default function History({ onLogout }) {
+  const { t } = useI18n()
   const [stats, setStats] = useState(null)
   const [account, setAccount] = useState('')
   const [error, setError] = useState('')
@@ -31,7 +33,7 @@ export default function History({ onLogout }) {
     const list = [...(stats?.history || [])]
     list.sort((a, b) => {
       if (sort === 'title') {
-        const byTitle = a.title.localeCompare(b.title, 'ru')
+        const byTitle = a.title.localeCompare(b.title, getLang() === 'kk' ? 'kk' : 'ru')
         if (byTitle !== 0) return ascending ? byTitle : -byTitle
         return when(b) - when(a)
       }
@@ -59,27 +61,27 @@ export default function History({ onLogout }) {
       title="История"
       extra={(
         <div className="top-actions">
-          <button className={sort === 'date' ? 'primary' : 'ghost'} type="button" onClick={() => choose('date')}>{dateLabel}</button>
-          <button className={sort === 'title' ? 'primary' : 'ghost'} type="button" onClick={() => choose('title')}>{titleLabel}</button>
+          <button className={sort === 'date' ? 'primary' : 'ghost'} type="button" onClick={() => choose('date')}>{t(dateLabel)}</button>
+          <button className={sort === 'title' ? 'primary' : 'ghost'} type="button" onClick={() => choose('title')}>{t(titleLabel)}</button>
         </div>
       )}
     >
-      {error && <p className="form-error">{error}</p>}
-      {stats === null && !error && <p className="muted">Загрузка…</p>}
-      {stats && games.length === 0 && <p className="muted">Пока нет сыгранных игр.</p>}
+      {error && <p className="form-error">{t(error)}</p>}
+      {stats === null && !error && <p className="muted">{t('Загрузка…')}</p>}
+      {stats && games.length === 0 && <p className="muted">{t('Пока нет сыгранных игр.')}</p>}
       <ul className="session-list">
         {games.map((result) => (
           <li key={result.id}>
             {result.quizId ? (
               <Link to={`/host/quiz/${result.quizId}/stats/${result.id}`}>
                 <strong>{result.title}</strong>
-                <span>{formatWhen(result.startedAt || result.finishedAt)} · {result.playerCount} участ.</span>
-                <span>{result.top ? `1 место: ${result.top.name} (${result.top.score})` : 'Без игроков'}</span>
+                <span>{formatWhen(result.startedAt || result.finishedAt)} · {t('{count} участ.', { count: result.playerCount })}</span>
+                <span>{result.top ? t('1 место: {name} ({score})', { name: result.top.name, score: result.top.score }) : t('Без игроков')}</span>
               </Link>
             ) : (
               <span>
                 <strong>{result.title}</strong>
-                <span>{formatWhen(result.startedAt || result.finishedAt)} · {result.playerCount} участ.</span>
+                <span>{formatWhen(result.startedAt || result.finishedAt)} · {t('{count} участ.', { count: result.playerCount })}</span>
               </span>
             )}
           </li>

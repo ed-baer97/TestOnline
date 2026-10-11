@@ -1,3 +1,5 @@
+import { useI18n } from './i18n.jsx'
+
 export function BarChart({ caption, items }) {
   if (!items.length) return null
   const max = Math.max(1, ...items.map((item) => item.value))
@@ -18,6 +20,7 @@ export function BarChart({ caption, items }) {
 }
 
 export function RateList({ caption, items }) {
+  const { t } = useI18n()
   return (
     <figure className="chart">
       <figcaption>{caption}</figcaption>
@@ -28,7 +31,7 @@ export function RateList({ caption, items }) {
             <div className="rate-track" aria-hidden="true">
               <div style={{ width: `${item.rate ?? 0}%` }} />
             </div>
-            <em>{item.rate == null ? 'нет данных' : `${item.rate}%`}</em>
+            <em>{item.rate == null ? t('нет данных') : `${item.rate}%`}</em>
           </li>
         ))}
       </ul>

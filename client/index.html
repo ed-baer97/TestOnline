@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#071422" />
-    <title>TestOnline</title>
+    <title>TestOnline — финансовая безопасность</title>
     <script>
       try {
         var saved = localStorage.getItem('theme')
@@ -13,6 +13,11 @@
           : (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
         document.documentElement.dataset.theme = theme
         document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'light' ? '#f4f8fc' : '#071422')
+        var lang = localStorage.getItem('lang')
+        if (lang === 'kk') {
+          document.documentElement.lang = 'kk'
+          document.title = 'TestOnline — қаржылық қауіпсіздік'
+        }
       } catch (e) {}
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />

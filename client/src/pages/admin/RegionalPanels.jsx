@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api.js'
 import { EMPTY_GROUPS, groupLabels } from '../../bands.js'
+import { useI18n } from '../../i18n.jsx'
 import { GroupChecks, Notice } from './ui.jsx'
 
 export function Organizations() {
+  const { t } = useI18n()
   const [organizations, setOrganizations] = useState(null)
   const [name, setName] = useState('')
   const [groups, setGroups] = useState(EMPTY_GROUPS)
@@ -35,7 +37,7 @@ export function Organizations() {
   }
 
   async function remove(org) {
-    if (!window.confirm(`Удалить организацию «${org.name}»?`)) return
+    if (!window.confirm(t('Удалить организацию «{name}»?', { name: org.name }))) return
     setError('')
     setNotice('')
     try {
@@ -48,31 +50,31 @@ export function Organizations() {
 
   return (
     <section className="stack">
-      <div className="section-head"><h1>Организации</h1></div>
+      <div className="section-head"><h1>{t('Организации')}</h1></div>
       <Notice error={error} notice={notice} />
       <form className="admin-form" onSubmit={create}>
         <label>
-          Название
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Школа №3" />
+          {t('Название')}
+          <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Школа №3')} />
         </label>
         <GroupChecks groups={groups} onChange={setGroups} />
-        <button className="primary add" type="submit">Создать организацию</button>
+        <button className="primary add" type="submit">{t('Создать организацию')}</button>
       </form>
-      {organizations === null && !error && <p className="muted">Загрузка…</p>}
+      {organizations === null && !error && <p className="muted">{t('Загрузка…')}</p>}
       <div className="stack">
         {organizations?.map((org) => (
           <article className="question-card" key={org.id}>
             <header>
               <div>
                 <h2>{org.name}</h2>
-                <p className="muted">{groupLabels(org.groups) || 'Группы не отмечены'}</p>
-                <p className="muted">{org.classes} кл. · {org.learners} тест. · {org.admins} адм.</p>
+                <p className="muted">{groupLabels(org.groups, t) || t('Группы не отмечены')}</p>
+                <p className="muted">{t('{orgClasses} кл. · {learners} тест. · {admins} адм.', { orgClasses: org.classes, learners: org.learners, admins: org.admins })}</p>
               </div>
               <div className="row-actions">
                 <button className="ghost" type="button" onClick={() => setEditing(editing === org.id ? null : org.id)}>
-                  {editing === org.id ? 'Закрыть' : 'Изменить'}
+                  {editing === org.id ? t('Закрыть') : t('Изменить')}
                 </button>
-                <button className="ghost" type="button" onClick={() => remove(org)}>Удалить</button>
+                <button className="ghost" type="button" onClick={() => remove(org)}>{t('Удалить')}</button>
               </div>
             </header>
             {editing === org.id && (
@@ -94,6 +96,7 @@ export function Organizations() {
 }
 
 function OrgEditor({ org, onSaved, onError }) {
+  const { t } = useI18n()
   const [name, setName] = useState(org.name)
   const [groups, setGroups] = useState(org.groups)
 
@@ -111,16 +114,17 @@ function OrgEditor({ org, onSaved, onError }) {
   return (
     <form className="stack" onSubmit={save}>
       <label>
-        Название
+        {t('Название')}
         <input value={name} onChange={(event) => setName(event.target.value)} />
       </label>
       <GroupChecks groups={groups} onChange={setGroups} />
-      <button className="primary add" type="submit">Сохранить</button>
+      <button className="primary add" type="submit">{t('Сохранить')}</button>
     </form>
   )
 }
 
 export function OrgStaff() {
+  const { t } = useI18n()
   const [admins, setAdmins] = useState(null)
   const [organizations, setOrganizations] = useState([])
   const [form, setForm] = useState({ displayName: '', login: '', password: '', organizationId: '' })
@@ -162,7 +166,7 @@ export function OrgStaff() {
   }
 
   async function remove(person) {
-    if (!window.confirm(`Удалить администратора ${person.displayName}?`)) return
+    if (!window.confirm(t('Удалить администратора {name}?', { name: person.displayName }))) return
     setError('')
     setNotice('')
     try {
@@ -175,29 +179,29 @@ export function OrgStaff() {
 
   return (
     <section className="stack">
-      <div className="section-head"><h1>Админы организаций</h1></div>
+      <div className="section-head"><h1>{t('Админы организаций')}</h1></div>
       <Notice error={error} notice={notice} />
       <form className="admin-form" onSubmit={create}>
         <label>
-          Имя
+          {t('Имя')}
           <input name="displayName" value={form.displayName} onChange={patch} />
         </label>
         <label>
-          Логин
+          {t('Логин')}
           <input name="login" autoComplete="off" value={form.login} onChange={patch} />
         </label>
         <label>
-          Пароль
+          {t('Пароль')}
           <input name="password" type="password" autoComplete="new-password" value={form.password} onChange={patch} />
         </label>
         <label>
-          Организация
+          {t('Организация')}
           <select name="organizationId" value={form.organizationId} onChange={patch}>
-            {organizations.length === 0 && <option value="">Сначала создайте организацию</option>}
+            {organizations.length === 0 && <option value="">{t('Сначала создайте организацию')}</option>}
             {organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
           </select>
         </label>
-        <button className="primary add" type="submit" disabled={!organizations.length}>Создать администратора</button>
+        <button className="primary add" type="submit" disabled={!organizations.length}>{t('Создать администратора')}</button>
       </form>
       <div className="stack">
         {admins?.map((person) => (
@@ -216,6 +220,7 @@ export function OrgStaff() {
 }
 
 function OrgAdminRow({ person, organizations, onChanged, onDelete, onError }) {
+  const { t } = useI18n()
   const [displayName, setDisplayName] = useState(person.displayName)
   const [organizationId, setOrganizationId] = useState(person.organizationId)
   const [password, setPassword] = useState('')
@@ -235,22 +240,22 @@ function OrgAdminRow({ person, organizations, onChanged, onDelete, onError }) {
   return (
     <article className="person">
       <form onSubmit={save}>
-        <input aria-label="Имя" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-        <select aria-label="Организация" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}>
+        <input aria-label={t('Имя')} value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+        <select aria-label={t('Организация')} value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}>
           {organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
         </select>
         <input
-          aria-label="Новый пароль"
+          aria-label={t('Новый пароль')}
           type="password"
           autoComplete="new-password"
-          placeholder="Новый пароль"
+          placeholder={t('Новый пароль')}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
-        <button className="ghost" type="submit">Сохранить</button>
+        <button className="ghost" type="submit">{t('Сохранить')}</button>
       </form>
       <span className="muted">{person.login}</span>
-      <button className="ghost" type="button" onClick={onDelete}>Удалить</button>
+      <button className="ghost" type="button" onClick={onDelete}>{t('Удалить')}</button>
     </article>
   )
 }
