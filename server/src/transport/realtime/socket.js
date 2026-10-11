@@ -9,7 +9,7 @@ import {
   remember,
   submitAnswer,
   viewFor,
-} from '../../services/rooms.js'
+} from '../../services/rooms/index.js'
 
 // Сокеты всех экземпляров io в процессе: комнаты живут в памяти процесса и общие для них.
 const watchers = new Set()

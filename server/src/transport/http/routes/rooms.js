@@ -11,7 +11,7 @@ import {
   publishRoom,
   remember,
   submitAnswer,
-} from '../../../services/rooms.js'
+} from '../../../services/rooms/index.js'
 import { requireHost, route } from '../middleware.js'
 
 // Комнатой управляют по hostToken и playerToken, а не по cookie: экран ведущего и телефоны входят без логина.
