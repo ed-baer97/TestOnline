@@ -1,23 +1,20 @@
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import test from 'node:test'
+import { useTestDatabase } from './helpers/db.js'
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testonline-'))
-process.env.DB_PATH = path.join(dir, 'test.sqlite')
+await useTestDatabase('flow')
 process.env.ADMIN_PASSWORD = 'admin'
 process.env.SESSION_SECRET = 'test-secret'
 
 test('комната: QR-вход, вопрос без правильного ответа, очки и подиум', async () => {
-  const { createApp } = await import('./index.js')
+  const { createApp } = await import('../src/index.js')
   const { io } = await import('socket.io-client')
   const { httpServer, io: serverIo } = createApp()
   await new Promise((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
   const port = httpServer.address().port
   const base = `http://127.0.0.1:${port}`
 
-  const { registerUser } = await import('./db.js')
+  const { registerUser } = await import('../src/db.js')
   await registerUser({ login: 'host', password: 'secret1' })
   await assert.rejects(() => registerUser({ login: 'host', password: 'secret1' }), (error) => error.status === 409)
   const session = await fetch(`${base}/api/login`, {

@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import test from 'node:test'
+import { useTestDatabase } from './helpers/db.js'
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testonline-lessons-'))
-process.env.DB_PATH = path.join(dir, 'lessons.sqlite')
+await useTestDatabase('lessons')
 process.env.SESSION_SECRET = 'test-secret'
 process.env.SUPER_LOGIN = 'root'
 process.env.SUPER_PASSWORD = 'rootpass'
@@ -13,8 +11,8 @@ process.env.SUPER_PASSWORD = 'rootpass'
 const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
 test('урок: презентация, тест и видимость по группе', async () => {
-  const admin = await import('./admin.js')
-  const lessons = await import('./lessons.js')
+  const admin = await import('../src/admin.js')
+  const lessons = await import('../src/lessons.js')
   const root = await admin.ensureSuperAdmin()
   const demoId = await lessons.ensureDemoLesson()
   assert.equal(await lessons.ensureDemoLesson(), demoId)
@@ -213,7 +211,7 @@ test('урок: презентация, тест и видимость по гр
   assert.equal((await lessons.openLessonFile(pupil, imported.slides[1].fileId)).mime, 'image/png')
 
   const legacyId = '11111111-2222-4333-8444-555555555555'
-  const { db } = await import('./db.js')
+  const { db } = await import('../src/db.js')
   await db.run('INSERT INTO lesson_files (id, lesson_id, mime, data_base64) VALUES (?, ?, ?, ?)', legacyId, fromDeck.id, 'image/png', pixel.split(',')[1])
   assert.equal(await lessons.migrateLessonFiles(), 1)
   assert.equal(await lessons.migrateLessonFiles(), 0)
@@ -239,7 +237,7 @@ test('урок: презентация, тест и видимость по гр
   assert.equal(wordy.questions[0].options[0].text, longOption)
 
   const sharp = (await import('sharp')).default
-  const { slidesFromPptx } = await import('./pptx.js')
+  const { slidesFromPptx } = await import('../src/pptx.js')
   const huge = await sharp({
     create: { width: 1800, height: 1800, channels: 3, noise: { type: 'gaussian' } },
   }).png().toBuffer()

@@ -1,15 +1,12 @@
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import test from 'node:test'
+import { useTestDatabase } from './helpers/db.js'
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testonline-stats-'))
-process.env.DB_PATH = path.join(dir, 'test.sqlite')
+await useTestDatabase('stats')
 process.env.SESSION_SECRET = 'test-secret'
 
 test('сводка считает запуски, средний балл и долю верных ответов', async () => {
-  const { createQuiz, quizStats, registerUser, saveResult, statsOverview } = await import('./db.js')
+  const { createQuiz, quizStats, registerUser, saveResult, statsOverview } = await import('../src/db.js')
   const user = await registerUser({ login: 'stat', password: 'secret1' })
   const quiz = await createQuiz(user.id, {
     title: 'География',

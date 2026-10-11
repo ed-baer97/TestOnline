@@ -1,13 +1,10 @@
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import test from 'node:test'
 import ExcelJS from 'exceljs'
-import { questionsFromXlsx, templateWorkbook } from './excel.js'
+import { questionsFromXlsx, templateWorkbook } from '../src/excel.js'
+import { useTestDatabase } from './helpers/db.js'
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testonline-excel-'))
-process.env.DB_PATH = path.join(dir, 'test.sqlite')
+await useTestDatabase('excel')
 process.env.SESSION_SECRET = 'test-secret'
 
 function fill(argb) {
@@ -98,12 +95,12 @@ test('шаблон Excel читается как квиз с жёлтым пра
 })
 
 test('импорт через API доступен после входа', async () => {
-  const { createApp } = await import('./index.js')
+  const { createApp } = await import('../src/index.js')
   const { httpServer } = createApp()
   await new Promise((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
   const base = `http://127.0.0.1:${httpServer.address().port}`
   try {
-    const { registerUser } = await import('./db.js')
+    const { registerUser } = await import('../src/db.js')
     await registerUser({ login: 'importer', password: 'secret1' })
     const register = await fetch(`${base}/api/login`, {
       method: 'POST',

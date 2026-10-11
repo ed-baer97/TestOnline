@@ -1,17 +1,14 @@
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import test from 'node:test'
+import { useTestDatabase } from './helpers/db.js'
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testonline-admin-'))
-process.env.DB_PATH = path.join(dir, 'admin.sqlite')
+await useTestDatabase('admin')
 process.env.SESSION_SECRET = 'test-secret'
 process.env.SUPER_LOGIN = 'root'
 process.env.SUPER_PASSWORD = 'rootpass'
 
 test('регион видит своих, организация собирает классы', async () => {
-  const admin = await import('./admin.js')
+  const admin = await import('../src/admin.js')
   const root = await admin.ensureSuperAdmin()
   assert.equal(root.role, 'super')
 
@@ -94,7 +91,7 @@ test('регион видит своих, организация собирае�
   assert.ok(imported.errors.some((line) => line.includes('7в')))
   assert.ok(imported.errors.some((line) => line.includes('arman') && line.includes('занят')))
   assert.ok(imported.errors.some((line) => line.includes('повторяется')))
-  const { authenticate } = await import('./db.js')
+  const { authenticate } = await import('../src/db.js')
   assert.equal((await authenticate('erlan', imported.learners[1].password)).role, 'learner')
 
   const page = await admin.listLearners(orgAdmin, { limit: 2 })
@@ -128,7 +125,7 @@ test('регион видит своих, организация собирае�
   )
   await assert.rejects(() => admin.createRegion(orgAdmin, { name: 'Новый' }), (error) => error.status === 403)
 
-  const { createApp } = await import('./index.js')
+  const { createApp } = await import('../src/index.js')
   const { httpServer } = createApp()
   await new Promise((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
   const base = `http://127.0.0.1:${httpServer.address().port}`

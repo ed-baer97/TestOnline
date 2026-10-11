@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { normalizeAccount, normalizeQuiz, scorePoints } from './domain.js'
+import { normalizeAccount, normalizeQuiz, scorePoints } from '../src/domain.js'
 
 test('быстрый верный ответ стоит 1000, медленный 500', () => {
   assert.equal(scorePoints(0, 20), 1000)
