@@ -4,7 +4,7 @@ import { cleanText } from './text.js'
 
 export function normalizeAccount({ login, password }) {
   const name = cleanText(login)
-  if (!/^[\p{L}\p{N}][\p{L}\p{N}._-]{2,31}$/u.test(name)) fail('Логин: 3–32 символа, буквы, цифры, точка, _ или -')
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{2,31}$/.test(name)) fail('Логин: 3–32 символа, латинские буквы, цифры, точка, _ или -')
   const pass = String(password ?? '')
   if (pass.length < 6 || pass.length > 72) fail('Пароль от 6 до 72 символов')
   return { login: name, password: pass }

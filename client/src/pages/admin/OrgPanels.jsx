@@ -232,7 +232,7 @@ export function Learners() {
       )}
       {groups.length === 0 && <p className="muted">Сначала создайте класс, затем сюда можно добавить тестируемого.</p>}
       <p className="muted">
-        В файле четыре столбца: класс, имя, логин, пароль. Если пароль пустой, он будет создан автоматически и показан после загрузки.
+        В файле четыре столбца: класс, имя, логин, пароль. Логин — латиницей (буквы, цифры, точка, _ или -). Если пароль пустой, он будет создан автоматически и показан после загрузки.
       </p>
       <form className="admin-form" onSubmit={create}>
         <label>
@@ -241,7 +241,7 @@ export function Learners() {
         </label>
         <label>
           Логин
-          <input name="login" autoComplete="off" value={form.login} onChange={patch} />
+          <input name="login" autoComplete="off" placeholder="anna.k" title="3–32 символа латиницей: буквы, цифры, точка, _ или -" value={form.login} onChange={patch} />
         </label>
         <label>
           Пароль
