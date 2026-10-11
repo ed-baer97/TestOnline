@@ -77,7 +77,7 @@ export function registerLessonRoutes(app) {
     res.json(await checkLesson(req.user, req.params.id, req.body?.answers))
   }))
   app.put('/api/admin/lessons/:id/video', guard, express.raw({ type: () => true, limit: '80mb' }), route(async (req, res) => {
-    let name = ''
+    let name
     try {
       name = decodeURIComponent(String(req.get('x-file-name') || ''))
     } catch {

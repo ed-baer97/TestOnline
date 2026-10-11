@@ -141,6 +141,12 @@ TEST_POSTGRES_URL=postgresql://postgres:пароль@localhost:5432/postgres npm
 
 Каждый файл тестов создаёт себе отдельную базу `testonline_*`. После прогона их можно удалить.
 
+Линтер (ESLint, настройки в `eslint.config.mjs`) проверяет сервер, клиент и тесты:
+
+```bash
+npm run lint
+```
+
 ## Из чего состоит проект
 
 | Папка | Что внутри |

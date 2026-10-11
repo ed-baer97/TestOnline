@@ -8,7 +8,7 @@ const ROOM_TTL_MS = 4 * 60 * 60 * 1000
 const PODIUM_TTL_MS = 30 * 60 * 1000
 
 export async function createRoom(quiz) {
-  let code = ''
+  let code
   do {
     code = String(Math.floor(100000 + Math.random() * 900000))
   } while (rooms.has(code) || await readLiveRoom(code))

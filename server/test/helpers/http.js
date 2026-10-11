@@ -26,7 +26,7 @@ export async function call(base, path, { method = 'GET', json, body, cookie, hea
   const response = await fetch(`${base}${path}`, init)
   const buffer = Buffer.from(await response.arrayBuffer())
   const text = buffer.toString()
-  let data = null
+  let data
   try {
     data = JSON.parse(text)
   } catch {
