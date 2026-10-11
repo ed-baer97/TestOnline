@@ -103,12 +103,14 @@ test('импорт через API доступен после входа', async
   await new Promise((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
   const base = `http://127.0.0.1:${httpServer.address().port}`
   try {
-    const register = await fetch(`${base}/api/register`, {
+    const { registerUser } = await import('./db.js')
+    await registerUser({ login: 'importer', password: 'secret1' })
+    const register = await fetch(`${base}/api/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ login: 'importer', password: 'secret1' }),
     })
-    assert.equal(register.status, 201)
+    assert.equal(register.status, 200)
     const cookie = register.headers.get('set-cookie').split(';')[0]
     const buffer = await workbook([{
       values: ['Столица Франции?', 'Париж', 'Рим'],

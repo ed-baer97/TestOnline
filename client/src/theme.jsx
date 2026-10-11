@@ -10,7 +10,7 @@ export function currentTheme() {
 function paint(theme) {
   document.documentElement.dataset.theme = theme
   const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.setAttribute('content', theme === 'light' ? '#f6f3ec' : '#12141c')
+  if (meta) meta.setAttribute('content', theme === 'light' ? '#f4f8fc' : '#071422')
 }
 
 export function ThemeToggle() {

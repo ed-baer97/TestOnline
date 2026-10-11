@@ -17,20 +17,16 @@ test('комната: QR-вход, вопрос без правильного о
   const port = httpServer.address().port
   const base = `http://127.0.0.1:${port}`
 
-  const register = await fetch(`${base}/api/register`, {
+  const { registerUser } = await import('./db.js')
+  await registerUser({ login: 'host', password: 'secret1' })
+  await assert.rejects(() => registerUser({ login: 'host', password: 'secret1' }), (error) => error.status === 409)
+  const session = await fetch(`${base}/api/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ login: 'host', password: 'secret1' }),
   })
-  assert.equal(register.status, 201)
-  const cookie = register.headers.get('set-cookie').split(';')[0]
-
-  const taken = await fetch(`${base}/api/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ login: 'host', password: 'secret1' }),
-  })
-  assert.equal(taken.status, 409)
+  assert.equal(session.status, 200)
+  const cookie = session.headers.get('set-cookie').split(';')[0]
 
   const badLogin = await fetch(`${base}/api/login`, {
     method: 'POST',
@@ -156,12 +152,13 @@ test('комната: QR-вход, вопрос без правильного о
   assert.equal(overviewJson.runs, 1)
   assert.equal(overviewJson.participants, 1)
 
-  const other = await fetch(`${base}/api/register`, {
+  await registerUser({ login: 'other', password: 'secret2' })
+  const other = await fetch(`${base}/api/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ login: 'other', password: 'secret2' }),
   })
-  assert.equal(other.status, 201)
+  assert.equal(other.status, 200)
   const otherCookie = other.headers.get('set-cookie').split(';')[0]
   const hidden = await fetch(`${base}/api/quizzes/${quiz.id}`, { headers: { Cookie: otherCookie } })
   assert.equal(hidden.status, 404)

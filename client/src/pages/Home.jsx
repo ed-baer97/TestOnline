@@ -20,10 +20,13 @@ export default function Home() {
     <main className="home">
       <section className="home-copy">
         <p className="brand">TestOnline</p>
-        <h1>Живой квиз на одном экране и телефонах</h1>
+        <h1>Обучение и тесты для школ и вузов</h1>
         <p className="lead">
-          Ведущий создаёт комнату и показывает QR-код. Участники сканируют его и отвечают у себя.
+          Организации, классы и тестируемые. Войдите логином, который выдал администратор.
         </p>
+        <div className="home-actions">
+          <Link className="primary" to="/login">Войти</Link>
+        </div>
         <form className="join-form" onSubmit={submit}>
           <label>
             Код комнаты
@@ -39,7 +42,7 @@ export default function Home() {
           <button className="primary" type="submit">Войти</button>
         </form>
         {error && <p className="form-error">{error}</p>}
-        <Link className="text-link" to="/host">Я ведущий</Link>
+        <p className="muted">Код комнаты — для живого квиза.</p>
       </section>
       <aside className="phone" aria-hidden="true">
         <p>Столица Франции?</p>

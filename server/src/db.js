@@ -28,19 +28,14 @@ function postgresConnectionString(url) {
 }
 
 async function openDatabase() {
-  if (!postgresUrl) {
-    if (process.env.VERCEL) {
-      const error = new Error('База не подключена: в проекте Vercel нет POSTGRES_URL')
-      error.status = 500
-      throw error
-    }
-    return openSqlite()
-  }
-  const local = /localhost|127\.0\.0\.1/.test(postgresUrl)
+  if (!postgresUrl) return openSqlite()
+  // PG_SSL=0 — Postgres рядом (docker compose, локальная сеть), без TLS.
+  const plain = process.env.PG_SSL === '0' || /localhost|127\.0\.0\.1/.test(postgresUrl)
+  const poolSize = Number(process.env.PG_POOL_MAX) > 0 ? Number(process.env.PG_POOL_MAX) : 20
   const pool = new pg.Pool({
-    connectionString: local ? postgresUrl : postgresConnectionString(postgresUrl),
-    max: process.env.VERCEL ? 1 : 3,
-    ssl: local ? false : { rejectUnauthorized: false },
+    connectionString: plain ? postgresUrl : postgresConnectionString(postgresUrl),
+    max: poolSize,
+    ssl: plain ? false : { rejectUnauthorized: false },
   })
   const statements = [
     `CREATE TABLE IF NOT EXISTS users (
@@ -50,6 +45,82 @@ async function openDatabase() {
       created_at TEXT NOT NULL
     )`,
     'CREATE UNIQUE INDEX IF NOT EXISTS users_login_lower ON users (lower(login))',
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'host'`,
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS region_id TEXT',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS organization_id TEXT',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS class_id TEXT',
+    `CREATE TABLE IF NOT EXISTS regions (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS organizations (
+      id TEXT PRIMARY KEY,
+      region_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      grades_1_4 INTEGER NOT NULL DEFAULT 0,
+      grades_5_9 INTEGER NOT NULL DEFAULT 0,
+      grades_10_11 INTEGER NOT NULL DEFAULT 0,
+      students INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS tracks (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS classes (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      band TEXT NOT NULL,
+      grade INTEGER,
+      track_id TEXT,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )`,
+    'CREATE INDEX IF NOT EXISTS organizations_region ON organizations (region_id)',
+    'CREATE INDEX IF NOT EXISTS classes_org ON classes (organization_id)',
+    'CREATE INDEX IF NOT EXISTS tracks_org ON tracks (organization_id)',
+    'CREATE INDEX IF NOT EXISTS users_org_role ON users (organization_id, role)',
+    `CREATE TABLE IF NOT EXISTS lessons (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      seed_key TEXT,
+      grades_1_4 INTEGER NOT NULL DEFAULT 0,
+      grades_5_9 INTEGER NOT NULL DEFAULT 0,
+      grades_10_11 INTEGER NOT NULL DEFAULT 0,
+      students INTEGER NOT NULL DEFAULT 0,
+      slides TEXT NOT NULL,
+      questions TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`,
+    'CREATE UNIQUE INDEX IF NOT EXISTS lessons_seed_key ON lessons (seed_key) WHERE seed_key IS NOT NULL',
+    `CREATE TABLE IF NOT EXISTS lesson_files (
+      id TEXT PRIMARY KEY,
+      lesson_id TEXT NOT NULL,
+      mime TEXT NOT NULL,
+      data_base64 TEXT NOT NULL DEFAULT ''
+    )`,
+    'CREATE INDEX IF NOT EXISTS lesson_files_lesson ON lesson_files (lesson_id)',
+    `ALTER TABLE lesson_files ALTER COLUMN data_base64 SET DEFAULT ''`,
+    `CREATE TABLE IF NOT EXISTS lesson_attempts (
+      id TEXT PRIMARY KEY,
+      lesson_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      score INTEGER NOT NULL,
+      total INTEGER NOT NULL,
+      finished_at TEXT NOT NULL
+    )`,
+    'CREATE INDEX IF NOT EXISTS lesson_attempts_user ON lesson_attempts (lesson_id, user_id)',
+    'CREATE INDEX IF NOT EXISTS lesson_attempts_by_user ON lesson_attempts (user_id, lesson_id)',
+    'ALTER TABLE lesson_attempts ADD COLUMN IF NOT EXISTS answers TEXT',
+    'CREATE INDEX IF NOT EXISTS users_class ON users (class_id)',
+    `ALTER TABLE lessons ADD COLUMN IF NOT EXISTS format TEXT NOT NULL DEFAULT 'slides'`,
+    'ALTER TABLE lessons ADD COLUMN IF NOT EXISTS video_mime TEXT',
+    'ALTER TABLE lessons ADD COLUMN IF NOT EXISTS video_name TEXT',
     `CREATE TABLE IF NOT EXISTS quizzes (
       id TEXT PRIMARY KEY,
       user_id TEXT,
@@ -124,6 +195,83 @@ async function openSqlite() {
   ensureColumn('quizzes', 'user_id', 'ALTER TABLE quizzes ADD COLUMN user_id TEXT')
   ensureColumn('results', 'user_id', 'ALTER TABLE results ADD COLUMN user_id TEXT')
   ensureColumn('results', 'started_at', 'ALTER TABLE results ADD COLUMN started_at TEXT')
+  ensureColumn('users', 'role', "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'host'")
+  ensureColumn('users', 'region_id', 'ALTER TABLE users ADD COLUMN region_id TEXT')
+  ensureColumn('users', 'organization_id', 'ALTER TABLE users ADD COLUMN organization_id TEXT')
+  ensureColumn('users', 'display_name', 'ALTER TABLE users ADD COLUMN display_name TEXT')
+  ensureColumn('users', 'class_id', 'ALTER TABLE users ADD COLUMN class_id TEXT')
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS regions (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS organizations (
+      id TEXT PRIMARY KEY,
+      region_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      grades_1_4 INTEGER NOT NULL DEFAULT 0,
+      grades_5_9 INTEGER NOT NULL DEFAULT 0,
+      grades_10_11 INTEGER NOT NULL DEFAULT 0,
+      students INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS tracks (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS classes (
+      id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      band TEXT NOT NULL,
+      grade INTEGER,
+      track_id TEXT,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS organizations_region ON organizations (region_id);
+    CREATE INDEX IF NOT EXISTS classes_org ON classes (organization_id);
+    CREATE INDEX IF NOT EXISTS tracks_org ON tracks (organization_id);
+    CREATE INDEX IF NOT EXISTS users_org_role ON users (organization_id, role);
+    CREATE TABLE IF NOT EXISTS lessons (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      seed_key TEXT,
+      grades_1_4 INTEGER NOT NULL DEFAULT 0,
+      grades_5_9 INTEGER NOT NULL DEFAULT 0,
+      grades_10_11 INTEGER NOT NULL DEFAULT 0,
+      students INTEGER NOT NULL DEFAULT 0,
+      slides TEXT NOT NULL,
+      questions TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS lessons_seed_key ON lessons (seed_key) WHERE seed_key IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS lesson_files (
+      id TEXT PRIMARY KEY,
+      lesson_id TEXT NOT NULL,
+      mime TEXT NOT NULL,
+      data_base64 TEXT NOT NULL DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS lesson_files_lesson ON lesson_files (lesson_id);
+    CREATE TABLE IF NOT EXISTS lesson_attempts (
+      id TEXT PRIMARY KEY,
+      lesson_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      score INTEGER NOT NULL,
+      total INTEGER NOT NULL,
+      finished_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS lesson_attempts_user ON lesson_attempts (lesson_id, user_id);
+    CREATE INDEX IF NOT EXISTS lesson_attempts_by_user ON lesson_attempts (user_id, lesson_id);
+    CREATE INDEX IF NOT EXISTS users_class ON users (class_id);
+  `)
+  ensureColumn('lessons', 'format', "ALTER TABLE lessons ADD COLUMN format TEXT NOT NULL DEFAULT 'slides'")
+  ensureColumn('lessons', 'video_mime', 'ALTER TABLE lessons ADD COLUMN video_mime TEXT')
+  ensureColumn('lessons', 'video_name', 'ALTER TABLE lessons ADD COLUMN video_name TEXT')
+  ensureColumn('lesson_attempts', 'answers', 'ALTER TABLE lesson_attempts ADD COLUMN answers TEXT')
   return {
     get: async (sql, ...params) => db.prepare(sql).get(...params),
     all: async (sql, ...params) => db.prepare(sql).all(...params),
@@ -142,7 +290,7 @@ function ready() {
   return opened
 }
 
-const db = {
+export const db = {
   get: async (...args) => (await ready()).get(...args),
   all: async (...args) => (await ready()).all(...args),
   run: async (...args) => (await ready()).run(...args),
@@ -209,12 +357,13 @@ async function insertDemo(userId) {
 export async function registerUser({ login, password }) {
   const first = Number((await db.get('SELECT COUNT(*) AS n FROM users')).n) === 0
   const id = crypto.randomUUID()
+  const passwordHash = await hashPassword(password)
   try {
     await db.run(
       'INSERT INTO users (id, login, password_hash, created_at) VALUES (?, ?, ?, ?)',
       id,
       login,
-      hashPassword(password),
+      passwordHash,
       new Date().toISOString(),
     )
   } catch (error) {
@@ -235,9 +384,9 @@ export async function registerUser({ login, password }) {
 }
 
 export async function authenticate(login, password) {
-  const row = await db.get('SELECT id, login, password_hash FROM users WHERE lower(login) = lower(?)', String(login || '').trim())
-  if (!row || !verifyPassword(password, row.password_hash)) return null
-  return { id: row.id, login: row.login }
+  const row = await db.get('SELECT id, login, password_hash, role FROM users WHERE lower(login) = lower(?)', String(login || '').trim())
+  if (!row || !(await verifyPassword(password, row.password_hash))) return null
+  return { id: row.id, login: row.login, role: row.role || 'host' }
 }
 
 export async function getUser(id) {

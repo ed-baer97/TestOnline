@@ -13,8 +13,72 @@ async function request(url, options = {}) {
 export const api = {
   me: () => request('/api/me'),
   login: (login, password) => request('/api/login', { method: 'POST', body: JSON.stringify({ login, password }) }),
-  register: (login, password) => request('/api/register', { method: 'POST', body: JSON.stringify({ login, password }) }),
   logout: () => request('/api/logout', { method: 'POST' }),
+  dashboard: () => request('/api/admin/dashboard'),
+  regions: () => request('/api/admin/regions'),
+  createRegion: (body) => request('/api/admin/regions', { method: 'POST', body: JSON.stringify(body) }),
+  updateRegion: (id, body) => request(`/api/admin/regions/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteRegion: (id) => request(`/api/admin/regions/${id}`, { method: 'DELETE' }),
+  regionalAdmins: () => request('/api/admin/regional-admins'),
+  createRegionalAdmin: (body) => request('/api/admin/regional-admins', { method: 'POST', body: JSON.stringify(body) }),
+  updateRegionalAdmin: (id, body) => request(`/api/admin/regional-admins/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteRegionalAdmin: (id) => request(`/api/admin/regional-admins/${id}`, { method: 'DELETE' }),
+  organizations: () => request('/api/admin/organizations'),
+  createOrganization: (body) => request('/api/admin/organizations', { method: 'POST', body: JSON.stringify(body) }),
+  updateOrganization: (id, body) => request(`/api/admin/organizations/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteOrganization: (id) => request(`/api/admin/organizations/${id}`, { method: 'DELETE' }),
+  orgAdmins: () => request('/api/admin/org-admins'),
+  createOrgAdmin: (body) => request('/api/admin/org-admins', { method: 'POST', body: JSON.stringify(body) }),
+  updateOrgAdmin: (id, body) => request(`/api/admin/org-admins/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteOrgAdmin: (id) => request(`/api/admin/org-admins/${id}`, { method: 'DELETE' }),
+  structure: () => request('/api/admin/structure'),
+  createTrack: (body) => request('/api/admin/tracks', { method: 'POST', body: JSON.stringify(body) }),
+  updateTrack: (id, body) => request(`/api/admin/tracks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteTrack: (id) => request(`/api/admin/tracks/${id}`, { method: 'DELETE' }),
+  createClass: (body) => request('/api/admin/classes', { method: 'POST', body: JSON.stringify(body) }),
+  updateClass: (id, body) => request(`/api/admin/classes/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteClass: (id) => request(`/api/admin/classes/${id}`, { method: 'DELETE' }),
+  learners: (params = {}) => {
+    const query = new URLSearchParams()
+    for (const [key, value] of Object.entries(params)) if (value !== '' && value != null) query.set(key, String(value))
+    const suffix = query.toString()
+    return request(`/api/admin/learners${suffix ? `?${suffix}` : ''}`)
+  },
+  importLearners: (file) => {
+    if (!/\.xlsx$/i.test(file?.name || '')) return Promise.reject(new Error('Нужен файл Excel .xlsx'))
+    if (file.size > 5 * 1024 * 1024) return Promise.reject(new Error('Файл больше 5 МБ'))
+    return request('/api/admin/learners/import', {
+      method: 'POST',
+      body: file,
+      headers: { 'Content-Type': 'application/octet-stream' },
+    })
+  },
+  createLearner: (body) => request('/api/admin/learners', { method: 'POST', body: JSON.stringify(body) }),
+  updateLearner: (id, body) => request(`/api/admin/learners/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteLearner: (id) => request(`/api/admin/learners/${id}`, { method: 'DELETE' }),
+  lessons: () => request('/api/lessons'),
+  lesson: (id) => request(`/api/lessons/${id}`),
+  checkLesson: (id, answers) => request(`/api/lessons/${id}/check`, { method: 'POST', body: JSON.stringify({ answers }) }),
+  createLesson: (body) => request('/api/admin/lessons', { method: 'POST', body: JSON.stringify(body) }),
+  updateLesson: (id, body) => request(`/api/admin/lessons/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  uploadLessonVideo: (id, file) => request(`/api/admin/lessons/${id}/video`, {
+    method: 'PUT',
+    body: file,
+    headers: {
+      'Content-Type': file.type || 'application/octet-stream',
+      'X-File-Name': encodeURIComponent(file.name || 'video'),
+    },
+  }),
+  importPptx: (file) => {
+    if (!/\.pptx$/i.test(file?.name || '')) return Promise.reject(new Error('Нужна презентация PowerPoint .pptx'))
+    if (file.size > 30 * 1024 * 1024) return Promise.reject(new Error('Презентация больше 30 МБ'))
+    return request('/api/admin/lessons/pptx', {
+      method: 'POST',
+      body: file,
+      headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+    })
+  },
+  deleteLesson: (id) => request(`/api/admin/lessons/${id}`, { method: 'DELETE' }),
   quizzes: () => request('/api/quizzes'),
   quiz: (id) => request(`/api/quizzes/${id}`),
   createQuiz: (body) => request('/api/quizzes', { method: 'POST', body: JSON.stringify(body) }),
