@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { roleLabel } from '../roles.js'
+import { roleLabel } from '../lib/roles.js'
 import { TopbarSlot, TopbarSlots } from '../topbar.jsx'
 
 export function AdminFrame({ me, onLogout, tabs, children }) {

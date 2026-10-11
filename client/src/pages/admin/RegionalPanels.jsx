@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api/index.js'
-import { EMPTY_GROUPS, groupLabels } from '../../bands.js'
+import { EMPTY_GROUPS, groupLabels } from '../../lib/bands.js'
 import { GroupChecks, Notice } from './ui.jsx'
 
 export function Organizations() {

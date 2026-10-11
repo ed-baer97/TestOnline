@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { api } from './api/index.js'
-import { homeFor } from './roles.js'
+import { homeFor } from './lib/roles.js'
 import Admin from './pages/Admin.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Editor from './pages/Editor.jsx'

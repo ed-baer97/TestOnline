@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api/index.js'
-import { homeFor } from '../roles.js'
+import { homeFor } from '../lib/roles.js'
 
 export default function Login() {
   const navigate = useNavigate()

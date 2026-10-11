@@ -1,16 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/index.js'
-import { formatCode } from '../lib/format.js'
+import { formatCode, formatWhen, shortWhen } from '../lib/format.js'
 import { BarChart, RateList } from '../charts.jsx'
-
-function formatWhen(value) {
-  return new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
-}
-
-function shortWhen(value) {
-  return new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'short' }).format(new Date(value))
-}
 
 function launchWhen(session) {
   return session.startedAt || session.finishedAt

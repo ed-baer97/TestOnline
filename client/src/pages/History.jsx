@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/index.js'
+import { formatWhen } from '../lib/format.js'
 import { HostFrame } from './HostFrame.jsx'
-
-function formatWhen(value) {
-  return new Intl.DateTimeFormat('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
-}
 
 function when(result) {
   return Date.parse(result.startedAt || result.finishedAt) || 0
