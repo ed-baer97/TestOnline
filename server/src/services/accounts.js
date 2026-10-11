@@ -3,7 +3,6 @@ import { normalizeAccount, readPassword } from '../domain/accounts.js'
 import { fail } from '../domain/errors.js'
 import { classCaption } from '../domain/structure.js'
 import { config } from '../infrastructure/config.js'
-import { isUniqueViolation } from '../infrastructure/db/index.js'
 import { hashPassword, verifyPassword } from '../infrastructure/passwords.js'
 import * as quizzesRepo from '../repositories/quizzes.js'
 import * as resultsRepo from '../repositories/results.js'
@@ -19,7 +18,7 @@ export async function registerUser({ login, password }) {
   try {
     await usersRepo.insertHost({ id, login, passwordHash, createdAt: new Date().toISOString() })
   } catch (error) {
-    if (isUniqueViolation(error)) fail('Такой логин уже занят', 409)
+    if (usersRepo.isLoginTaken(error)) fail('Такой логин уже занят', 409)
     throw error
   }
   if (first) {
@@ -90,7 +89,7 @@ export async function createAccount({ role, login, password, displayName, region
       classId: classId || null,
     })
   } catch (error) {
-    if (isUniqueViolation(error)) fail('Такой логин уже занят', 409)
+    if (usersRepo.isLoginTaken(error)) fail('Такой логин уже занят', 409)
     throw error
   }
   return profile(id)

@@ -1,5 +1,10 @@
-import { db } from '../infrastructure/db/index.js'
+import { db, isUniqueViolation } from '../infrastructure/db/index.js'
 import { count, countsById, placeholders } from './sql.js'
+
+// Ошибка вставки в users из-за уникального индекса по логину (без учёта регистра).
+export function isLoginTaken(error) {
+  return isUniqueViolation(error)
+}
 
 export async function countUsers() {
   const row = await db.get('SELECT COUNT(*) AS n FROM users')

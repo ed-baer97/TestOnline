@@ -4,7 +4,6 @@ import { generatePassword, normalizeAccount } from '../../domain/accounts.js'
 import { fail } from '../../domain/errors.js'
 import { classCaption } from '../../domain/structure.js'
 import { cleanText } from '../../domain/text.js'
-import { isUniqueViolation } from '../../infrastructure/db/index.js'
 import { hashPassword } from '../../infrastructure/passwords.js'
 import * as classesRepo from '../../repositories/classes.js'
 import * as usersRepo from '../../repositories/users.js'
@@ -128,7 +127,7 @@ export async function importLearners(actor, buffer) {
     try {
       await usersRepo.insertLearners(batch)
     } catch (error) {
-      if (!isUniqueViolation(error)) throw error
+      if (!usersRepo.isLoginTaken(error)) throw error
       // Кто-то занял логин между проверкой и вставкой: пачку повторяем по одному.
       created.splice(created.length - chunk.length, chunk.length)
       for (const [index, row] of chunk.entries()) {
@@ -137,7 +136,7 @@ export async function importLearners(actor, buffer) {
           await usersRepo.insertLearner({ id, login: row.login, passwordHash: hashes[index], createdAt: now, displayName: row.displayName, organizationId: actor.organizationId, classId: row.klass.id })
           created.push({ id, displayName: row.displayName, login: row.login, password: row.password, classLabel: row.klass.label })
         } catch (inner) {
-          if (!isUniqueViolation(inner)) throw inner
+          if (!usersRepo.isLoginTaken(inner)) throw inner
           errors.push(`Логин «${row.login}» уже занят`)
         }
       }
