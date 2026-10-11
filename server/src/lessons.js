@@ -1,11 +1,10 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { db } from './db.js'
+import { config } from './infrastructure/config.js'
+import { db } from './infrastructure/db/index.js'
 import { slidesFromPptx } from './pptx.js'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg'])
 const MAX_VIDEO = 80 * 1024 * 1024
 const MAX_IMAGE = 1_500_000
@@ -36,8 +35,7 @@ function assertRole(actor, ...roles) {
 }
 
 function attemptLimit() {
-  const value = Number(process.env.LESSON_MAX_ATTEMPTS)
-  return Number.isInteger(value) && value > 0 ? value : 1
+  return config.lessonMaxAttempts
 }
 
 function readGroups(input) {
@@ -161,9 +159,7 @@ export async function ensureDemoLesson() {
 // при старте такие строки один раз переносятся на диск, колонка остаётся пустой.
 
 function mediaRoot() {
-  if (process.env.MEDIA_DIR) return path.resolve(process.env.MEDIA_DIR)
-  if (process.env.DB_PATH) return path.resolve(path.dirname(process.env.DB_PATH), 'media')
-  return path.join(__dirname, '..', 'data', 'media')
+  return config.mediaDir
 }
 
 function filesRoot() {

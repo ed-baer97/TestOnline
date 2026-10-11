@@ -2,9 +2,8 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { pathToFileURL } from 'node:url'
 import cookieParser from 'cookie-parser'
-import dotenv from 'dotenv'
 import express from 'express'
 import { createServer } from 'node:http'
 import { Server } from 'socket.io'
@@ -43,6 +42,7 @@ import {
   updateTrack,
 } from './admin.js'
 import { authenticate, createQuiz, deleteQuiz, getQuiz, listQuizzes, listResults, quizStats, statsOverview, updateQuiz } from './db.js'
+import { config } from './infrastructure/config.js'
 import { checkLesson, createLesson, deleteLesson, getLesson, importPptx, listLessons, openLessonFile, openLessonMedia, saveLessonVideo, updateLesson } from './lessons.js'
 import { normalizeQuiz } from './domain.js'
 import { questionsFromXlsx, templateWorkbook } from './excel.js'
@@ -63,22 +63,16 @@ import {
   watch,
 } from './rooms.js'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-dotenv.config({ path: path.join(__dirname, '..', '.env') })
-
-const SECRET = process.env.SESSION_SECRET || 'testonline-dev-secret'
-const PORT = Number(process.env.PORT || 3001)
-
 function signSession(userId) {
   const data = Buffer.from(JSON.stringify({ userId, exp: Date.now() + 14 * 24 * 60 * 60 * 1000 })).toString('base64url')
-  const sig = crypto.createHmac('sha256', SECRET).update(data).digest('base64url')
+  const sig = crypto.createHmac('sha256', config.sessionSecret).update(data).digest('base64url')
   return `${data}.${sig}`
 }
 
 function readSession(token) {
   if (!token || !token.includes('.')) return null
   const [data, sig] = token.split('.')
-  const expected = crypto.createHmac('sha256', SECRET).update(data).digest('base64url')
+  const expected = crypto.createHmac('sha256', config.sessionSecret).update(data).digest('base64url')
   const left = Buffer.from(sig)
   const right = Buffer.from(expected)
   if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) return null
@@ -143,7 +137,7 @@ function sendSession(res, user, status = 200) {
   res.cookie('session', signSession(user.id), {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.COOKIE_SECURE === '1',
+    secure: config.cookieSecure,
     path: '/',
   })
   res.status(status).json({
@@ -181,7 +175,7 @@ export function createApp() {
     addTrailingSlash: false,
   })
 
-  if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1)
+  if (config.trustProxy) app.set('trust proxy', 1)
 
   app.use((req, res, next) => {
     if (!(req.url || '').startsWith('/socket.io')) return next()
@@ -338,8 +332,7 @@ export function createApp() {
   app.get('/api/lessons', guard, route(async (req, res) => {
     res.json({ lessons: await listLessons(req.user) })
   }))
-  // MEDIA_ACCEL=1: Node только проверяет права, файл отдаёт Nginx по внутреннему адресу /media-internal/.
-  const accel = process.env.MEDIA_ACCEL === '1'
+  const accel = config.mediaAccel
   app.get('/api/lessons/:id/media', guard, route(async (req, res) => {
     const media = await openLessonMedia(req.user, req.params.id)
     if (accel) {
@@ -669,7 +662,7 @@ export function createApp() {
     res.status(404).json({ error: 'Такого запроса нет' })
   })
 
-  const clientDist = path.join(__dirname, '..', '..', 'client', 'dist')
+  const clientDist = config.clientDist
   app.use(express.static(clientDist))
   app.get(/^(?!\/api|\/socket\.io).*/, (req, res, next) => {
     if (req.method !== 'GET') return next()
@@ -686,7 +679,7 @@ export default runtime.app
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
 if (isMain) {
-  runtime.httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`TestOnline API http://localhost:${PORT}`)
+  runtime.httpServer.listen(config.port, '0.0.0.0', () => {
+    console.log(`TestOnline API http://localhost:${config.port}`)
   })
 }

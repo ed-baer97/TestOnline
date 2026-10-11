@@ -211,7 +211,7 @@ test('урок: презентация, тест и видимость по гр
   assert.equal((await lessons.openLessonFile(pupil, imported.slides[1].fileId)).mime, 'image/png')
 
   const legacyId = '11111111-2222-4333-8444-555555555555'
-  const { db } = await import('../src/db.js')
+  const { db } = await import('../src/infrastructure/db/index.js')
   await db.run('INSERT INTO lesson_files (id, lesson_id, mime, data_base64) VALUES (?, ?, ?, ?)', legacyId, fromDeck.id, 'image/png', pixel.split(',')[1])
   assert.equal(await lessons.migrateLessonFiles(), 1)
   assert.equal(await lessons.migrateLessonFiles(), 0)

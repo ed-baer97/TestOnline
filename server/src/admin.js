@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
-import { db } from './db.js'
 import { normalizeAccount } from './domain.js'
+import { config } from './infrastructure/config.js'
+import { db, isUniqueViolation } from './infrastructure/db/index.js'
 import { hashPassword } from './passwords.js'
 
 export const BANDS = [
@@ -30,10 +31,6 @@ function cleanLabel(value, min, max, label) {
 
 function sameText(left, right) {
   return left.localeCompare(right, 'ru', { sensitivity: 'accent' }) === 0
-}
-
-function isUnique(error) {
-  return error?.code === '23505' || String(error?.message || '').includes('UNIQUE')
 }
 
 async function count(sql, ...params) {
@@ -134,8 +131,8 @@ export function bootAdmin() {
 export async function ensureSuperAdmin() {
   const existing = await db.get("SELECT id FROM users WHERE role = 'super' LIMIT 1")
   if (existing) return profile(existing.id)
-  const login = process.env.SUPER_LOGIN || 'super'
-  const password = process.env.SUPER_PASSWORD || 'super12345'
+  const login = config.superLogin
+  const password = config.superPassword
   const account = normalizeAccount({ login, password })
   const taken = await db.get('SELECT id FROM users WHERE lower(login) = lower(?)', account.login)
   if (taken) return profile(taken.id)
@@ -175,7 +172,7 @@ async function insertUser({ role, login, password, displayName, regionId, organi
       classId || null,
     )
   } catch (error) {
-    if (isUnique(error)) fail('Такой логин уже занят', 409)
+    if (isUniqueViolation(error)) fail('Такой логин уже занят', 409)
     throw error
   }
   return profile(id)
@@ -993,7 +990,7 @@ export async function importLearners(actor, buffer) {
         ...params,
       )
     } catch (error) {
-      if (!isUnique(error)) throw error
+      if (!isUniqueViolation(error)) throw error
       // Кто-то занял логин между проверкой и вставкой: пачку повторяем по одному.
       created.splice(created.length - chunk.length, chunk.length)
       for (const [index, row] of chunk.entries()) {
@@ -1006,7 +1003,7 @@ export async function importLearners(actor, buffer) {
           )
           created.push({ id, displayName: row.displayName, login: row.login, password: row.password, classLabel: row.klass.label })
         } catch (inner) {
-          if (!isUnique(inner)) throw inner
+          if (!isUniqueViolation(inner)) throw inner
           errors.push(`Логин «${row.login}» уже занят`)
         }
       }

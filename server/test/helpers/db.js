@@ -37,6 +37,6 @@ export async function createHost(login, password) {
 }
 
 export async function rawDb() {
-  const { db } = await import('../../src/db.js')
+  const { db } = await import('../../src/infrastructure/db/index.js')
   return db
 }
