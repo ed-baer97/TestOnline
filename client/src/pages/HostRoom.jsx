@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { api, formatCode, hostKey } from '../api.js'
-import { useI18n } from '../i18n.jsx'
+import { pick, useI18n } from '../i18n.jsx'
 import { COLOR_NAMES, SHAPES, Shape } from '../shapes.jsx'
 import { useCountdown } from '../useCountdown.js'
 
 export default function HostRoom() {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const { code } = useParams()
   const [state, setState] = useState(null)
   const [error, setError] = useState('')
@@ -121,9 +121,15 @@ export default function HostRoom() {
         <section className="lobby">
           <div>
             <h1>{state.title}</h1>
-            <p className="lead">{t('Покажите QR-код. Телефоны откроют игру сами, вводить код не нужно.')}</p>
-            {joinUrl && <p className="join-url">{joinUrl}</p>}
-            {joinUrl.includes('localhost') && <p className="form-error">{t('Телефоны не откроют localhost. Зайдите на этот компьютер по адресу в локальной сети.')}</p>}
+            {state.access === 'private' ? (
+              <p className="lead">{t('Квиз для {org}, {klass}. Участники заходят из кабинета под своими логинами.', { org: pick(lang, state.organizationName, state.organizationNameKk), klass: state.classLabel })}</p>
+            ) : (
+              <>
+                <p className="lead">{t('Покажите QR-код. Телефоны откроют игру сами, вводить код не нужно.')}</p>
+                {joinUrl && <p className="join-url">{joinUrl}</p>}
+                {joinUrl.includes('localhost') && <p className="form-error">{t('Телефоны не откроют localhost. Зайдите на этот компьютер по адресу в локальной сети.')}</p>}
+              </>
+            )}
             <p className="count">{t('{count} в лобби', { count: state.playerCount })}</p>
             <div className="chips">
               {state.players.map((player) => (
@@ -131,7 +137,7 @@ export default function HostRoom() {
               ))}
             </div>
           </div>
-          {qr && <img className="qr" src={qr} alt={t('QR-код для входа в игру')} />}
+          {state.access !== 'private' && qr && <img className="qr" src={qr} alt={t('QR-код для входа в игру')} />}
         </section>
       )}
       {(state.status === 'question' || state.status === 'reveal') && state.question && (

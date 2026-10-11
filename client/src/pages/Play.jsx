@@ -15,11 +15,26 @@ export default function Play() {
   const [state, setState] = useState(null)
   const [online, setOnline] = useState(true)
   const [identity, setIdentity] = useState(() => sessionStorage.getItem(playerKey(code)) || '')
+  const [me, setMe] = useState(undefined)
+  const autoJoin = useRef(false)
   const seconds = useCountdown(state?.endsAt, state?.serverNow)
 
   useEffect(() => {
     api.room(code).then(setInfo).catch(() => setMissing(true))
   }, [code])
+
+  useEffect(() => {
+    api.me().then(setMe).catch(() => setMe({ ok: false }))
+  }, [])
+
+  useEffect(() => {
+    if (info?.access !== 'private' || !me?.ok || identity || autoJoin.current) return
+    autoJoin.current = true
+    const token = sessionStorage.getItem(playerKey(code)) || newId()
+    sessionStorage.setItem(playerKey(code), token)
+    setName(me.displayName || me.login || '')
+    setIdentity(token)
+  }, [info, me, identity, code])
 
   useEffect(() => {
     if (!identity) return undefined
@@ -70,7 +85,21 @@ export default function Play() {
     )
   }
 
-  if (!info) return <p className="center muted">{t('Ищем комнату…')}</p>
+  if (!info || (info.access === 'private' && me === undefined)) return <p className="center muted">{t('Ищем комнату…')}</p>
+
+  if (info.access === 'private' && !identity) {
+    return (
+      <main className="auth">
+        <section className="card">
+          <p className="brand">TestOnline</p>
+          <h1>{info.title}</h1>
+          <p className="muted">{t('Войдите под своим логином, чтобы подключиться к квизу.')}</p>
+          {error && <p className="form-error">{t(error)}</p>}
+          {!me?.ok && <Link className="primary" to="/login">{t('Войти')}</Link>}
+        </section>
+      </main>
+    )
+  }
 
   if (!identity) {
     return (

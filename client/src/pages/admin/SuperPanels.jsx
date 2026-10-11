@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api.js'
-import { useI18n } from '../../i18n.jsx'
+import { pick, useI18n } from '../../i18n.jsx'
 import { Notice } from './ui.jsx'
 
 export function Regions() {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const [regions, setRegions] = useState(null)
   const [name, setName] = useState('')
+  const [nameKk, setNameKk] = useState('')
   const [drafts, setDrafts] = useState({})
+  const [draftsKk, setDraftsKk] = useState({})
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
@@ -15,6 +17,7 @@ export function Regions() {
     return api.regions().then((data) => {
       setRegions(data.regions)
       setDrafts(Object.fromEntries(data.regions.map((region) => [region.id, region.name])))
+      setDraftsKk(Object.fromEntries(data.regions.map((region) => [region.id, region.nameKk || ''])))
     })
   }
 
@@ -27,8 +30,9 @@ export function Regions() {
     setError('')
     setNotice('')
     try {
-      await api.createRegion({ name })
+      await api.createRegion({ name, nameKk })
       setName('')
+      setNameKk('')
       setNotice('Регион создан')
       await load()
     } catch (err) {
@@ -41,7 +45,7 @@ export function Regions() {
     setError('')
     setNotice('')
     try {
-      await api.updateRegion(id, { name: drafts[id] })
+      await api.updateRegion(id, { name: drafts[id], nameKk: draftsKk[id] || '' })
       setNotice('Название сохранено')
       await load()
     } catch (err) {
@@ -50,7 +54,7 @@ export function Regions() {
   }
 
   async function remove(region) {
-    if (!window.confirm(t('Удалить регион «{name}»?', { name: region.name }))) return
+    if (!window.confirm(t('Удалить регион «{name}»?', { name: pick(lang, region.name, region.nameKk) }))) return
     setError('')
     setNotice('')
     try {
@@ -67,8 +71,12 @@ export function Regions() {
       <Notice error={error} notice={notice} />
       <form className="admin-form" onSubmit={create}>
         <label>
-          {t('Новый регион')}
+          {t('Название, русский')}
           <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Мангыстауская область')} />
+        </label>
+        <label>
+          {t('Название, қазақша')}
+          <input value={nameKk} onChange={(event) => setNameKk(event.target.value)} placeholder="Маңғыстау облысы" />
         </label>
         <button className="primary add" type="submit">{t('Создать регион')}</button>
       </form>
@@ -78,9 +86,14 @@ export function Regions() {
           <article className="person" key={region.id}>
             <form onSubmit={(event) => rename(event, region.id)}>
               <input
-                aria-label={t('Название {name}', { name: region.name })}
+                aria-label={t('Название, русский')}
                 value={drafts[region.id] || ''}
                 onChange={(event) => setDrafts((current) => ({ ...current, [region.id]: event.target.value }))}
+              />
+              <input
+                aria-label={t('Название, қазақша')}
+                value={draftsKk[region.id] || ''}
+                onChange={(event) => setDraftsKk((current) => ({ ...current, [region.id]: event.target.value }))}
               />
               <button className="ghost" type="submit">{t('Сохранить')}</button>
             </form>
@@ -96,7 +109,7 @@ export function Regions() {
 }
 
 export function RegionalStaff() {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const [admins, setAdmins] = useState(null)
   const [regions, setRegions] = useState([])
   const [form, setForm] = useState({ displayName: '', login: '', password: '', regionId: '' })
@@ -125,9 +138,10 @@ export function RegionalStaff() {
     setError('')
     setNotice('')
     try {
+      const created = { login: form.login, password: form.password }
       await api.createRegionalAdmin(form)
       setForm((current) => ({ ...current, displayName: '', login: '', password: '' }))
-      setNotice('Администратор создан. Передайте ему логин и пароль.')
+      setNotice(`Администратор создан. Логин: ${created.login}. Пароль: ${created.password}.`)
       await load()
     } catch (err) {
       setError(err.message)
@@ -164,10 +178,10 @@ export function RegionalStaff() {
           <input name="password" type="password" autoComplete="new-password" value={form.password} onChange={patch} />
         </label>
         <label>
-          {t('Регион')}
+          {t('Область')}
           <select name="regionId" value={form.regionId} onChange={patch}>
             {regions.length === 0 && <option value="">{t('Сначала создайте регион')}</option>}
-            {regions.map((region) => <option key={region.id} value={region.id}>{region.name}</option>)}
+            {regions.map((region) => <option key={region.id} value={region.id}>{pick(lang, region.name, region.nameKk)}</option>)}
           </select>
         </label>
         <button className="primary add" type="submit" disabled={!regions.length}>{t('Создать администратора')}</button>
@@ -182,7 +196,7 @@ export function RegionalStaff() {
 }
 
 function RegionAdminRow({ person, regions, onChanged, onDelete, onError }) {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const [displayName, setDisplayName] = useState(person.displayName)
   const [regionId, setRegionId] = useState(person.regionId)
   const [password, setPassword] = useState('')
@@ -203,8 +217,9 @@ function RegionAdminRow({ person, regions, onChanged, onDelete, onError }) {
     <article className="person">
       <form onSubmit={save}>
         <input aria-label={t('Имя')} value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-        <select aria-label={t('Регион')} value={regionId} onChange={(event) => setRegionId(event.target.value)}>
-          {regions.map((region) => <option key={region.id} value={region.id}>{region.name}</option>)}
+        <span className="muted">{t('Логин')}: {person.login}</span>
+        <select aria-label={t('Область')} value={regionId} onChange={(event) => setRegionId(event.target.value)}>
+          {regions.map((region) => <option key={region.id} value={region.id}>{pick(lang, region.name, region.nameKk)}</option>)}
         </select>
         <input
           aria-label={t('Новый пароль')}
@@ -216,7 +231,6 @@ function RegionAdminRow({ person, regions, onChanged, onDelete, onError }) {
         />
         <button className="ghost" type="submit">{t('Сохранить')}</button>
       </form>
-      <span className="muted">{person.login}</span>
       <button className="ghost" type="button" onClick={onDelete}>{t('Удалить')}</button>
     </article>
   )

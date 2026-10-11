@@ -13,11 +13,12 @@ function blankQuestion() {
   }
 }
 
-export default function Editor({ onLogout }) {
+export default function Editor({ onLogout, embedded = false }) {
   const { t } = useI18n()
   const { id } = useParams()
   const navigate = useNavigate()
-  const isNew = id === 'new'
+  const isNew = !id || id === 'new'
+  const quizPath = (quizId) => (embedded ? `/admin/materials/quizzes/${quizId}` : `/host/quiz/${quizId}`)
   const [title, setTitle] = useState('')
   const [questions, setQuestions] = useState([blankQuestion()])
   const [error, setError] = useState('')
@@ -65,7 +66,7 @@ export default function Editor({ onLogout }) {
     try {
       const quiz = isNew ? await api.createQuiz(body) : await api.updateQuiz(id, body)
       setSaved('Сохранено')
-      if (isNew && stay) navigate(`/host/quiz/${quiz.id}`, { replace: true })
+      if (isNew && stay) navigate(quizPath(quiz.id), { replace: true })
       return quiz
     } catch (err) {
       setError(err.message)
@@ -112,16 +113,8 @@ export default function Editor({ onLogout }) {
 
   if (!ready && !error) return <p className="center muted">{t('Загрузка…')}</p>
 
-  return (
-    <main className="sheet editor">
-      <header className="topbar">
-        <Link className="brand" to="/host">TestOnline</Link>
-        <div className="top-actions">
-          <button className="ghost" type="button" onClick={save}>{t('Сохранить')}</button>
-          <button className="primary" type="button" onClick={saveAndStart}>{t('Запустить')}</button>
-          <button className="ghost" type="button" onClick={onLogout}>{t('Выйти')}</button>
-        </div>
-      </header>
+  const fields = (
+    <>
       <label className="title-field">
         {t('Название квиза')}
         <input value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} placeholder={t('География, 7 класс')} />
@@ -178,6 +171,36 @@ export default function Editor({ onLogout }) {
         </section>
       ))}
       <button className="ghost add" type="button" onClick={() => setQuestions((current) => [...current, blankQuestion()])}>{t('Добавить вопрос')}</button>
+    </>
+  )
+
+  if (embedded) {
+    return (
+      <section className="stack editor">
+        <div className="section-head">
+          <h1>{isNew ? t('Новый квиз') : t('Квиз')}</h1>
+          <div className="row-actions">
+            <Link className="ghost" to="/admin/materials/quizzes">{t('К квизам')}</Link>
+            <button className="ghost" type="button" onClick={save}>{t('Сохранить')}</button>
+            <button className="primary" type="button" onClick={saveAndStart}>{t('Запустить')}</button>
+          </div>
+        </div>
+        {fields}
+      </section>
+    )
+  }
+
+  return (
+    <main className="sheet editor">
+      <header className="topbar">
+        <Link className="brand" to="/host">TestOnline</Link>
+        <div className="top-actions">
+          <button className="ghost" type="button" onClick={save}>{t('Сохранить')}</button>
+          <button className="primary" type="button" onClick={saveAndStart}>{t('Запустить')}</button>
+          <button className="ghost" type="button" onClick={onLogout}>{t('Выйти')}</button>
+        </div>
+      </header>
+      {fields}
     </main>
   )
 }

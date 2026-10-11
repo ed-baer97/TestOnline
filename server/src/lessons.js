@@ -31,6 +31,17 @@ function cleanLabel(value, min, max, label) {
   return text
 }
 
+function optionalLabel(value, max, label) {
+  const text = clean(value)
+  if (!text) return ''
+  if (text.length < 2 || text.length > max) fail(`${label}: от 2 до ${max} символов`)
+  return text
+}
+
+function readLang(value) {
+  return value === 'kk' ? 'kk' : 'ru'
+}
+
 function assertRole(actor, ...roles) {
   if (!actor || !roles.includes(actor.role)) fail('Недостаточно прав', 403)
 }
@@ -108,6 +119,80 @@ const DEMO_SLIDES = [
   },
 ]
 
+const DEMO_SLIDES_KK = [
+  {
+    id: 'sun',
+    kind: 'frame',
+    tone: 'sun',
+    kicker: '1-слайд',
+    title: 'Күн жүйесі',
+    lines: [
+      'Күннің айналасында сегіз ғаламшар қозғалады.',
+      'Оларды Күннің тартылысы ұстап тұрады, олар шағылған жарықпен жарқырайды.',
+    ],
+  },
+  {
+    id: 'center',
+    kind: 'frame',
+    tone: 'orbit',
+    kicker: '2-слайд',
+    title: 'Ортадағы жұлдыз',
+    lines: [
+      'Күн — ғаламшар емес, жұлдыз.',
+      'Ол ғаламшарларға жарық пен жылу береді.',
+    ],
+  },
+  {
+    id: 'order',
+    kind: 'frame',
+    tone: 'planets',
+    kicker: '3-слайд',
+    title: 'Ғаламшарлар реті',
+    lines: [
+      'Күннен бастап: Меркурий, Шолпан, Жер, Марс.',
+      'Әрі қарай: Юпитер, Сатурн, Уран және Нептун.',
+    ],
+  },
+  {
+    id: 'earth',
+    kind: 'frame',
+    tone: 'earth',
+    kicker: '4-слайд',
+    title: 'Біздің ғаламшар',
+    lines: [
+      'Жер — Күннен үшінші ғаламшар.',
+      'Онда су мен ауа бар, сондықтан мұнда адамдар, жануарлар және өсімдіктер тіршілік етеді.',
+    ],
+  },
+]
+
+const DEMO_QUESTIONS_KK = [
+  {
+    id: 'planets',
+    text: 'Күннің айналасында неше ғаламшар айналады?',
+    options: [{ text: '8' }, { text: '7' }, { text: '9' }, { text: '10' }],
+    correctIndex: 0,
+  },
+  {
+    id: 'center',
+    text: 'Күн жүйесінің ортасында не бар?',
+    options: [{ text: 'Күн' }, { text: 'Жер' }, { text: 'Ай' }, { text: 'Марс' }],
+    correctIndex: 0,
+  },
+  {
+    id: 'third',
+    text: 'Күннен үшінші ғаламшар қайсысы?',
+    options: [{ text: 'Жер' }, { text: 'Шолпан' }, { text: 'Марс' }, { text: 'Юпитер' }],
+    correctIndex: 0,
+  },
+  {
+    id: 'closest',
+    text: 'Күнге ең жақын ғаламшар қайсысы?',
+    options: [{ text: 'Меркурий' }, { text: 'Шолпан' }, { text: 'Жер' }, { text: 'Марс' }],
+    correctIndex: 0,
+  },
+]
+
 const DEMO_QUESTIONS = [
   {
     id: 'planets',
@@ -135,22 +220,40 @@ const DEMO_QUESTIONS = [
   },
 ]
 
+async function fillDemoKazakh(id) {
+  await db.run(
+    'UPDATE lessons SET title_kk = ?, slides_kk = ?, questions_kk = ? WHERE id = ? AND (slides_kk IS NULL OR slides_kk = ? OR slides_kk = ?)',
+    'Күн жүйесі',
+    JSON.stringify(DEMO_SLIDES_KK),
+    JSON.stringify(DEMO_QUESTIONS_KK),
+    id,
+    '',
+    '[]',
+  )
+}
+
 export async function ensureDemoLesson() {
   const existing = await db.get('SELECT id FROM lessons WHERE seed_key = ?', DEMO_KEY)
-  if (existing) return existing.id
+  if (existing) {
+    await fillDemoKazakh(existing.id)
+    return existing.id
+  }
   const count = await db.get('SELECT COUNT(*) AS n FROM lessons')
   if (Number(count?.n || 0) > 0) return null
   const now = new Date().toISOString()
   const id = crypto.randomUUID()
   await db.run(
     `INSERT INTO lessons (
-      id, title, seed_key, grades_1_4, grades_5_9, grades_10_11, students, slides, questions, created_at, updated_at
-    ) VALUES (?, ?, ?, 0, 1, 0, 0, ?, ?, ?, ?)`,
+      id, title, title_kk, seed_key, grades_1_4, grades_5_9, grades_10_11, students, slides, questions, slides_kk, questions_kk, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, 0, 1, 0, 0, ?, ?, ?, ?, ?, ?)`,
     id,
     'Солнечная система',
+    'Күн жүйесі',
     DEMO_KEY,
     JSON.stringify(DEMO_SLIDES),
     JSON.stringify(DEMO_QUESTIONS),
+    JSON.stringify(DEMO_SLIDES_KK),
+    JSON.stringify(DEMO_QUESTIONS_KK),
     now,
     now,
   )
@@ -162,7 +265,6 @@ export async function ensureDemoLesson() {
 
 function mediaRoot() {
   if (process.env.MEDIA_DIR) return path.resolve(process.env.MEDIA_DIR)
-  if (process.env.DB_PATH) return path.resolve(path.dirname(process.env.DB_PATH), 'media')
   return path.join(__dirname, '..', 'data', 'media')
 }
 
@@ -233,16 +335,57 @@ function lessonFormat(row) {
   return row.format === 'video' ? 'video' : 'slides'
 }
 
+function parseList(value) {
+  try {
+    const parsed = JSON.parse(value || '[]')
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 function summary(row, best) {
   return {
     id: row.id,
     title: row.title,
+    titleKk: row.title_kk || '',
     format: lessonFormat(row),
     groups: mapGroups(row),
-    slideCount: JSON.parse(row.slides).length,
-    questionCount: JSON.parse(row.questions).length,
+    slideCount: parseList(row.slides).length,
+    slideCountKk: parseList(row.slides_kk).length,
+    questionCount: parseList(row.questions).length,
+    questionCountKk: parseList(row.questions_kk).length,
+    hasVideoKk: Boolean(row.video_mime_kk),
     best: best ? { score: Number(best.score), total: Number(best.total) } : null,
   }
+}
+
+function videoOf(row, lang) {
+  if (lang === 'kk' && row.video_mime_kk) return { name: row.video_name_kk || 'video', mime: row.video_mime_kk, lang: 'kk' }
+  if (row.video_mime) return { name: row.video_name || 'video', mime: row.video_mime, lang: 'ru' }
+  if (row.video_mime_kk) return { name: row.video_name_kk || 'video', mime: row.video_mime_kk, lang: 'kk' }
+  return null
+}
+
+function selectPack(row, lang) {
+  const ru = {
+    lang: 'ru',
+    title: row.title,
+    slides: parseList(row.slides),
+    questions: parseList(row.questions),
+  }
+  const kkSlides = parseList(row.slides_kk)
+  const kkQuestions = parseList(row.questions_kk)
+  const kkReady = Boolean(row.title_kk || kkSlides.length || kkQuestions.length || row.video_mime_kk)
+  if (readLang(lang) === 'kk' && kkReady) {
+    return {
+      lang: 'kk',
+      title: row.title_kk || row.title,
+      slides: kkSlides.length ? kkSlides : ru.slides,
+      questions: kkQuestions.length ? kkQuestions : ru.questions,
+    }
+  }
+  return ru
 }
 
 async function bestAttempts(userId) {
@@ -324,7 +467,7 @@ function gradeAnswers(questions, given) {
 
 async function attemptsOf(lessonId, userId) {
   return db.all(
-    `SELECT id, score, total, answers, finished_at FROM lesson_attempts
+    `SELECT id, score, total, answers, finished_at, lang FROM lesson_attempts
      WHERE lesson_id = ? AND user_id = ? ORDER BY finished_at ASC, id ASC`,
     lessonId,
     userId,
@@ -342,33 +485,51 @@ function presentAttempt(row, questions) {
       results = null
     }
   }
-  return { score: Number(row.score), total: Number(row.total), finishedAt: row.finished_at, results }
+  return { score: Number(row.score), total: Number(row.total), finishedAt: row.finished_at, lang: row.lang === 'kk' ? 'kk' : 'ru', results }
 }
 
 function attemptState(rows, max) {
   return { used: rows.length, max, locked: rows.length >= max }
 }
 
-export async function getLesson(actor, id) {
+export async function getLesson(actor, id, lang = 'ru') {
   assertRole(actor, 'super', 'learner')
   const row = await mustLesson(id)
   if (!(await canSee(actor, row))) fail('Урок не найден', 404)
-  const slides = JSON.parse(row.slides)
-  const questions = JSON.parse(row.questions)
   const format = lessonFormat(row)
+  const pack = selectPack(row, lang)
   let best = null
   let attempts = null
   if (actor.role === 'learner') {
     const rows = await attemptsOf(id, actor.id)
     best = rows.reduce((top, item) => (!top || Number(item.score) > Number(top.score) ? item : top), null)
-    attempts = { ...attemptState(rows, attemptLimit()), last: presentAttempt(rows[rows.length - 1], questions) }
+    const last = rows[rows.length - 1]
+    const lastQuestions = last ? selectPack(row, last.lang).questions : pack.questions
+    attempts = { ...attemptState(rows, attemptLimit()), last: presentAttempt(last, lastQuestions) }
   }
-  return {
+  const lesson = {
     ...summary(row, best),
-    slides: format === 'video' ? [] : presentSlides(slides),
-    video: format === 'video' && row.video_mime ? { name: row.video_name || 'video', mime: row.video_mime } : null,
-    questions: presentQuestions(questions, actor.role === 'super'),
+    title: pack.title,
+    slides: format === 'video' ? [] : presentSlides(pack.slides),
+    video: format === 'video' ? videoOf(row, pack.lang) : null,
+    questions: presentQuestions(pack.questions, actor.role === 'super'),
     attempts,
+  }
+  if (actor.role !== 'super') return lesson
+  const ruSlides = parseList(row.slides)
+  const kkSlides = parseList(row.slides_kk)
+  const ruQuestions = parseList(row.questions)
+  const kkQuestions = parseList(row.questions_kk)
+  return {
+    ...lesson,
+    title: row.title,
+    titleKk: row.title_kk || '',
+    slides: format === 'video' ? [] : presentSlides(ruSlides),
+    slidesKk: format === 'video' ? [] : presentSlides(kkSlides),
+    questions: presentQuestions(ruQuestions, true),
+    questionsKk: presentQuestions(kkQuestions, true),
+    video: format === 'video' && row.video_mime ? { name: row.video_name || 'video', mime: row.video_mime } : null,
+    videoKk: format === 'video' && row.video_mime_kk ? { name: row.video_name_kk || 'video', mime: row.video_mime_kk } : null,
   }
 }
 
@@ -385,13 +546,14 @@ export async function openLessonFile(actor, fileId) {
   return { path: target, mime: row.mime }
 }
 
-function mediaPath(lessonId) {
+function mediaPath(lessonId, lang = 'ru') {
   if (!UUID.test(String(lessonId || ''))) fail('Урок не найден', 404)
-  return path.join(mediaRoot(), lessonId)
+  return path.join(mediaRoot(), lang === 'kk' ? `${lessonId}.kk` : lessonId)
 }
 
 async function removeVideoFile(lessonId) {
-  await fs.promises.rm(mediaPath(lessonId), { force: true })
+  await fs.promises.rm(mediaPath(lessonId, 'ru'), { force: true })
+  await fs.promises.rm(mediaPath(lessonId, 'kk'), { force: true })
 }
 
 function normalizeFrame(slide) {
@@ -422,13 +584,30 @@ function readDataUrl(value) {
   return { mime, bytes }
 }
 
-async function normalizeSlides(slides, lessonId) {
+function isBlankSlides(slides) {
+  if (!Array.isArray(slides) || slides.length === 0) return true
+  return slides.every((slide) => {
+    if (slide?.kind === 'image') return !slide.fileId && !slide.dataUrl && !clean(slide.caption)
+    return !clean(slide?.title)
+      && !(Array.isArray(slide?.lines) && slide.lines.some((line) => clean(line)))
+      && !slide?.dataUrl
+      && !slide?.imageFileId
+  })
+}
+
+function isBlankQuestions(questions) {
+  if (!Array.isArray(questions) || questions.length === 0) return true
+  return questions.every((question) => {
+    if (clean(question?.text)) return false
+    const options = Array.isArray(question?.options) ? question.options : []
+    return options.every((option) => !clean(option?.text))
+  })
+}
+
+async function normalizeSlides(slides, lessonId, owned, used) {
   if (!Array.isArray(slides) || slides.length < 1 || slides.length > 20) {
     fail('Нужен хотя бы один слайд, максимум 20')
   }
-  const ownedRows = await db.all('SELECT id FROM lesson_files WHERE lesson_id = ?', lessonId)
-  const owned = new Set(ownedRows.map((row) => row.id))
-  const used = new Set()
   const result = []
   for (const [index, slide] of slides.entries()) {
     const label = `Слайд ${index + 1}`
@@ -463,7 +642,6 @@ async function normalizeSlides(slides, lessonId) {
     const id = typeof slide?.id === 'string' && slide.id ? slide.id : crypto.randomUUID()
     result.push({ id, kind: 'image', fileId, caption })
   }
-  await dropFiles(ownedRows.map((row) => row.id).filter((id) => !used.has(id)))
   return result
 }
 
@@ -514,45 +692,62 @@ function readFormat(input) {
 
 async function saveLesson(id, input, seedKey) {
   const title = cleanLabel(input?.title, 2, 80, 'Название урока')
+  const titleKk = optionalLabel(input?.titleKk, 80, 'Название урока')
   const groups = readGroups(input)
   const format = readFormat(input)
   const questions = normalizeQuestions(input?.questions)
-  const slides = format === 'video' ? [] : await normalizeSlides(input?.slides, id)
+  const questionsKk = isBlankQuestions(input?.questionsKk) ? [] : normalizeQuestions(input?.questionsKk)
+  const ownedRows = await db.all('SELECT id FROM lesson_files WHERE lesson_id = ?', id)
+  const owned = new Set(ownedRows.map((row) => row.id))
+  const used = new Set()
+  const slides = format === 'video' ? [] : await normalizeSlides(input?.slides, id, owned, used)
+  const slidesKk = format === 'video' || isBlankSlides(input?.slidesKk) ? [] : await normalizeSlides(input?.slidesKk, id, owned, used)
   if (format === 'video') await dropLessonFiles(id)
-  else await removeVideoFile(id)
+  else await dropFiles(ownedRows.map((row) => row.id).filter((fileId) => !used.has(fileId)))
+  if (format !== 'video') await removeVideoFile(id)
   const now = new Date().toISOString()
   const numbers = groupNumbers(groups)
   const existing = await db.get('SELECT id FROM lessons WHERE id = ?', id)
   if (!existing) {
     await db.run(
       `INSERT INTO lessons (
-        id, title, seed_key, grades_1_4, grades_5_9, grades_10_11, students, format, slides, questions, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, title, title_kk, seed_key, grades_1_4, grades_5_9, grades_10_11, students, format, slides, questions, slides_kk, questions_kk, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       title,
+      titleKk,
       seedKey || null,
       ...numbers,
       format,
       JSON.stringify(slides),
       JSON.stringify(questions),
+      JSON.stringify(slidesKk),
+      JSON.stringify(questionsKk),
       now,
       now,
     )
   } else {
     await db.run(
       `UPDATE lessons
-       SET title = ?, grades_1_4 = ?, grades_5_9 = ?, grades_10_11 = ?, students = ?, format = ?,
+       SET title = ?, title_kk = ?, grades_1_4 = ?, grades_5_9 = ?, grades_10_11 = ?, students = ?, format = ?,
            video_mime = CASE WHEN ? = 'slides' THEN NULL ELSE video_mime END,
            video_name = CASE WHEN ? = 'slides' THEN NULL ELSE video_name END,
-           slides = ?, questions = ?, updated_at = ?
+           video_mime_kk = CASE WHEN ? = 'slides' THEN NULL ELSE video_mime_kk END,
+           video_name_kk = CASE WHEN ? = 'slides' THEN NULL ELSE video_name_kk END,
+           slides = ?, questions = ?, slides_kk = ?, questions_kk = ?, updated_at = ?
        WHERE id = ?`,
       title,
+      titleKk,
       ...numbers,
+      format,
+      format,
       format,
       format,
       format,
       JSON.stringify(slides),
       JSON.stringify(questions),
+      JSON.stringify(slidesKk),
+      JSON.stringify(questionsKk),
       now,
       id,
     )
@@ -560,7 +755,7 @@ async function saveLesson(id, input, seedKey) {
   return getLesson({ role: 'super' }, id)
 }
 
-export async function saveLessonVideo(actor, id, buffer, mime, name) {
+export async function saveLessonVideo(actor, id, buffer, mime, name, lang = 'ru') {
   assertRole(actor, 'super')
   const row = await mustLesson(id)
   if (lessonFormat(row) !== 'video') fail('Этот урок — презентация')
@@ -569,31 +764,45 @@ export async function saveLessonVideo(actor, id, buffer, mime, name) {
   const bytes = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer || [])
   if (!bytes.length) fail('Файл пустой')
   if (bytes.length > MAX_VIDEO) fail('Видео больше 80 МБ')
+  const chosen = readLang(lang)
   await fs.promises.mkdir(mediaRoot(), { recursive: true })
-  await fs.promises.writeFile(mediaPath(id), bytes)
+  await fs.promises.writeFile(mediaPath(id, chosen), bytes)
   const safeName = clean(name).slice(0, 120) || 'video'
-  await db.run(
-    'UPDATE lessons SET video_mime = ?, video_name = ?, updated_at = ? WHERE id = ?',
-    type,
-    safeName,
-    new Date().toISOString(),
-    id,
-  )
+  if (chosen === 'kk') {
+    await db.run(
+      'UPDATE lessons SET video_mime_kk = ?, video_name_kk = ?, updated_at = ? WHERE id = ?',
+      type,
+      safeName,
+      new Date().toISOString(),
+      id,
+    )
+  } else {
+    await db.run(
+      'UPDATE lessons SET video_mime = ?, video_name = ?, updated_at = ? WHERE id = ?',
+      type,
+      safeName,
+      new Date().toISOString(),
+      id,
+    )
+  }
   return getLesson({ role: 'super' }, id)
 }
 
-export async function openLessonMedia(actor, id) {
+export async function openLessonMedia(actor, id, lang = 'ru') {
   assertRole(actor, 'super', 'learner')
   const row = await mustLesson(id)
-  if (!(await canSee(actor, row)) || lessonFormat(row) !== 'video' || !row.video_mime) fail('Видео не найдено', 404)
-  const target = mediaPath(id)
+  if (!(await canSee(actor, row)) || lessonFormat(row) !== 'video') fail('Видео не найдено', 404)
+  const chosen = readLang(lang)
+  const video = videoOf(row, chosen)
+  if (!video) fail('Видео не найдено', 404)
+  const target = mediaPath(id, video.lang)
   let stat
   try {
     stat = await fs.promises.stat(target)
   } catch {
     fail('Видео не найдено', 404)
   }
-  return { mime: row.video_mime, size: stat.size, path: target, name: row.video_name || 'video' }
+  return { mime: video.mime, size: stat.size, path: target, name: video.name, fileName: video.lang === 'kk' ? `${id}.kk` : id }
 }
 
 export async function importPptx(actor, buffer) {
@@ -637,11 +846,12 @@ export async function deleteLesson(actor, id) {
   await db.run('DELETE FROM lessons WHERE id = ?', id)
 }
 
-export async function checkLesson(actor, id, answers) {
+export async function checkLesson(actor, id, answers, lang = 'ru') {
   assertRole(actor, 'super', 'learner')
   const row = await mustLesson(id)
   if (!(await canSee(actor, row))) fail('Урок не найден', 404)
-  const questions = JSON.parse(row.questions)
+  const pack = selectPack(row, lang)
+  const questions = pack.questions
   const given = readAnswers(answers)
   const graded = gradeAnswers(questions, given)
   if (actor.role !== 'learner') return { ...graded, repeated: false, attempts: null }
@@ -650,13 +860,14 @@ export async function checkLesson(actor, id, answers) {
   const before = await attemptsOf(id, actor.id)
   if (before.length >= max) {
     // Попытки исчерпаны: повторная отправка возвращает сохранённый результат, новая строка не пишется.
-    return { ...presentAttempt(before[before.length - 1], questions), repeated: true, attempts: attemptState(before, max) }
+    const stored = selectPack(row, before[before.length - 1].lang).questions
+    return { ...presentAttempt(before[before.length - 1], stored), repeated: true, attempts: attemptState(before, max) }
   }
 
   const attemptId = crypto.randomUUID()
   await db.run(
-    `INSERT INTO lesson_attempts (id, lesson_id, user_id, score, total, finished_at, answers)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO lesson_attempts (id, lesson_id, user_id, score, total, finished_at, answers, lang)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     attemptId,
     id,
     actor.id,
@@ -667,6 +878,7 @@ export async function checkLesson(actor, id, answers) {
       questionId: question.id,
       chosen: given.has(question.id) ? given.get(question.id) : -1,
     }))),
+    pack.lang,
   )
 
   // Две одновременные отправки могли пройти проверку выше: оставляем первые max попыток, лишние убираем.
@@ -675,7 +887,7 @@ export async function checkLesson(actor, id, answers) {
     for (const extra of after.slice(max)) await db.run('DELETE FROM lesson_attempts WHERE id = ?', extra.id)
     const kept = after.slice(0, max)
     const last = kept[kept.length - 1]
-    return { ...presentAttempt(last, questions), repeated: last.id !== attemptId, attempts: attemptState(kept, max) }
+    return { ...presentAttempt(last, selectPack(row, last.lang).questions), repeated: last.id !== attemptId, attempts: attemptState(kept, max) }
   }
   return { ...graded, repeated: false, attempts: attemptState(after, max) }
 }

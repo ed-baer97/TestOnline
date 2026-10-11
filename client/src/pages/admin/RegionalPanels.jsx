@@ -1,20 +1,26 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api.js'
 import { EMPTY_GROUPS, groupLabels } from '../../bands.js'
-import { useI18n } from '../../i18n.jsx'
+import { pick, useI18n } from '../../i18n.jsx'
 import { GroupChecks, Notice } from './ui.jsx'
 
 export function Organizations() {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const [organizations, setOrganizations] = useState(null)
+  const [districts, setDistricts] = useState([])
   const [name, setName] = useState('')
+  const [nameKk, setNameKk] = useState('')
+  const [districtId, setDistrictId] = useState('')
   const [groups, setGroups] = useState(EMPTY_GROUPS)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [editing, setEditing] = useState(null)
 
   function load() {
-    return api.organizations().then((data) => setOrganizations(data.organizations))
+    return Promise.all([api.organizations(), api.districts()]).then(([orgs, area]) => {
+      setOrganizations(orgs.organizations)
+      setDistricts(area.districts)
+    })
   }
 
   useEffect(() => {
@@ -26,8 +32,9 @@ export function Organizations() {
     setError('')
     setNotice('')
     try {
-      await api.createOrganization({ name, groups })
+      await api.createOrganization({ name, nameKk, districtId, groups })
       setName('')
+      setNameKk('')
       setGroups(EMPTY_GROUPS)
       setNotice('Организация создана')
       await load()
@@ -37,7 +44,7 @@ export function Organizations() {
   }
 
   async function remove(org) {
-    if (!window.confirm(t('Удалить организацию «{name}»?', { name: org.name }))) return
+    if (!window.confirm(t('Удалить организацию «{name}»? Удалятся администратор, классы и тестируемые.', { name: pick(lang, org.name, org.nameKk) }))) return
     setError('')
     setNotice('')
     try {
@@ -54,11 +61,24 @@ export function Organizations() {
       <Notice error={error} notice={notice} />
       <form className="admin-form" onSubmit={create}>
         <label>
-          {t('Название')}
+          {t('Название, русский')}
           <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Школа №3')} />
         </label>
+        <label>
+          {t('Название, қазақша')}
+          <input value={nameKk} onChange={(event) => setNameKk(event.target.value)} placeholder="№3 мектеп" />
+        </label>
+        {districts.length > 0 && (
+          <label>
+            {t('Район')}
+            <select value={districtId} onChange={(event) => setDistrictId(event.target.value)}>
+              <option value="">{t('Выберите район')}</option>
+              {districts.map((district) => <option key={district.id} value={district.id}>{pick(lang, district.name, district.nameKk)}</option>)}
+            </select>
+          </label>
+        )}
         <GroupChecks groups={groups} onChange={setGroups} />
-        <button className="primary add" type="submit">{t('Создать организацию')}</button>
+        <button className="primary add" type="submit" disabled={districts.length > 0 && !districtId}>{t('Создать организацию')}</button>
       </form>
       {organizations === null && !error && <p className="muted">{t('Загрузка…')}</p>}
       <div className="stack">
@@ -66,7 +86,8 @@ export function Organizations() {
           <article className="question-card" key={org.id}>
             <header>
               <div>
-                <h2>{org.name}</h2>
+                <h2>{pick(lang, org.name, org.nameKk)}</h2>
+                {districts.length > 0 && <p className="muted">{org.districtName ? pick(lang, org.districtName, org.districtNameKk) : t('Район не выбран')}</p>}
                 <p className="muted">{groupLabels(org.groups, t) || t('Группы не отмечены')}</p>
                 <p className="muted">{t('{orgClasses} кл. · {learners} тест. · {admins} адм.', { orgClasses: org.classes, learners: org.learners, admins: org.admins })}</p>
               </div>
@@ -80,6 +101,7 @@ export function Organizations() {
             {editing === org.id && (
               <OrgEditor
                 org={org}
+                districts={districts}
                 onSaved={async () => {
                   setNotice('Организация сохранена')
                   setEditing(null)
@@ -95,16 +117,18 @@ export function Organizations() {
   )
 }
 
-function OrgEditor({ org, onSaved, onError }) {
-  const { t } = useI18n()
+function OrgEditor({ org, districts, onSaved, onError }) {
+  const { lang, t } = useI18n()
   const [name, setName] = useState(org.name)
+  const [nameKk, setNameKk] = useState(org.nameKk || '')
+  const [districtId, setDistrictId] = useState(org.districtId || '')
   const [groups, setGroups] = useState(org.groups)
 
   async function save(event) {
     event.preventDefault()
     onError('')
     try {
-      await api.updateOrganization(org.id, { name, groups })
+      await api.updateOrganization(org.id, { name, nameKk, districtId, groups })
       await onSaved()
     } catch (err) {
       onError(err.message)
@@ -114,9 +138,22 @@ function OrgEditor({ org, onSaved, onError }) {
   return (
     <form className="stack" onSubmit={save}>
       <label>
-        {t('Название')}
+        {t('Название, русский')}
         <input value={name} onChange={(event) => setName(event.target.value)} />
       </label>
+      <label>
+        {t('Название, қазақша')}
+        <input value={nameKk} onChange={(event) => setNameKk(event.target.value)} />
+      </label>
+      {districts.length > 0 && (
+        <label>
+          {t('Район')}
+          <select value={districtId} onChange={(event) => setDistrictId(event.target.value)}>
+            <option value="">{t('Выберите район')}</option>
+            {districts.map((district) => <option key={district.id} value={district.id}>{pick(lang, district.name, district.nameKk)}</option>)}
+          </select>
+        </label>
+      )}
       <GroupChecks groups={groups} onChange={setGroups} />
       <button className="primary add" type="submit">{t('Сохранить')}</button>
     </form>
@@ -124,7 +161,7 @@ function OrgEditor({ org, onSaved, onError }) {
 }
 
 export function OrgStaff() {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const [admins, setAdmins] = useState(null)
   const [organizations, setOrganizations] = useState([])
   const [form, setForm] = useState({ displayName: '', login: '', password: '', organizationId: '' })
@@ -156,9 +193,10 @@ export function OrgStaff() {
     setError('')
     setNotice('')
     try {
+      const created = { login: form.login, password: form.password }
       await api.createOrgAdmin(form)
       setForm((current) => ({ ...current, displayName: '', login: '', password: '' }))
-      setNotice('Администратор создан. Передайте ему логин и пароль.')
+      setNotice(`Администратор создан. Логин: ${created.login}. Пароль: ${created.password}.`)
       await load()
     } catch (err) {
       setError(err.message)
@@ -198,7 +236,7 @@ export function OrgStaff() {
           {t('Организация')}
           <select name="organizationId" value={form.organizationId} onChange={patch}>
             {organizations.length === 0 && <option value="">{t('Сначала создайте организацию')}</option>}
-            {organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+            {organizations.map((org) => <option key={org.id} value={org.id}>{pick(lang, org.name, org.nameKk)}</option>)}
           </select>
         </label>
         <button className="primary add" type="submit" disabled={!organizations.length}>{t('Создать администратора')}</button>
@@ -220,7 +258,7 @@ export function OrgStaff() {
 }
 
 function OrgAdminRow({ person, organizations, onChanged, onDelete, onError }) {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const [displayName, setDisplayName] = useState(person.displayName)
   const [organizationId, setOrganizationId] = useState(person.organizationId)
   const [password, setPassword] = useState('')
@@ -241,8 +279,9 @@ function OrgAdminRow({ person, organizations, onChanged, onDelete, onError }) {
     <article className="person">
       <form onSubmit={save}>
         <input aria-label={t('Имя')} value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+        <span className="muted">{t('Логин')}: {person.login}</span>
         <select aria-label={t('Организация')} value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}>
-          {organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+          {organizations.map((org) => <option key={org.id} value={org.id}>{pick(lang, org.name, org.nameKk)}</option>)}
         </select>
         <input
           aria-label={t('Новый пароль')}
@@ -254,7 +293,6 @@ function OrgAdminRow({ person, organizations, onChanged, onDelete, onError }) {
         />
         <button className="ghost" type="submit">{t('Сохранить')}</button>
       </form>
-      <span className="muted">{person.login}</span>
       <button className="ghost" type="button" onClick={onDelete}>{t('Удалить')}</button>
     </article>
   )

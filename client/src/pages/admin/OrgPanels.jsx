@@ -244,9 +244,10 @@ export function Learners() {
     setError('')
     setNotice('')
     try {
+      const created = { login: form.login, password: form.password }
       await api.createLearner(form)
       setForm((current) => ({ ...current, displayName: '', login: '', password: '' }))
-      setNotice('Тестируемый создан. Передайте логин и пароль.')
+      setNotice(`Тестируемый создан. Логин: ${created.login}. Пароль: ${created.password}.`)
       await load()
     } catch (err) {
       setError(err.message)
@@ -309,10 +310,20 @@ export function Learners() {
         <h1>{t('Тестируемые')}</h1>
         <div className="row-actions">
           <a className="ghost" href="/api/admin/learners/template">{t('Шаблон Excel')}</a>
-          <label className="primary file-button">
-            {importing ? t('Загрузка…') : t('Загрузить из Excel')}
-            <input className="sr-only" type="file" accept=".xlsx" disabled={importing || !groups.length} onChange={upload} />
-          </label>
+          {groups.length === 0 ? (
+            <button
+              className="primary is-off"
+              type="button"
+              onClick={() => setError('Сначала создайте класс, затем сюда можно добавить тестируемого.')}
+            >
+              {t('Загрузить из Excel')}
+            </button>
+          ) : (
+            <label className="primary file-button">
+              {importing ? t('Загрузка…') : t('Загрузить из Excel')}
+              <input type="file" accept=".xlsx" disabled={importing} onChange={upload} />
+            </label>
+          )}
         </div>
       </div>
       <Notice error={error} notice={notice} />
@@ -356,7 +367,7 @@ export function Learners() {
       )}
       {groups.length === 0 && <p className="muted">{t('Сначала создайте класс, затем сюда можно добавить тестируемого.')}</p>}
       <p className="muted">
-        {t('В файле четыре столбца: класс, имя, логин, пароль. Если пароль пустой, он будет создан автоматически и показан после загрузки.')}
+        {t('В файле столбцы: Класс, Имя, Логин, Пароль. Имя можно написать по-русски или по-казахски. Если пароль пустой, он будет создан автоматически и показан после загрузки.')}
       </p>
       <form className="admin-form" onSubmit={create}>
         <label>

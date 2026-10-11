@@ -1,13 +1,20 @@
 import assert from 'node:assert/strict'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testonline-'))
-process.env.DB_PATH = path.join(dir, 'test.sqlite')
+process.env.MEDIA_DIR = path.join(dir, 'media')
+process.env.PG_SCHEMA = `t_${crypto.randomBytes(4).toString('hex')}`
 process.env.ADMIN_PASSWORD = 'admin'
 process.env.SESSION_SECRET = 'test-secret'
+
+test.after(async () => {
+  const { closeDatabase } = await import('./db.js')
+  await closeDatabase()
+})
 
 test('комната: QR-вход, вопрос без правильного ответа, очки и подиум', async () => {
   const { createApp } = await import('./index.js')
@@ -62,6 +69,13 @@ test('комната: QR-вход, вопрос без правильного о
   assert.equal(roomRes.status, 201)
   const room = await roomRes.json()
   assert.match(room.code, /^\d{6}$/)
+
+  const hostPrivate = await fetch(`${base}/api/rooms`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ quizId: quiz.id, mode: 'private', organizationId: 'x', classId: 'y' }),
+  })
+  assert.equal(hostPrivate.status, 403)
 
   const info = await fetch(`${base}/api/rooms/${room.code}`)
   const infoJson = await info.json()
@@ -162,6 +176,97 @@ test('комната: QR-вход, вопрос без правильного о
   const otherCookie = other.headers.get('set-cookie').split(';')[0]
   const hidden = await fetch(`${base}/api/quizzes/${quiz.id}`, { headers: { Cookie: otherCookie } })
   assert.equal(hidden.status, 404)
+
+  const admin = await import('./admin.js')
+  const root = await admin.ensureSuperAdmin()
+  const region = await admin.createRegion(root, { name: 'Атырауская область' })
+  const regional = await admin.createRegionalAdmin(root, {
+    login: 'atyrauflow',
+    password: 'secret1',
+    displayName: 'Ерлан',
+    regionId: region.id,
+  })
+  const school = await admin.createOrganization(regional, { name: 'Школа теста', groups: { grades_5_9: true } })
+  const orgAdmin = await admin.createOrgAdmin(regional, {
+    login: 'schoolflow',
+    password: 'secret1',
+    displayName: 'Мадина',
+    organizationId: school.id,
+  })
+  const classA = await admin.createClass(orgAdmin, { grade: 5, name: '5а' })
+  const classB = await admin.createClass(orgAdmin, { grade: 5, name: '5б' })
+  await admin.createLearner(orgAdmin, { login: 'armanflow', password: 'secret1', displayName: 'Арман Тест', classId: classA.id })
+  await admin.createLearner(orgAdmin, { login: 'aidaflow', password: 'secret1', displayName: 'Аида', classId: classB.id })
+
+  const superSession = await fetch(`${base}/api/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login: 'super', password: 'super12345' }),
+  })
+  assert.equal(superSession.status, 200)
+  const superCookie = superSession.headers.get('set-cookie').split(';')[0]
+  const privateQuiz = await fetch(`${base}/api/quizzes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: superCookie },
+    body: JSON.stringify({
+      title: 'Закрытый квиз',
+      questions: [{ text: 'Столица?', timeLimit: 20, correctIndex: 0, options: [{ text: 'Астана' }, { text: 'Алматы' }] }],
+    }),
+  })
+  assert.equal(privateQuiz.status, 201)
+  const privateQuizJson = await privateQuiz.json()
+  const privateRoomRes = await fetch(`${base}/api/rooms`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: superCookie },
+    body: JSON.stringify({ quizId: privateQuizJson.id, mode: 'private', organizationId: school.id, classId: classA.id }),
+  })
+  assert.equal(privateRoomRes.status, 201)
+  const privateRoom = await privateRoomRes.json()
+  assert.equal(privateRoom.access, 'private')
+
+  const privateInfo = await fetch(`${base}/api/rooms/${privateRoom.code}`)
+  assert.equal((await privateInfo.json()).access, 'private')
+
+  const guestJoin = await fetch(`${base}/api/rooms/${privateRoom.code}/join`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Гость', playerToken: 'player-token-guest-0001' }),
+  })
+  assert.equal(guestJoin.status, 400)
+
+  const learnerSession = await fetch(`${base}/api/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login: 'armanflow', password: 'secret1' }),
+  })
+  const learnerCookie = learnerSession.headers.get('set-cookie').split(';')[0]
+  const listed = await fetch(`${base}/api/learn/live`, { headers: { Cookie: learnerCookie } })
+  const listedJson = await listed.json()
+  assert.equal(listedJson.quizzes.length, 1)
+  assert.equal(listedJson.quizzes[0].title, 'Закрытый квиз')
+
+  const learnerJoin = await fetch(`${base}/api/rooms/${privateRoom.code}/join`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: learnerCookie },
+    body: JSON.stringify({ name: 'Чужое', playerToken: 'player-token-arman-0001' }),
+  })
+  assert.equal(learnerJoin.status, 200)
+  assert.equal((await learnerJoin.json()).me.name, 'Арман Тест')
+
+  const otherClass = await fetch(`${base}/api/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login: 'aidaflow', password: 'secret1' }),
+  })
+  const otherClassCookie = otherClass.headers.get('set-cookie').split(';')[0]
+  const blocked = await fetch(`${base}/api/rooms/${privateRoom.code}/join`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: otherClassCookie },
+    body: JSON.stringify({ name: 'Аида', playerToken: 'player-token-aida--0001' }),
+  })
+  assert.equal(blocked.status, 400)
+  const otherList = await fetch(`${base}/api/learn/live`, { headers: { Cookie: otherClassCookie } })
+  assert.equal((await otherList.json()).quizzes.length, 0)
 
   player.disconnect()
   host.disconnect()

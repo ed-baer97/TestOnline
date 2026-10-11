@@ -1,11 +1,15 @@
 import { NavLink } from 'react-router-dom'
-import { useI18n } from '../i18n.jsx'
+import { pick, useI18n } from '../i18n.jsx'
 import { roleLabel } from '../roles.js'
 import { TopbarSlot, TopbarSlots } from '../topbar.jsx'
 
 export function AdminFrame({ me, onLogout, tabs, children }) {
-  const { t } = useI18n()
-  const scope = me.regionName || me.organizationName || t('Вся платформа')
+  const { lang, t } = useI18n()
+  const scope = me.regionName
+    ? pick(lang, me.regionName, me.regionNameKk)
+    : me.organizationName
+      ? pick(lang, me.organizationName, me.organizationNameKk)
+      : t('Вся платформа')
   return (
     <TopbarSlots>
     <main className="sheet admin-sheet">

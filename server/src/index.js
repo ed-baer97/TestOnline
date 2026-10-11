@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import cookieParser from 'cookie-parser'
 import dotenv from 'dotenv'
 import express from 'express'
@@ -28,10 +28,16 @@ import {
   importLearners,
   learnersTemplate,
   listLearners,
+  platformStats,
   listOrgAdmins,
   listOrganizations,
   listRegionalAdmins,
   listRegions,
+  listDistricts,
+  launchTargets,
+  listLaunchQuizzes,
+  privateAudience,
+  quizForRoom,
   profile,
   structure,
   updateClass,
@@ -52,6 +58,7 @@ import {
   getRoom,
   hostView,
   joinPlayer,
+  listPrivateForClass,
   markOffline,
   openRoom,
   playerByToken,
@@ -91,6 +98,14 @@ function readSession(token) {
   }
 }
 
+function cookieValue(header, name) {
+  for (const part of String(header || '').split(';')) {
+    const [key, ...rest] = part.trim().split('=')
+    if (key === name) return decodeURIComponent(rest.join('='))
+  }
+  return ''
+}
+
 async function loadUser(req, res) {
   const session = readSession(req.cookies.session)
   if (!session?.userId) {
@@ -119,7 +134,7 @@ function requireUser(req, res, next) {
 function requireHost(req, res, next) {
   loadUser(req, res).then((user) => {
     if (!user) return
-    if (user.role !== 'host') {
+    if (user.role !== 'host' && user.role !== 'super') {
       res.status(403).json({ error: 'Недостаточно прав' })
       return
     }
@@ -233,6 +248,10 @@ export function createApp() {
   app.get('/api/admin/dashboard', guard, route(async (req, res) => {
     res.json(await dashboard(req.user))
   }))
+  app.get('/api/admin/platform-stats', guard, route(async (req, res) => {
+    const requested = typeof req.query.regionId === 'string' ? req.query.regionId : null
+    res.json(await platformStats(req.user, requested || null))
+  }))
   app.get('/api/admin/regions', guard, route(async (req, res) => {
     res.json({ regions: await listRegions(req.user) })
   }))
@@ -259,8 +278,17 @@ export function createApp() {
     await deleteRegionalAdmin(req.user, req.params.id)
     res.json({ ok: true })
   }))
+  app.get('/api/admin/districts', guard, route(async (req, res) => {
+    res.json({ districts: await listDistricts(req.user) })
+  }))
   app.get('/api/admin/organizations', guard, route(async (req, res) => {
     res.json({ organizations: await listOrganizations(req.user) })
+  }))
+  app.get('/api/admin/launch-targets', guard, route(async (req, res) => {
+    res.json({ organizations: await launchTargets(req.user) })
+  }))
+  app.get('/api/admin/launch-quizzes', guard, route(async (req, res) => {
+    res.json({ quizzes: await listLaunchQuizzes(req.user) })
   }))
   app.post('/api/admin/organizations', guard, route(async (req, res) => {
     res.status(201).json(await createOrganization(req.user, req.body || {}))
@@ -341,10 +369,10 @@ export function createApp() {
   // MEDIA_ACCEL=1: Node только проверяет права, файл отдаёт Nginx по внутреннему адресу /media-internal/.
   const accel = process.env.MEDIA_ACCEL === '1'
   app.get('/api/lessons/:id/media', guard, route(async (req, res) => {
-    const media = await openLessonMedia(req.user, req.params.id)
+    const media = await openLessonMedia(req.user, req.params.id, req.query.lang)
     if (accel) {
       res.setHeader('Content-Type', media.mime)
-      res.setHeader('X-Accel-Redirect', `/media-internal/${req.params.id}`)
+      res.setHeader('X-Accel-Redirect', `/media-internal/${media.fileName}`)
       res.end()
       return
     }
@@ -390,10 +418,10 @@ export function createApp() {
     })
   }))
   app.get('/api/lessons/:id', guard, route(async (req, res) => {
-    res.json(await getLesson(req.user, req.params.id))
+    res.json(await getLesson(req.user, req.params.id, req.query.lang))
   }))
   app.post('/api/lessons/:id/check', guard, route(async (req, res) => {
-    res.json(await checkLesson(req.user, req.params.id, req.body?.answers))
+    res.json(await checkLesson(req.user, req.params.id, req.body?.answers, req.body?.lang))
   }))
   app.put('/api/admin/lessons/:id/video', guard, express.raw({ type: () => true, limit: '80mb' }), route(async (req, res) => {
     let name = ''
@@ -402,7 +430,7 @@ export function createApp() {
     } catch {
       name = ''
     }
-    res.json(await saveLessonVideo(req.user, req.params.id, req.body, req.get('content-type'), name))
+    res.json(await saveLessonVideo(req.user, req.params.id, req.body, req.get('content-type'), name, req.query.lang || req.get('x-lang')))
   }))
   app.post('/api/admin/lessons/pptx', guard, express.raw({ type: () => true, limit: '30mb' }), route(async (req, res) => {
     res.json(await importPptx(req.user, req.body))
@@ -498,14 +526,19 @@ export function createApp() {
     res.json({ results: await listResults(req.userId) })
   }))
 
-  app.post('/api/rooms', requireHost, route(async (req, res) => {
-    const quiz = await getQuiz(req.body?.quizId, req.userId)
-    if (!quiz) {
-      res.status(404).json({ error: 'Квиз не найден' })
-      return
-    }
-    const room = await createRoom(quiz)
-    res.status(201).json({ code: room.code, hostToken: room.hostToken, title: room.quiz.title })
+  app.get('/api/learn/live', requireUser, route(async (req, res) => {
+    const quizzes = req.user.role === 'learner' ? await listPrivateForClass(req.user.classId) : []
+    res.json({ quizzes })
+  }))
+
+  app.post('/api/rooms', requireUser, route(async (req, res) => {
+    const mode = req.body?.mode === 'private' ? 'private' : 'public'
+    const quiz = await quizForRoom(req.user, req.body?.quizId, mode)
+    const audience = mode === 'private'
+      ? await privateAudience(req.user, req.body?.organizationId, req.body?.classId)
+      : null
+    const room = await createRoom(quiz, audience)
+    res.status(201).json({ code: room.code, hostToken: room.hostToken, title: room.quiz.title, access: room.audience.kind })
   }))
 
   app.get('/api/rooms/:code/host', route(async (req, res) => {
@@ -538,7 +571,9 @@ export function createApp() {
       res.status(404).json({ error: 'Комната не найдена' })
       return
     }
-    const result = joinPlayer(room, { name: req.body?.name, playerToken: req.body?.playerToken })
+    const session = readSession(req.cookies?.session)
+    const user = session?.userId ? await profile(session.userId) : null
+    const result = joinPlayer(room, { name: req.body?.name, playerToken: req.body?.playerToken, user })
     if (result.error) {
       res.status(400).json({ error: result.error })
       return
@@ -615,7 +650,9 @@ export function createApp() {
         ack?.({ error: 'Комната не найдена' })
         return
       }
-      const result = joinPlayer(room, { name, playerToken })
+      const session = readSession(cookieValue(socket.handshake.headers.cookie, 'session'))
+      const user = session?.userId ? await profile(session.userId) : null
+      const result = joinPlayer(room, { name, playerToken, user })
       if (result.error) {
         ack?.({ error: result.error })
         return
@@ -670,13 +707,16 @@ export function createApp() {
   })
 
   const clientDist = path.join(__dirname, '..', '..', 'client', 'dist')
-  app.use(express.static(clientDist))
-  app.get(/^(?!\/api|\/socket\.io).*/, (req, res, next) => {
-    if (req.method !== 'GET') return next()
-    res.sendFile(path.join(clientDist, 'index.html'), (error) => {
-      if (error) next()
+  const serveClient = process.env.NODE_ENV === 'production' || process.env.SERVE_CLIENT === '1'
+  if (serveClient) {
+    app.use(express.static(clientDist))
+    app.get(/^(?!\/api|\/socket\.io).*/, (req, res, next) => {
+      if (req.method !== 'GET') return next()
+      res.sendFile(path.join(clientDist, 'index.html'), (error) => {
+        if (error) next()
+      })
     })
-  })
+  }
 
   return { app, httpServer, io }
 }
@@ -684,9 +724,12 @@ export function createApp() {
 const runtime = createApp()
 export default runtime.app
 
-const isMain = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+const entry = process.argv[1] ? path.resolve(process.argv[1]) : ''
+const isMain = entry === fileURLToPath(import.meta.url) || path.basename(entry) === 'start.js'
 if (isMain) {
   runtime.httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`TestOnline API http://localhost:${PORT}`)
+    console.log(process.env.NODE_ENV === 'production'
+      ? `TestOnline слушает порт ${PORT}`
+      : `TestOnline API на порту ${PORT}. Сайт: http://localhost:5174`)
   })
 }

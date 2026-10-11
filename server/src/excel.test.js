@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -7,8 +8,14 @@ import ExcelJS from 'exceljs'
 import { questionsFromXlsx, templateWorkbook } from './excel.js'
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testonline-excel-'))
-process.env.DB_PATH = path.join(dir, 'test.sqlite')
+process.env.MEDIA_DIR = path.join(dir, 'media')
+process.env.PG_SCHEMA = `t_${crypto.randomBytes(4).toString('hex')}`
 process.env.SESSION_SECRET = 'test-secret'
+
+test.after(async () => {
+  const { closeDatabase } = await import('./db.js')
+  await closeDatabase()
+})
 
 function fill(argb) {
   return { type: 'pattern', pattern: 'solid', fgColor: argb }

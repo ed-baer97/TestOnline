@@ -1,12 +1,22 @@
 import crypto from 'node:crypto'
 import { cleanName, scorePoints } from './domain.js'
-import { deleteLiveRoom, readLiveRoom, saveLiveRoom, saveResult } from './db.js'
+import { deleteLiveRoom, listLiveRooms, readLiveRoom, saveLiveRoom, saveResult } from './db.js'
 
 const rooms = new Map()
 const ROOM_TTL_MS = 4 * 60 * 60 * 1000
 const PODIUM_TTL_MS = 30 * 60 * 1000
 
-export async function createRoom(quiz) {
+const PUBLIC_AUDIENCE = {
+  kind: 'public',
+  organizationId: null,
+  classId: null,
+  band: null,
+  organizationName: '',
+  organizationNameKk: '',
+  classLabel: '',
+}
+
+export async function createRoom(quiz, audience = null) {
   let code = ''
   do {
     code = String(Math.floor(100000 + Math.random() * 900000))
@@ -36,6 +46,7 @@ export async function createRoom(quiz) {
     players: new Map(),
     createdAt: Date.now(),
     podiumAt: null,
+    audience: audience?.kind === 'private' ? audience : { ...PUBLIC_AUDIENCE },
   }
   rooms.set(code, room)
   await remember(room)
@@ -56,6 +67,7 @@ function freeze(room) {
     createdAt: room.createdAt,
     podiumAt: room.podiumAt,
     startedAt: room.startedAt || null,
+    audience: room.audience || { ...PUBLIC_AUDIENCE },
   }
 }
 
@@ -108,6 +120,7 @@ export function publicInfo(room) {
     status: room.status,
     playerCount: room.players.size,
     joinable: room.status === 'lobby',
+    access: room.audience?.kind === 'private' ? 'private' : 'public',
   }
 }
 
@@ -187,6 +200,10 @@ export function viewFor(room, socket) {
           }
         : null,
       leaderboard: board.slice(0, 50).map(({ name, score, rank }) => ({ name, score, rank })),
+      access: room.audience?.kind === 'private' ? 'private' : 'public',
+      organizationName: room.audience?.organizationName || '',
+      organizationNameKk: room.audience?.organizationNameKk || '',
+      classLabel: room.audience?.classLabel || '',
     }
   }
 
@@ -224,6 +241,31 @@ export function playerByToken(room, token) {
   return findByToken(room, token)
 }
 
+export async function listPrivateForClass(classId) {
+  if (!classId) return []
+  const rows = await listLiveRooms()
+  const found = []
+  for (const row of rows) {
+    let data
+    try {
+      data = JSON.parse(row.payload)
+    } catch {
+      continue
+    }
+    if (data.audience?.kind !== 'private' || data.audience.classId !== classId) continue
+    if (data.status === 'podium') continue
+    const room = await openRoom(data.code)
+    if (!room || room.audience?.classId !== classId || room.status === 'podium') continue
+    found.push({
+      code: room.code,
+      title: room.quiz.title,
+      status: room.status,
+      playerCount: room.players.size,
+    })
+  }
+  return found
+}
+
 const watchers = new Set()
 
 export function watch(socket) {
@@ -246,23 +288,44 @@ function findByToken(room, token) {
   return null
 }
 
-export function joinPlayer(room, { name, playerToken }) {
+function seatName(value, limit) {
+  const name = String(value || '').replace(/\s+/g, ' ').trim()
+  if (name.length < 2 || name.length > limit) return null
+  return name
+}
+
+export function joinPlayer(room, { name, playerToken, user }) {
   const existing = findByToken(room, playerToken)
   if (existing) return { player: existing }
+
+  const closed = room.audience?.kind === 'private'
+  if (closed) {
+    if (!user || user.role !== 'learner' || user.classId !== room.audience.classId) {
+      return { error: 'Этот квиз только для выбранного класса. Войдите под своим логином.' }
+    }
+    const seated = [...room.players.values()].find((player) => player.userId === user.id)
+    if (seated) {
+      seated.token = playerToken
+      return { player: seated }
+    }
+  }
 
   if (room.status !== 'lobby') return { error: 'Игра уже началась' }
   if (typeof playerToken !== 'string' || !/^[A-Za-z0-9-]{20,80}$/.test(playerToken)) {
     return { error: 'Не удалось войти в комнату' }
   }
-  const nickname = cleanName(name)
-  if (!nickname) return { error: 'Имя от 2 до 20 символов' }
-  const taken = [...room.players.values()].some((player) => player.name.toLowerCase() === nickname.toLowerCase())
-  if (taken) return { error: 'Такое имя уже занято' }
+  const nickname = closed ? seatName(user.displayName, 40) : cleanName(name)
+  if (!nickname) return { error: closed ? 'В профиле нет имени' : 'Имя от 2 до 20 символов' }
+  if (!closed) {
+    const taken = [...room.players.values()].some((player) => player.name.toLowerCase() === nickname.toLowerCase())
+    if (taken) return { error: 'Такое имя уже занято' }
+  }
   if (room.players.size >= 300) return { error: 'Комната заполнена' }
 
   const player = {
     id: crypto.randomUUID(),
     token: playerToken,
+    userId: closed ? user.id : null,
     name: nickname,
     score: 0,
     answered: false,
@@ -336,13 +399,21 @@ function finish(room) {
     quizId: room.quiz.id,
     quizTitle: room.quiz.title,
     code: room.code,
+    access: room.audience?.kind === 'private' ? 'private' : 'public',
+    organizationId: room.audience?.kind === 'private' ? room.audience.organizationId : null,
+    classId: room.audience?.kind === 'private' ? room.audience.classId : null,
+    band: room.audience?.kind === 'private' ? room.audience.band : null,
     startedAt: room.startedAt || room.createdAt,
-    players: leaderboard(room).map((entry) => ({
-      name: entry.name,
-      score: entry.score,
-      rank: entry.rank,
-      answers: room.players.get(entry.id)?.answers || [],
-    })),
+    players: leaderboard(room).map((entry) => {
+      const player = room.players.get(entry.id)
+      return {
+        name: entry.name,
+        userId: player?.userId || null,
+        score: entry.score,
+        rank: entry.rank,
+        answers: player?.answers || [],
+      }
+    }),
   }).catch((error) => {
     room.saved = false
     console.error('Не удалось сохранить итог игры', error)

@@ -1,12 +1,19 @@
 import assert from 'node:assert/strict'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testonline-stats-'))
-process.env.DB_PATH = path.join(dir, 'test.sqlite')
+process.env.MEDIA_DIR = path.join(dir, 'media')
+process.env.PG_SCHEMA = `t_${crypto.randomBytes(4).toString('hex')}`
 process.env.SESSION_SECRET = 'test-secret'
+
+test.after(async () => {
+  const { closeDatabase } = await import('./db.js')
+  await closeDatabase()
+})
 
 test('сводка считает запуски, средний балл и долю верных ответов', async () => {
   const { createQuiz, quizStats, registerUser, saveResult, statsOverview } = await import('./db.js')

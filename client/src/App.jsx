@@ -55,9 +55,9 @@ export default function App() {
       <Route path="/host" element={<RequireAuth roles={['host']}><Dashboard onLogout={logout} /></RequireAuth>} />
       <Route path="/host/quizzes" element={<RequireAuth roles={['host']}><Quizzes onLogout={logout} /></RequireAuth>} />
       <Route path="/host/history" element={<RequireAuth roles={['host']}><History onLogout={logout} /></RequireAuth>} />
-      <Route path="/host/quiz/:id/stats/:resultId/:player" element={<RequireAuth roles={['host']}><Stats onLogout={logout} /></RequireAuth>} />
-      <Route path="/host/quiz/:id/stats/:resultId" element={<RequireAuth roles={['host']}><Stats onLogout={logout} /></RequireAuth>} />
-      <Route path="/host/quiz/:id/stats" element={<RequireAuth roles={['host']}><Stats onLogout={logout} /></RequireAuth>} />
+      <Route path="/host/quiz/:id/stats/:resultId/:player" element={<RequireAuth roles={['host', 'super']}><Stats onLogout={logout} /></RequireAuth>} />
+      <Route path="/host/quiz/:id/stats/:resultId" element={<RequireAuth roles={['host', 'super']}><Stats onLogout={logout} /></RequireAuth>} />
+      <Route path="/host/quiz/:id/stats" element={<RequireAuth roles={['host', 'super']}><Stats onLogout={logout} /></RequireAuth>} />
       <Route path="/host/quiz/:id" element={<RequireAuth roles={['host']}><Editor onLogout={logout} /></RequireAuth>} />
       <Route path="/host/room/:code" element={<HostRoom />} />
       <Route path="/play/:code" element={<Play />} />

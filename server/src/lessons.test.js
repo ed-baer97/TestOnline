@@ -1,14 +1,21 @@
 import assert from 'node:assert/strict'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testonline-lessons-'))
-process.env.DB_PATH = path.join(dir, 'lessons.sqlite')
+process.env.MEDIA_DIR = path.join(dir, 'media')
+process.env.PG_SCHEMA = `t_${crypto.randomBytes(4).toString('hex')}`
 process.env.SESSION_SECRET = 'test-secret'
 process.env.SUPER_LOGIN = 'root'
 process.env.SUPER_PASSWORD = 'rootpass'
+
+test.after(async () => {
+  const { closeDatabase } = await import('./db.js')
+  await closeDatabase()
+})
 
 const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
@@ -26,8 +33,10 @@ test('урок: презентация, тест и видимость по гр
     displayName: 'Айгуль',
     regionId: region.id,
   })
+  const districts = await admin.listDistricts(regional)
   const school = await admin.createOrganization(regional, {
     name: 'Школа №3',
+    districtId: districts[0].id,
     groups: { grades_5_9: true, students: true },
   })
   const orgAdmin = await admin.createOrgAdmin(regional, {

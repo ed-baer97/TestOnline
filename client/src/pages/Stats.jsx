@@ -116,49 +116,73 @@ function Tiles({ items }) {
   )
 }
 
+function meanScore(sessions) {
+  const scores = sessions.flatMap((session) => (session.players || []).map((player) => Number(player.score) || 0))
+  if (!scores.length) return null
+  return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
+}
+
+function AccessReport({ quizId, title, sessions }) {
+  const { t } = useI18n()
+  const runs = [...sessions].reverse()
+  const players = sessions.flatMap((session) => session.players || [])
+  return (
+    <section className="stack">
+      <h2>{t(title)}</h2>
+      <Tiles items={[
+        { label: 'Запусков', value: sessions.length },
+        { label: 'Участников', value: players.length },
+        { label: 'Средний балл', value: scoreText(meanScore(sessions)) },
+      ]} />
+      {sessions.length === 0 ? (
+        <p className="muted">{t('Пока пусто.')}</p>
+      ) : (
+        <>
+          <div className="chart-grid">
+            <BarChart
+              caption={t('Участники по запускам')}
+              items={runs.map((session) => ({ key: session.id, label: shortWhen(launchWhen(session)), value: session.playerCount }))}
+            />
+            <BarChart
+              caption={t('Средний балл по запускам')}
+              items={runs.map((session) => ({ key: session.id, label: shortWhen(launchWhen(session)), value: session.averageScore ?? 0 }))}
+            />
+          </div>
+          <RateList caption={t('Верные ответы по вопросам')} items={questionsOf(players)} />
+          <ul className="session-list">
+            {sessions.map((session) => (
+              <li key={session.id}>
+                <Link to={`/host/quiz/${quizId}/stats/${session.id}`}>
+                  <strong>{t(launchLabel(session))}</strong>
+                  <span>{t('код {code}', { code: formatCode(session.code) })}</span>
+                  <span>{t('{count} участ.', { count: session.playerCount })}</span>
+                  <span>{t('средний {score}', { score: scoreText(session.averageScore) })}</span>
+                  <span>{t('лучший {score}', { score: scoreText(session.topScore) })}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  )
+}
+
 function QuizReport({ stats }) {
   const { t } = useI18n()
-  const runs = [...stats.sessions].reverse()
+  const publicSessions = stats.sessions.filter((session) => session.access !== 'private')
+  const privateSessions = stats.sessions.filter((session) => session.access === 'private')
   return (
     <>
-      <Tiles items={[
-        { label: 'Запусков', value: stats.runs },
-        { label: 'Участников', value: stats.participants },
-        { label: 'Средний балл', value: scoreText(stats.averageScore) },
-        { label: 'Вопросов', value: stats.questionCount },
-      ]} />
+      <Tiles items={[{ label: 'Вопросов', value: stats.questionCount }]} />
       {stats.runs === 0 ? (
         <p className="muted">{t('Этот квиз ещё не запускали. После игры здесь появятся баллы и ошибки.')}</p>
       ) : (
-        <div className="chart-grid">
-          <BarChart
-            caption={t('Участники по запускам')}
-            items={runs.map((session) => ({ key: session.id, label: shortWhen(launchWhen(session)), value: session.playerCount }))}
-          />
-          <BarChart
-            caption={t('Средний балл по запускам')}
-            items={runs.map((session) => ({ key: session.id, label: shortWhen(launchWhen(session)), value: session.averageScore ?? 0 }))}
-          />
-        </div>
+        <>
+          <AccessReport quizId={stats.id} title="Публичные" sessions={publicSessions} />
+          <AccessReport quizId={stats.id} title="Приватные" sessions={privateSessions} />
+        </>
       )}
-      <RateList caption={t('Верные ответы по вопросам')} items={stats.questions} />
-      <section className="results">
-        <h2>{t('Запуски')}</h2>
-        {stats.sessions.length === 0 && <p className="muted">{t('Пока пусто.')}</p>}
-        <ul className="session-list">
-          {stats.sessions.map((session) => (
-            <li key={session.id}>
-              <Link to={`/host/quiz/${stats.id}/stats/${session.id}`}>
-                <strong>{t(launchLabel(session))}</strong>
-                <span>{t('код {code}', { code: formatCode(session.code) })}</span>
-                <span>{t('{count} участ.', { count: session.playerCount })}</span>
-                <span>{t('средний {score}', { score: scoreText(session.averageScore) })}</span>
-                <span>{t('лучший {score}', { score: scoreText(session.topScore) })}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
     </>
   )
 }

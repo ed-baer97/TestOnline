@@ -1,11 +1,24 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api.js'
-import { useI18n } from '../i18n.jsx'
+import { pick, useI18n } from '../i18n.jsx'
 import { TopbarExtra } from '../topbar.jsx'
 
+function shownLesson(lesson, lang) {
+  if (!lesson || lang !== 'kk' || !Object.prototype.hasOwnProperty.call(lesson, 'slidesKk')) return lesson
+  const has = lesson.slidesKk.length || lesson.questionsKk?.length || lesson.videoKk
+  if (!has) return lesson
+  return {
+    ...lesson,
+    title: pick(lang, lesson.title, lesson.titleKk),
+    slides: lesson.format === 'video' ? [] : (lesson.slidesKk.length ? lesson.slidesKk : lesson.slides),
+    questions: lesson.questionsKk?.length ? lesson.questionsKk : lesson.questions,
+    video: lesson.videoKk || lesson.video,
+  }
+}
+
 export default function LessonView({ backTo }) {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const { id } = useParams()
   const [lesson, setLesson] = useState(null)
   const [error, setError] = useState('')
@@ -24,19 +37,20 @@ export default function LessonView({ backTo }) {
     setVideoWatched(false)
     setAnswers({})
     setResult(null)
-    api.lesson(id).then((data) => {
-      setLesson(data)
+      api.lesson(id, lang).then((data) => {
+      const view = shownLesson(data, lang)
+      setLesson(view)
       const last = data.attempts?.last
       if (data.attempts?.locked && last) {
         setResult({ ...last, attempts: data.attempts })
-        if (last.results) {
+        if (last.results && (!last.lang || last.lang === lang || !data.questionsKk)) {
           const picked = {}
           for (const item of last.results) if (item.chosen >= 0) picked[item.questionId] = item.chosen
           setAnswers(picked)
         }
       }
     }).catch((err) => setError(err.message))
-  }, [id])
+  }, [id, lang])
 
   function showSlide(nextIndex) {
     setIndex(nextIndex)
@@ -71,7 +85,7 @@ export default function LessonView({ backTo }) {
       const data = await api.checkLesson(id, lesson.questions.map((question) => ({
         questionId: question.id,
         optionIndex: answers[question.id],
-      })))
+      })), lang)
       setResult(data)
     } catch (err) {
       setError(err.message)
@@ -139,7 +153,7 @@ export default function LessonView({ backTo }) {
           {lesson.video ? (
             <video
               className="lesson-video"
-              src={`/api/lessons/${lesson.id}/media`}
+              src={`/api/lessons/${lesson.id}/media?lang=${lang}`}
               controls
               playsInline
               onEnded={() => setVideoWatched(true)}

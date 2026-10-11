@@ -1,4 +1,3 @@
-import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
@@ -9,9 +8,16 @@ import { hashPassword, verifyPassword } from './passwords.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.join(__dirname, '..', '.env') })
 
-const postgresUrl = process.env.DB_PATH
-  ? ''
-  : (process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || '')
+const postgresUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || ''
+let poolRef = null
+let schemaRef = ''
+
+function schemaName() {
+  const schema = process.env.PG_SCHEMA || ''
+  if (!schema) return ''
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(schema)) throw new Error('PG_SCHEMA: допустимы латиница, цифры и подчёркивание')
+  return schema
+}
 
 function toPg(sql) {
   let index = 0
@@ -28,15 +34,27 @@ function postgresConnectionString(url) {
 }
 
 async function openDatabase() {
-  if (!postgresUrl) return openSqlite()
+  if (!postgresUrl) throw new Error('Задайте POSTGRES_URL: база только Postgres')
   // PG_SSL=0 — Postgres рядом (docker compose, локальная сеть), без TLS.
   const plain = process.env.PG_SSL === '0' || /localhost|127\.0\.0\.1/.test(postgresUrl)
   const poolSize = Number(process.env.PG_POOL_MAX) > 0 ? Number(process.env.PG_POOL_MAX) : 20
+  const connectionString = plain ? postgresUrl : postgresConnectionString(postgresUrl)
+  const ssl = plain ? false : { rejectUnauthorized: false }
+  const schema = schemaName()
+  if (schema) {
+    const bootstrap = new pg.Client({ connectionString, ssl })
+    await bootstrap.connect()
+    await bootstrap.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`)
+    await bootstrap.end()
+  }
   const pool = new pg.Pool({
-    connectionString: plain ? postgresUrl : postgresConnectionString(postgresUrl),
+    connectionString,
     max: poolSize,
-    ssl: plain ? false : { rejectUnauthorized: false },
+    ssl,
+    options: schema ? `-c search_path=${schema},public` : undefined,
   })
+  poolRef = pool
+  schemaRef = schema
   const statements = [
     `CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -49,12 +67,14 @@ async function openDatabase() {
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS region_id TEXT',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS organization_id TEXT',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name_kk TEXT',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS class_id TEXT',
     `CREATE TABLE IF NOT EXISTS regions (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       created_at TEXT NOT NULL
     )`,
+    'ALTER TABLE regions ADD COLUMN IF NOT EXISTS name_kk TEXT',
     `CREATE TABLE IF NOT EXISTS organizations (
       id TEXT PRIMARY KEY,
       region_id TEXT NOT NULL,
@@ -65,6 +85,17 @@ async function openDatabase() {
       students INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     )`,
+    'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS name_kk TEXT',
+    'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS district_id TEXT',
+    `CREATE TABLE IF NOT EXISTS districts (
+      id TEXT PRIMARY KEY,
+      region_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      name_kk TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    )`,
+    'CREATE INDEX IF NOT EXISTS districts_region ON districts (region_id)',
     `CREATE TABLE IF NOT EXISTS tracks (
       id TEXT PRIMARY KEY,
       organization_id TEXT NOT NULL,
@@ -121,6 +152,12 @@ async function openDatabase() {
     `ALTER TABLE lessons ADD COLUMN IF NOT EXISTS format TEXT NOT NULL DEFAULT 'slides'`,
     'ALTER TABLE lessons ADD COLUMN IF NOT EXISTS video_mime TEXT',
     'ALTER TABLE lessons ADD COLUMN IF NOT EXISTS video_name TEXT',
+    'ALTER TABLE lessons ADD COLUMN IF NOT EXISTS title_kk TEXT',
+    `ALTER TABLE lessons ADD COLUMN IF NOT EXISTS slides_kk TEXT NOT NULL DEFAULT '[]'`,
+    `ALTER TABLE lessons ADD COLUMN IF NOT EXISTS questions_kk TEXT NOT NULL DEFAULT '[]'`,
+    'ALTER TABLE lessons ADD COLUMN IF NOT EXISTS video_mime_kk TEXT',
+    'ALTER TABLE lessons ADD COLUMN IF NOT EXISTS video_name_kk TEXT',
+    `ALTER TABLE lesson_attempts ADD COLUMN IF NOT EXISTS lang TEXT NOT NULL DEFAULT 'ru'`,
     `CREATE TABLE IF NOT EXISTS quizzes (
       id TEXT PRIMARY KEY,
       user_id TEXT,
@@ -139,6 +176,10 @@ async function openDatabase() {
       started_at TEXT,
       finished_at TEXT NOT NULL
     )`,
+    `ALTER TABLE results ADD COLUMN IF NOT EXISTS access TEXT NOT NULL DEFAULT 'public'`,
+    'ALTER TABLE results ADD COLUMN IF NOT EXISTS organization_id TEXT',
+    'ALTER TABLE results ADD COLUMN IF NOT EXISTS class_id TEXT',
+    'ALTER TABLE results ADD COLUMN IF NOT EXISTS band TEXT',
     `CREATE TABLE IF NOT EXISTS live_rooms (
       code TEXT PRIMARY KEY,
       payload TEXT NOT NULL,
@@ -153,137 +194,18 @@ async function openDatabase() {
   }
 }
 
-async function openSqlite() {
-  const { DatabaseSync } = await import('node:sqlite')
-  const dataDir = path.join(__dirname, '..', 'data')
-  const dbFile = process.env.DB_PATH || path.join(dataDir, 'testonline.sqlite')
-  fs.mkdirSync(path.dirname(dbFile), { recursive: true })
-  const db = new DatabaseSync(dbFile)
-  db.exec(`
-    PRAGMA journal_mode = WAL;
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      login TEXT NOT NULL COLLATE NOCASE UNIQUE,
-      password_hash TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS quizzes (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      questions TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS results (
-      id TEXT PRIMARY KEY,
-      quiz_id TEXT,
-      quiz_title TEXT NOT NULL,
-      code TEXT NOT NULL,
-      players TEXT NOT NULL,
-      finished_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS live_rooms (
-      code TEXT PRIMARY KEY,
-      payload TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-  `)
-  const ensureColumn = (table, column, statement) => {
-    const columns = db.prepare(`PRAGMA table_info(${table})`).all()
-    if (!columns.some((item) => item.name === column)) db.exec(statement)
-  }
-  ensureColumn('quizzes', 'user_id', 'ALTER TABLE quizzes ADD COLUMN user_id TEXT')
-  ensureColumn('results', 'user_id', 'ALTER TABLE results ADD COLUMN user_id TEXT')
-  ensureColumn('results', 'started_at', 'ALTER TABLE results ADD COLUMN started_at TEXT')
-  ensureColumn('users', 'role', "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'host'")
-  ensureColumn('users', 'region_id', 'ALTER TABLE users ADD COLUMN region_id TEXT')
-  ensureColumn('users', 'organization_id', 'ALTER TABLE users ADD COLUMN organization_id TEXT')
-  ensureColumn('users', 'display_name', 'ALTER TABLE users ADD COLUMN display_name TEXT')
-  ensureColumn('users', 'class_id', 'ALTER TABLE users ADD COLUMN class_id TEXT')
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS regions (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS organizations (
-      id TEXT PRIMARY KEY,
-      region_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      grades_1_4 INTEGER NOT NULL DEFAULT 0,
-      grades_5_9 INTEGER NOT NULL DEFAULT 0,
-      grades_10_11 INTEGER NOT NULL DEFAULT 0,
-      students INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS tracks (
-      id TEXT PRIMARY KEY,
-      organization_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS classes (
-      id TEXT PRIMARY KEY,
-      organization_id TEXT NOT NULL,
-      band TEXT NOT NULL,
-      grade INTEGER,
-      track_id TEXT,
-      name TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS organizations_region ON organizations (region_id);
-    CREATE INDEX IF NOT EXISTS classes_org ON classes (organization_id);
-    CREATE INDEX IF NOT EXISTS tracks_org ON tracks (organization_id);
-    CREATE INDEX IF NOT EXISTS users_org_role ON users (organization_id, role);
-    CREATE TABLE IF NOT EXISTS lessons (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      seed_key TEXT,
-      grades_1_4 INTEGER NOT NULL DEFAULT 0,
-      grades_5_9 INTEGER NOT NULL DEFAULT 0,
-      grades_10_11 INTEGER NOT NULL DEFAULT 0,
-      students INTEGER NOT NULL DEFAULT 0,
-      slides TEXT NOT NULL,
-      questions TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS lessons_seed_key ON lessons (seed_key) WHERE seed_key IS NOT NULL;
-    CREATE TABLE IF NOT EXISTS lesson_files (
-      id TEXT PRIMARY KEY,
-      lesson_id TEXT NOT NULL,
-      mime TEXT NOT NULL,
-      data_base64 TEXT NOT NULL DEFAULT ''
-    );
-    CREATE INDEX IF NOT EXISTS lesson_files_lesson ON lesson_files (lesson_id);
-    CREATE TABLE IF NOT EXISTS lesson_attempts (
-      id TEXT PRIMARY KEY,
-      lesson_id TEXT NOT NULL,
-      user_id TEXT NOT NULL,
-      score INTEGER NOT NULL,
-      total INTEGER NOT NULL,
-      finished_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS lesson_attempts_user ON lesson_attempts (lesson_id, user_id);
-    CREATE INDEX IF NOT EXISTS lesson_attempts_by_user ON lesson_attempts (user_id, lesson_id);
-    CREATE INDEX IF NOT EXISTS users_class ON users (class_id);
-  `)
-  ensureColumn('lessons', 'format', "ALTER TABLE lessons ADD COLUMN format TEXT NOT NULL DEFAULT 'slides'")
-  ensureColumn('lessons', 'video_mime', 'ALTER TABLE lessons ADD COLUMN video_mime TEXT')
-  ensureColumn('lessons', 'video_name', 'ALTER TABLE lessons ADD COLUMN video_name TEXT')
-  ensureColumn('lesson_attempts', 'answers', 'ALTER TABLE lesson_attempts ADD COLUMN answers TEXT')
-  return {
-    get: async (sql, ...params) => db.prepare(sql).get(...params),
-    all: async (sql, ...params) => db.prepare(sql).all(...params),
-    run: async (sql, ...params) => db.prepare(sql).run(...params),
-  }
-}
 
 let opened
 function ready() {
   if (!opened) {
-    opened = openDatabase().catch((error) => {
+    opened = openDatabase().catch(async (error) => {
       opened = null
+      if (poolRef) {
+        const pool = poolRef
+        poolRef = null
+        schemaRef = ''
+        await pool.end().catch(() => {})
+      }
       throw error
     })
   }
@@ -294,6 +216,23 @@ export const db = {
   get: async (...args) => (await ready()).get(...args),
   all: async (...args) => (await ready()).all(...args),
   run: async (...args) => (await ready()).run(...args),
+}
+
+export async function closeDatabase() {
+  const pool = poolRef
+  const schema = schemaRef
+  poolRef = null
+  schemaRef = ''
+  opened = null
+  if (!pool) return
+  try {
+    if (schema) {
+      await pool.query('SET search_path TO public')
+      await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
+    }
+  } finally {
+    await pool.end()
+  }
 }
 
 const DEMO = [
@@ -394,14 +333,39 @@ export async function getUser(id) {
   return row ? { id: row.id, login: row.login } : null
 }
 
-export async function listQuizzes(userId) {
-  const rows = await db.all('SELECT id, title, questions, updated_at FROM quizzes WHERE user_id = ? ORDER BY updated_at DESC', userId)
-  return rows.map((row) => ({
+function quizSummary(row) {
+  return {
     id: row.id,
     title: row.title,
     questionCount: JSON.parse(row.questions).length,
     updatedAt: row.updated_at,
-  }))
+  }
+}
+
+export async function listQuizzes(userId) {
+  const rows = await db.all('SELECT id, title, questions, updated_at FROM quizzes WHERE user_id = ? ORDER BY updated_at DESC', userId)
+  return rows.map(quizSummary)
+}
+
+export async function listSuperQuizzes() {
+  const rows = await db.all(
+    `SELECT q.id, q.title, q.questions, q.updated_at
+     FROM quizzes q
+     JOIN users u ON u.id = q.user_id
+     WHERE u.role = 'super'
+     ORDER BY q.updated_at DESC`,
+  )
+  return rows.map(quizSummary)
+}
+
+export async function getLaunchQuiz(id) {
+  const row = await db.get(
+    `SELECT q.* FROM quizzes q
+     JOIN users u ON u.id = q.user_id
+     WHERE q.id = ? AND u.role = 'super'`,
+    id,
+  )
+  return row ? mapQuiz(row) : null
 }
 
 export async function getQuiz(id, userId) {
@@ -443,9 +407,10 @@ export async function deleteQuiz(id, userId) {
   return result.changes > 0
 }
 
-export async function saveResult({ userId, quizId, quizTitle, code, players, startedAt }) {
+export async function saveResult({ userId, quizId, quizTitle, code, players, startedAt, access, organizationId, classId, band }) {
+  const priv = access === 'private'
   await db.run(
-    'INSERT INTO results (id, user_id, quiz_id, quiz_title, code, players, started_at, finished_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO results (id, user_id, quiz_id, quiz_title, code, players, started_at, finished_at, access, organization_id, class_id, band) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     crypto.randomUUID(),
     userId,
     quizId,
@@ -454,6 +419,10 @@ export async function saveResult({ userId, quizId, quizTitle, code, players, sta
     JSON.stringify(players),
     startedAt ? new Date(startedAt).toISOString() : null,
     new Date().toISOString(),
+    priv ? 'private' : 'public',
+    priv ? organizationId || null : null,
+    priv ? classId || null : null,
+    priv ? band || null : null,
   )
 }
 
@@ -466,6 +435,7 @@ function mapResult(row) {
     players: JSON.parse(row.players),
     startedAt: row.started_at,
     finishedAt: row.finished_at,
+    access: row.access === 'private' ? 'private' : 'public',
   }
 }
 
@@ -477,8 +447,8 @@ function averageScore(players) {
 
 async function loadResults(userId, quizId) {
   const sql = quizId
-    ? 'SELECT id, quiz_id, quiz_title, code, players, started_at, finished_at FROM results WHERE user_id = ? AND quiz_id = ? ORDER BY finished_at DESC'
-    : 'SELECT id, quiz_id, quiz_title, code, players, started_at, finished_at FROM results WHERE user_id = ? ORDER BY finished_at DESC'
+    ? 'SELECT id, quiz_id, quiz_title, code, players, started_at, finished_at, access FROM results WHERE user_id = ? AND quiz_id = ? ORDER BY finished_at DESC'
+    : 'SELECT id, quiz_id, quiz_title, code, players, started_at, finished_at, access FROM results WHERE user_id = ? ORDER BY finished_at DESC'
   const rows = quizId ? await db.all(sql, userId, quizId) : await db.all(sql, userId)
   return rows.map(mapResult)
 }
@@ -587,6 +557,7 @@ export async function quizStats(userId, quizId) {
       playerCount: result.players.length,
       averageScore: averageScore(result.players),
       topScore: result.players[0]?.score ?? null,
+      access: result.access === 'private' ? 'private' : 'public',
       players: result.players.map((player) => ({
         name: player.name,
         score: player.score,
@@ -616,6 +587,10 @@ export async function saveLiveRoom(code, payload) {
     payload,
     now,
   )
+}
+
+export async function listLiveRooms() {
+  return db.all('SELECT code, payload FROM live_rooms')
 }
 
 export async function readLiveRoom(code) {
