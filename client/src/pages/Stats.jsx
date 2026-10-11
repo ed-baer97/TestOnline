@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api, formatCode } from '../api.js'
+import { api } from '../api/index.js'
+import { formatCode } from '../lib/format.js'
 import { BarChart, RateList } from '../charts.jsx'
 
 function formatWhen(value) {

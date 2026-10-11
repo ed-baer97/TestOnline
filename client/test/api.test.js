@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { api, formatCode, hostKey, newId, playerKey } from '../src/api.js'
+import { api } from '../src/api/index.js'
+import { formatCode } from '../src/lib/format.js'
+import { newId } from '../src/lib/ids.js'
+import { forgetPlayerToken, readHostToken, readPlayerToken, saveHostToken, savePlayerToken } from '../src/state/roomTokens.js'
 
 const calls = []
 let reply = { status: 200, body: { ok: true } }
@@ -131,8 +134,20 @@ test('код комнаты, ключи хранилища и id', () => {
   assert.equal(formatCode('123456'), '123 456')
   assert.equal(formatCode(654321), '654 321')
   assert.equal(formatCode('12345'), '12345')
-  assert.equal(hostKey('123456'), 'host:123456')
-  assert.equal(playerKey('123456'), 'player:123456')
+  const store = new Map()
+  globalThis.sessionStorage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => store.set(key, String(value)),
+    removeItem: (key) => store.delete(key),
+  }
+  saveHostToken('123456', 'host-token')
+  savePlayerToken('123456', 'player-token')
+  assert.deepEqual([...store.entries()], [['host:123456', 'host-token'], ['player:123456', 'player-token']])
+  assert.equal(readHostToken('123456'), 'host-token')
+  assert.equal(readPlayerToken('123456'), 'player-token')
+  forgetPlayerToken('123456')
+  assert.equal(readPlayerToken('123456'), null)
+  assert.deepEqual([...store.keys()], ['host:123456'])
   const id = newId()
   assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
   assert.notEqual(newId(), id)

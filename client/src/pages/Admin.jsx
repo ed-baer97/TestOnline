@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { api } from '../api.js'
+import { api } from '../api/index.js'
 import { AdminFrame } from './AdminFrame.jsx'
 import { Classes, Learners } from './admin/OrgPanels.jsx'
 import { Organizations, OrgStaff } from './admin/RegionalPanels.jsx'

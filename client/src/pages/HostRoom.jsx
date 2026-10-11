@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import QRCode from 'qrcode'
-import { api, formatCode, hostKey } from '../api.js'
+import { api } from '../api/index.js'
+import { formatCode } from '../lib/format.js'
+import { readHostToken } from '../state/roomTokens.js'
 import { COLOR_NAMES, SHAPES, Shape } from '../shapes.jsx'
 import { useCountdown } from '../useCountdown.js'
 
@@ -15,7 +17,7 @@ export default function HostRoom() {
   const seconds = useCountdown(state?.endsAt, state?.serverNow)
 
   useEffect(() => {
-    const token = sessionStorage.getItem(hostKey(code))
+    const token = readHostToken(code)
     if (!token) {
       setError('Откройте комнату кнопкой «Запустить» в панели ведущего.')
       return undefined
@@ -65,7 +67,7 @@ export default function HostRoom() {
   }, [joinUrl])
 
   async function advance() {
-    const token = sessionStorage.getItem(hostKey(code))
+    const token = readHostToken(code)
     if (!token || state?.status === 'podium') return
     try {
       setState(await api.advanceRoom(code, token))

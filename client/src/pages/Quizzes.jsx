@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { api, hostKey } from '../api.js'
+import { api } from '../api/index.js'
+import { saveHostToken } from '../state/roomTokens.js'
 import { HostFrame } from './HostFrame.jsx'
 
 export default function Quizzes({ onLogout }) {
@@ -23,7 +24,7 @@ export default function Quizzes({ onLogout }) {
     setError('')
     try {
       const room = await api.createRoom(id)
-      sessionStorage.setItem(hostKey(room.code), room.hostToken)
+      saveHostToken(room.code, room.hostToken)
       navigate(`/host/room/${room.code}`)
     } catch (err) {
       setError(err.message)

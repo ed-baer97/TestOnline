@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
-import { api } from './api.js'
+import { api } from './api/index.js'
 import { homeFor } from './roles.js'
 import Admin from './pages/Admin.jsx'
 import Dashboard from './pages/Dashboard.jsx'

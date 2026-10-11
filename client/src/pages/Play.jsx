@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api, newId, playerKey } from '../api.js'
+import { api } from '../api/index.js'
+import { newId } from '../lib/ids.js'
+import { forgetPlayerToken, readPlayerToken, savePlayerToken } from '../state/roomTokens.js'
 import { COLOR_NAMES, SHAPES, Shape } from '../shapes.jsx'
 import { useCountdown } from '../useCountdown.js'
 
@@ -12,7 +14,7 @@ export default function Play() {
   const [error, setError] = useState('')
   const [state, setState] = useState(null)
   const [online, setOnline] = useState(true)
-  const [identity, setIdentity] = useState(() => sessionStorage.getItem(playerKey(code)) || '')
+  const [identity, setIdentity] = useState(() => readPlayerToken(code) || '')
   const seconds = useCountdown(state?.endsAt, state?.serverNow)
 
   useEffect(() => {
@@ -24,7 +26,7 @@ export default function Play() {
     let stopped = false
     api.joinRoom(code, { name, playerToken: identity }).catch((err) => {
       if (stopped) return
-      sessionStorage.removeItem(playerKey(code))
+      forgetPlayerToken(code)
       setIdentity('')
       setError(err.message)
     })
@@ -54,7 +56,7 @@ export default function Play() {
       return
     }
     const token = newId()
-    sessionStorage.setItem(playerKey(code), token)
+    savePlayerToken(code, token)
     setError('')
     setIdentity(token)
   }

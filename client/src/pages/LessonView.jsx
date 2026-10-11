@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api } from '../api.js'
+import { api } from '../api/index.js'
 import { TopbarExtra } from '../topbar.jsx'
 
 export default function LessonView({ backTo }) {

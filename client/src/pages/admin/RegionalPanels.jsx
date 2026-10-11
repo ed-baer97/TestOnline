@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../../api.js'
+import { api } from '../../api/index.js'
 import { EMPTY_GROUPS, groupLabels } from '../../bands.js'
 import { GroupChecks, Notice } from './ui.jsx'
 

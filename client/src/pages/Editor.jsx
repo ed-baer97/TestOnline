@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, hostKey, newId } from '../api.js'
+import { api } from '../api/index.js'
+import { newId } from '../lib/ids.js'
+import { saveHostToken } from '../state/roomTokens.js'
 
 function blankQuestion() {
   return {
@@ -104,7 +106,7 @@ export default function Editor({ onLogout }) {
     const quiz = await save(false)
     if (!quiz) return
     const room = await api.createRoom(quiz.id)
-    sessionStorage.setItem(hostKey(room.code), room.hostToken)
+    saveHostToken(room.code, room.hostToken)
     navigate(`/host/room/${room.code}`)
   }
 

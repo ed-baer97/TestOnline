@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../../api.js'
+import { api } from '../../api/index.js'
 import { Notice } from './ui.jsx'
 
 export function Classes() {

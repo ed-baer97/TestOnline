@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, newId } from '../../api.js'
+import { api } from '../../api/index.js'
+import { newId } from '../../lib/ids.js'
 import { EMPTY_GROUPS, groupLabels } from '../../bands.js'
 import { GroupChecks, Notice } from './ui.jsx'
 

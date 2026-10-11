@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { api } from '../api.js'
+import { api } from '../api/index.js'
 import { homeFor } from '../roles.js'
 
 export default function Login() {
