@@ -1,6 +1,4 @@
-import crypto from 'node:crypto'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import cookieParser from 'cookie-parser'
@@ -43,6 +41,8 @@ import {
 } from './admin.js'
 import { authenticate, createQuiz, deleteQuiz, getQuiz, listQuizzes, listResults, quizStats, statsOverview, updateQuiz } from './db.js'
 import { config } from './infrastructure/config.js'
+import { lanAddresses } from './infrastructure/network.js'
+import { readSession, signSession } from './infrastructure/session.js'
 import { checkLesson, createLesson, deleteLesson, getLesson, importPptx, listLessons, openLessonFile, openLessonMedia, saveLessonVideo, updateLesson } from './lessons.js'
 import { normalizeQuiz } from './domain.js'
 import { questionsFromXlsx, templateWorkbook } from './excel.js'
@@ -62,28 +62,6 @@ import {
   submitAnswer,
   watch,
 } from './rooms.js'
-
-function signSession(userId) {
-  const data = Buffer.from(JSON.stringify({ userId, exp: Date.now() + 14 * 24 * 60 * 60 * 1000 })).toString('base64url')
-  const sig = crypto.createHmac('sha256', config.sessionSecret).update(data).digest('base64url')
-  return `${data}.${sig}`
-}
-
-function readSession(token) {
-  if (!token || !token.includes('.')) return null
-  const [data, sig] = token.split('.')
-  const expected = crypto.createHmac('sha256', config.sessionSecret).update(data).digest('base64url')
-  const left = Buffer.from(sig)
-  const right = Buffer.from(expected)
-  if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) return null
-  try {
-    const payload = JSON.parse(Buffer.from(data, 'base64url').toString())
-    if (!payload?.exp || payload.exp < Date.now()) return null
-    return payload
-  } catch {
-    return null
-  }
-}
 
 async function loadUser(req, res) {
   const session = readSession(req.cookies.session)
@@ -146,23 +124,6 @@ function sendSession(res, user, status = 200) {
     role: user.role || 'host',
     displayName: user.displayName || user.login,
   })
-}
-function lanAddresses() {
-  const found = []
-  for (const nets of Object.values(os.networkInterfaces())) {
-    for (const net of nets || []) {
-      const family = net.family === 'IPv4' || net.family === 4
-      if (!family || net.internal) continue
-      found.push(net.address)
-    }
-  }
-  const rank = (ip) => {
-    if (ip.startsWith('192.168.')) return 3
-    if (ip.startsWith('10.')) return 2
-    if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(ip)) return 1
-    return 0
-  }
-  return found.sort((a, b) => rank(b) - rank(a))
 }
 
 export function createApp() {

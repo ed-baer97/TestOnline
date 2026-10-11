@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import { normalizeAccount } from './domain.js'
 import { config } from './infrastructure/config.js'
 import { db, isUniqueViolation } from './infrastructure/db/index.js'
-import { hashPassword } from './passwords.js'
+import { hashPassword } from './infrastructure/passwords.js'
 
 export const BANDS = [
   { id: 'grades_1_4', label: '1–4 классы', grades: [1, 2, 3, 4] },

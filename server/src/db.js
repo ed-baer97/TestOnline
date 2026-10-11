@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { db, isUniqueViolation } from './infrastructure/db/index.js'
-import { hashPassword, verifyPassword } from './passwords.js'
+import { hashPassword, verifyPassword } from './infrastructure/passwords.js'
 
 const DEMO = [
   {
