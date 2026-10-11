@@ -4,7 +4,7 @@ import { lessonsApi } from './lessons.js'
 import { quizzesApi } from './quizzes.js'
 import { roomsApi } from './rooms.js'
 
-// Клиент HTTP API. Страницы и состояние обращаются к серверу только через него.
+// Клиент HTTP API. Его вызывают только хуки из state/, страницы получают данные через них.
 export const api = {
   ...authApi,
   ...adminApi,

@@ -41,7 +41,7 @@ const client = {
   allowed: {
     entry: ['app'],
     app: ['pages', 'components', 'state', 'lib'],
-    pages: ['components', 'state', 'api', 'lib'],
+    pages: ['components', 'state', 'lib'],
     components: ['state', 'lib'],
     state: ['api', 'lib'],
     api: [],
