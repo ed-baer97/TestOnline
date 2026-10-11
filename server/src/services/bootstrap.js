@@ -1,4 +1,4 @@
-import { ensureDemoLesson, migrateLessonFiles } from '../lessons.js'
+import { ensureDemoLesson, migrateLessonFiles } from './lessons/index.js'
 import { ensureSuperAdmin } from './accounts.js'
 
 let boot

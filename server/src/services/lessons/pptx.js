@@ -1,8 +1,8 @@
 import crypto from 'node:crypto'
 import JSZip from 'jszip'
 import sharp from 'sharp'
-import { fail } from './domain/errors.js'
-import { MAX_IMAGE, TONES } from './domain/lesson.js'
+import { fail } from '../../domain/errors.js'
+import { MAX_IMAGE, TONES } from '../../domain/lesson.js'
 
 const MAX_SLIDES = 20
 

@@ -12,7 +12,7 @@ const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcS
 
 test('урок: презентация, тест и видимость по группе', async () => {
   const admin = await import('../src/services/admin/index.js')
-  const lessons = await import('../src/lessons.js')
+  const lessons = await import('../src/services/lessons/index.js')
   const { ensureSuperAdmin } = await import('../src/services/accounts.js')
   const root = await ensureSuperAdmin()
   const demoId = await lessons.ensureDemoLesson()
@@ -238,7 +238,7 @@ test('урок: презентация, тест и видимость по гр
   assert.equal(wordy.questions[0].options[0].text, longOption)
 
   const sharp = (await import('sharp')).default
-  const { slidesFromPptx } = await import('../src/pptx.js')
+  const { slidesFromPptx } = await import('../src/services/lessons/pptx.js')
   const huge = await sharp({
     create: { width: 1800, height: 1800, channels: 3, noise: { type: 'gaussian' } },
   }).png().toBuffer()

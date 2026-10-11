@@ -8,7 +8,7 @@ import { Server } from 'socket.io'
 import { config } from './infrastructure/config.js'
 import { lanAddresses } from './infrastructure/network.js'
 import { readSession, signSession } from './infrastructure/session.js'
-import { checkLesson, createLesson, deleteLesson, getLesson, importPptx, listLessons, openLessonFile, openLessonMedia, saveLessonVideo, updateLesson } from './lessons.js'
+import { checkLesson, createLesson, deleteLesson, getLesson, importPptx, listLessons, openLessonFile, openLessonMedia, saveLessonVideo, updateLesson } from './services/lessons/index.js'
 import { questionsFromXlsx, templateWorkbook } from './excel.js'
 import { authenticate, profile } from './services/accounts.js'
 import {
