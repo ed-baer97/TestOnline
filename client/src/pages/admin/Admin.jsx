@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { api } from '../../api/index.js'
+import { useAdminProfile, useDashboard } from '../../state/admin/overview.js'
 import { AdminFrame } from '../../components/layout/AdminFrame.jsx'
 import { Classes, Learners } from './OrgPanels.jsx'
 import { Organizations, OrgStaff } from './RegionalPanels.jsx'
@@ -33,12 +32,7 @@ function tabsFor(role) {
 }
 
 function Overview() {
-  const [stats, setStats] = useState(null)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    api.dashboard().then(setStats).catch((err) => setError(err.message))
-  }, [])
+  const { stats, error } = useDashboard()
 
   return (
     <section className="stack">
@@ -50,15 +44,7 @@ function Overview() {
 }
 
 export default function Admin({ onLogout }) {
-  const [me, setMe] = useState(null)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    api.me().then((data) => {
-      if (!data.ok) setError('Нужен вход')
-      else setMe(data)
-    }).catch((err) => setError(err.message))
-  }, [])
+  const { me, error } = useAdminProfile()
 
   if (error) return <p className="center form-error">{error}</p>
   if (!me) return <p className="center muted">Загрузка…</p>
