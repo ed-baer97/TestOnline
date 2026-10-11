@@ -4,7 +4,7 @@
   "scripts": {
     "setup": "npm install && npm install --prefix server && npm install --prefix client",
     "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
-    "test": "npm test --prefix server && npm test --prefix client",
+    "test": "npm test --prefix server && npm test --prefix client && node --test \"test/*.test.mjs\"",
     "build": "npm run build --prefix client",
     "start": "npm run start --prefix server"
   },
