@@ -2,40 +2,19 @@ import crypto from 'node:crypto'
 import { assertRole } from './domain/access.js'
 import { generatePassword, normalizeAccount, readPassword } from './domain/accounts.js'
 import { fail } from './domain/errors.js'
-import { BANDS, bandForGrade, classCaption, GROUP_KEYS, groupNumbers, groupsFromRow, readGroups } from './domain/structure.js'
+import { BANDS, bandForGrade, classCaption, GROUP_KEYS, readGroups } from './domain/structure.js'
 import { cleanLabel, cleanText, sameText } from './domain/text.js'
 import { config } from './infrastructure/config.js'
-import { db, isUniqueViolation } from './infrastructure/db/index.js'
+import { isUniqueViolation } from './infrastructure/db/index.js'
 import { hashPassword } from './infrastructure/passwords.js'
-
-async function count(sql, ...params) {
-  const row = await db.get(sql, ...params)
-  return Number(row?.n || 0)
-}
-
-function mapOrg(row) {
-  return {
-    id: row.id,
-    regionId: row.region_id,
-    name: row.name,
-    groups: groupsFromRow(row),
-    createdAt: row.created_at,
-  }
-}
+import * as classesRepo from './repositories/classes.js'
+import * as organizationsRepo from './repositories/organizations.js'
+import * as regionsRepo from './repositories/regions.js'
+import * as tracksRepo from './repositories/tracks.js'
+import * as usersRepo from './repositories/users.js'
 
 export async function profile(id) {
-  const row = await db.get(
-    `SELECT u.id, u.login, u.role, u.display_name, u.region_id, u.organization_id, u.class_id,
-            r.name AS region_name, o.name AS organization_name,
-            c.name AS class_name, c.grade, c.band, t.name AS track_name
-     FROM users u
-     LEFT JOIN regions r ON r.id = u.region_id
-     LEFT JOIN organizations o ON o.id = u.organization_id
-     LEFT JOIN classes c ON c.id = u.class_id
-     LEFT JOIN tracks t ON t.id = c.track_id
-     WHERE u.id = ?`,
-    id,
-  )
+  const row = await usersRepo.findProfileRow(id)
   if (!row) return null
   const klass = row.class_id && row.class_name ? row : null
   return {
@@ -73,23 +52,21 @@ export function bootAdmin() {
 }
 
 export async function ensureSuperAdmin() {
-  const existing = await db.get("SELECT id FROM users WHERE role = 'super' LIMIT 1")
+  const existing = await usersRepo.findSuperAdmin()
   if (existing) return profile(existing.id)
   const login = config.superLogin
   const password = config.superPassword
   const account = normalizeAccount({ login, password })
-  const taken = await db.get('SELECT id FROM users WHERE lower(login) = lower(?)', account.login)
+  const taken = await usersRepo.findByLogin(account.login)
   if (taken) return profile(taken.id)
   const id = crypto.randomUUID()
-  await db.run(
-    `INSERT INTO users (id, login, password_hash, created_at, role, display_name)
-     VALUES (?, ?, ?, ?, 'super', ?)`,
+  await usersRepo.insertSuperAdmin({
     id,
-    account.login,
-    await hashPassword(account.password),
-    new Date().toISOString(),
-    'Суперглавный',
-  )
+    login: account.login,
+    passwordHash: await hashPassword(account.password),
+    createdAt: new Date().toISOString(),
+    displayName: 'Суперглавный',
+  })
   return profile(id)
 }
 
@@ -98,19 +75,17 @@ async function insertUser({ role, login, password, displayName, regionId, organi
   const id = crypto.randomUUID()
   const passwordHash = await hashPassword(account.password)
   try {
-    await db.run(
-      `INSERT INTO users (id, login, password_hash, created_at, role, display_name, region_id, organization_id, class_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    await usersRepo.insertUser({
       id,
-      account.login,
+      login: account.login,
       passwordHash,
-      new Date().toISOString(),
+      createdAt: new Date().toISOString(),
       role,
       displayName,
-      regionId || null,
-      organizationId || null,
-      classId || null,
-    )
+      regionId: regionId || null,
+      organizationId: organizationId || null,
+      classId: classId || null,
+    })
   } catch (error) {
     if (isUniqueViolation(error)) fail('Такой логин уже занят', 409)
     throw error
@@ -121,19 +96,19 @@ async function insertUser({ role, login, password, displayName, regionId, organi
 async function setPassword(id, password) {
   const next = readPassword(password)
   if (!next) return
-  await db.run('UPDATE users SET password_hash = ? WHERE id = ?', await hashPassword(next), id)
+  await usersRepo.updatePasswordHash(id, await hashPassword(next))
 }
 
 async function mustRegion(id) {
-  const row = await db.get('SELECT id, name, created_at FROM regions WHERE id = ?', id)
-  if (!row) fail('Регион не найден', 404)
-  return { id: row.id, name: row.name, createdAt: row.created_at }
+  const region = await regionsRepo.findRegion(id)
+  if (!region) fail('Регион не найден', 404)
+  return region
 }
 
 async function mustOrg(id) {
-  const row = await db.get('SELECT * FROM organizations WHERE id = ?', id)
-  if (!row) fail('Организация не найдена', 404)
-  return mapOrg(row)
+  const org = await organizationsRepo.findOrganization(id)
+  if (!org) fail('Организация не найдена', 404)
+  return org
 }
 
 async function orgInRegion(id, regionId) {
@@ -149,39 +124,6 @@ function chart(caption, items, order = 'value') {
     caption,
     items: list.sort((a, b) => b.value - a.value || a.label.localeCompare(b.label, 'ru')),
   }
-}
-
-async function learnerCounts(orgIds) {
-  if (!orgIds.length) return new Map()
-  const marks = orgIds.map(() => '?').join(',')
-  const rows = await db.all(
-    `SELECT organization_id AS id, COUNT(*) AS n FROM users
-     WHERE role = 'learner' AND organization_id IN (${marks}) GROUP BY organization_id`,
-    ...orgIds,
-  )
-  return new Map(rows.map((row) => [row.id, Number(row.n)]))
-}
-
-async function composition(orgIds) {
-  if (!orgIds.length) return []
-  const marks = orgIds.map(() => '?').join(',')
-  const rows = await db.all(
-    `SELECT c.id, c.name, c.band, c.grade, c.organization_id, t.name AS track_name,
-            (SELECT COUNT(*) FROM users u WHERE u.role = 'learner' AND u.class_id = c.id) AS learners
-     FROM classes c
-     LEFT JOIN tracks t ON t.id = c.track_id
-     WHERE c.organization_id IN (${marks})`,
-    ...orgIds,
-  )
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    band: row.band,
-    grade: row.grade == null ? null : Number(row.grade),
-    organizationId: row.organization_id,
-    trackName: row.track_name,
-    learners: Number(row.learners),
-  }))
 }
 
 function bandItems(classes, orgs) {
@@ -222,8 +164,8 @@ export async function dashboard(actor) {
 
 async function superDashboard() {
   const regions = await listRegions({ role: 'super' })
-  const organizations = await count('SELECT COUNT(*) AS n FROM organizations')
-  const admins = await count("SELECT COUNT(*) AS n FROM users WHERE role = 'regional'")
+  const organizations = await organizationsRepo.countOrganizations()
+  const admins = await usersRepo.countRegionalAdmins()
   const learners = regions.reduce((sum, region) => sum + region.learners, 0)
   return {
     scope: 'platform',
@@ -251,18 +193,13 @@ async function superDashboard() {
 
 async function regionDashboard(regionId) {
   const region = await mustRegion(regionId)
-  const orgs = (await db.all('SELECT * FROM organizations WHERE region_id = ?', regionId)).map(mapOrg)
+  const orgs = await organizationsRepo.listOrganizations(regionId)
   const ids = orgs.map((org) => org.id)
-  const marks = ids.map(() => '?').join(',')
-  const admins = ids.length
-    ? await count(`SELECT COUNT(*) AS n FROM users WHERE role = 'org' AND organization_id IN (${marks})`, ...ids)
-    : 0
-  const classes = ids.length
-    ? await count(`SELECT COUNT(*) AS n FROM classes WHERE organization_id IN (${marks})`, ...ids)
-    : 0
-  const learnersByOrg = await learnerCounts(ids)
+  const admins = await usersRepo.countOrgAdminsIn(ids)
+  const classes = await classesRepo.countClassesIn(ids)
+  const learnersByOrg = await usersRepo.learnerCountsByOrganization(ids)
   const learners = [...learnersByOrg.values()].reduce((sum, value) => sum + value, 0)
-  const rows = await composition(ids)
+  const rows = await classesRepo.listClassesWithLearners(ids)
   const orgRows = orgs
     .map((org) => ({
       id: org.id,
@@ -271,13 +208,7 @@ async function regionDashboard(regionId) {
       learners: learnersByOrg.get(org.id) || 0,
     }))
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
-  const adminRows = ids.length
-    ? await db.all(
-      `SELECT organization_id AS id, COUNT(*) AS n FROM users WHERE role = 'org' AND organization_id IN (${marks}) GROUP BY organization_id`,
-      ...ids,
-    )
-    : []
-  const adminByOrg = new Map(adminRows.map((row) => [row.id, Number(row.n)]))
+  const adminByOrg = await usersRepo.orgAdminCountsByOrganization(ids)
   return {
     scope: 'region',
     title: region.name,
@@ -306,9 +237,9 @@ async function regionDashboard(regionId) {
 
 async function orgDashboard(organizationId) {
   const org = await mustOrg(organizationId)
-  const rows = await composition([org.id])
+  const rows = await classesRepo.listClassesWithLearners([org.id])
   const learners = rows.reduce((sum, item) => sum + item.learners, 0)
-  const admins = await count("SELECT COUNT(*) AS n FROM users WHERE role = 'org' AND organization_id = ?", org.id)
+  const admins = await usersRepo.countOrgAdmins(org.id)
   const classRows = [...rows].sort((a, b) => classCaption(a).localeCompare(classCaption(b), 'ru'))
   return {
     scope: 'organization',
@@ -338,18 +269,13 @@ async function orgDashboard(organizationId) {
 
 export async function listRegions(actor) {
   assertRole(actor, 'super')
-  const regions = await db.all('SELECT id, name, created_at FROM regions')
+  const regions = await regionsRepo.listRegions()
   const result = []
   for (const region of regions) {
-    const organizations = await count('SELECT COUNT(*) AS n FROM organizations WHERE region_id = ?', region.id)
-    const admins = await count("SELECT COUNT(*) AS n FROM users WHERE role = 'regional' AND region_id = ?", region.id)
-    const learners = await count(
-      `SELECT COUNT(*) AS n FROM users u
-       JOIN organizations o ON o.id = u.organization_id
-       WHERE u.role = 'learner' AND o.region_id = ?`,
-      region.id,
-    )
-    result.push({ id: region.id, name: region.name, createdAt: region.created_at, organizations, admins, learners })
+    const organizations = await organizationsRepo.countOrganizationsInRegion(region.id)
+    const admins = await usersRepo.countRegionalAdminsInRegion(region.id)
+    const learners = await usersRepo.countLearnersInRegion(region.id)
+    result.push({ id: region.id, name: region.name, createdAt: region.createdAt, organizations, admins, learners })
   }
   return result.sort((a, b) => a.name.localeCompare(b.name, 'ru'))
 }
@@ -357,10 +283,10 @@ export async function listRegions(actor) {
 export async function createRegion(actor, input) {
   assertRole(actor, 'super')
   const name = cleanLabel(input?.name, 2, 80, 'Название региона')
-  const rows = await db.all('SELECT id, name FROM regions')
+  const rows = await regionsRepo.listRegionNames()
   if (rows.some((row) => sameText(row.name, name))) fail('Такой регион уже есть', 409)
   const id = crypto.randomUUID()
-  await db.run('INSERT INTO regions (id, name, created_at) VALUES (?, ?, ?)', id, name, new Date().toISOString())
+  await regionsRepo.insertRegion({ id, name, createdAt: new Date().toISOString() })
   return mustRegion(id)
 }
 
@@ -368,28 +294,24 @@ export async function updateRegion(actor, id, input) {
   assertRole(actor, 'super')
   await mustRegion(id)
   const name = cleanLabel(input?.name, 2, 80, 'Название региона')
-  const rows = await db.all('SELECT id, name FROM regions')
+  const rows = await regionsRepo.listRegionNames()
   if (rows.some((row) => row.id !== id && sameText(row.name, name))) fail('Такой регион уже есть', 409)
-  await db.run('UPDATE regions SET name = ? WHERE id = ?', name, id)
+  await regionsRepo.renameRegion(id, name)
   return mustRegion(id)
 }
 
 export async function deleteRegion(actor, id) {
   assertRole(actor, 'super')
   await mustRegion(id)
-  const organizations = await count('SELECT COUNT(*) AS n FROM organizations WHERE region_id = ?', id)
-  const admins = await count("SELECT COUNT(*) AS n FROM users WHERE role = 'regional' AND region_id = ?", id)
+  const organizations = await organizationsRepo.countOrganizationsInRegion(id)
+  const admins = await usersRepo.countRegionalAdminsInRegion(id)
   if (organizations || admins) fail('Сначала удалите организации и администраторов этого региона')
-  await db.run('DELETE FROM regions WHERE id = ?', id)
+  await regionsRepo.deleteRegion(id)
 }
 
 export async function listRegionalAdmins(actor) {
   assertRole(actor, 'super')
-  const rows = await db.all(
-    `SELECT u.id, u.login, u.display_name, u.region_id, r.name AS region_name
-     FROM users u JOIN regions r ON r.id = u.region_id
-     WHERE u.role = 'regional'`,
-  )
+  const rows = await usersRepo.listRegionalAdmins()
   return rows
     .map((row) => ({
       id: row.id,
@@ -416,35 +338,28 @@ export async function createRegionalAdmin(actor, input) {
 
 export async function updateRegionalAdmin(actor, id, input) {
   assertRole(actor, 'super')
-  const current = await db.get("SELECT id FROM users WHERE id = ? AND role = 'regional'", id)
+  const current = await usersRepo.findRegionalAdmin(id)
   if (!current) fail('Администратор не найден', 404)
   const region = await mustRegion(input?.regionId)
   const displayName = cleanLabel(input?.displayName, 2, 80, 'Имя')
-  await db.run('UPDATE users SET display_name = ?, region_id = ? WHERE id = ?', displayName, region.id, id)
+  await usersRepo.updateRegionalAdmin(id, { displayName, regionId: region.id })
   await setPassword(id, input?.password)
   return profile(id)
 }
 
 export async function deleteRegionalAdmin(actor, id) {
   assertRole(actor, 'super')
-  const result = await db.run("DELETE FROM users WHERE id = ? AND role = 'regional'", id)
-  if (!result.changes) fail('Администратор не найден', 404)
+  const changes = await usersRepo.deleteRegionalAdmin(id)
+  if (!changes) fail('Администратор не найден', 404)
 }
 
 export async function listOrganizations(actor) {
   assertRole(actor, 'regional')
-  const rows = (await db.all('SELECT * FROM organizations WHERE region_id = ?', actor.regionId)).map(mapOrg)
+  const rows = await organizationsRepo.listOrganizations(actor.regionId)
   const ids = rows.map((org) => org.id)
-  const learners = await learnerCounts(ids)
-  const marks = ids.map(() => '?').join(',')
-  const classRows = ids.length
-    ? await db.all(`SELECT organization_id AS id, COUNT(*) AS n FROM classes WHERE organization_id IN (${marks}) GROUP BY organization_id`, ...ids)
-    : []
-  const adminRows = ids.length
-    ? await db.all(`SELECT organization_id AS id, COUNT(*) AS n FROM users WHERE role = 'org' AND organization_id IN (${marks}) GROUP BY organization_id`, ...ids)
-    : []
-  const classMap = new Map(classRows.map((row) => [row.id, Number(row.n)]))
-  const adminMap = new Map(adminRows.map((row) => [row.id, Number(row.n)]))
+  const learners = await usersRepo.learnerCountsByOrganization(ids)
+  const classMap = await classesRepo.classCountsByOrganization(ids)
+  const adminMap = await usersRepo.orgAdminCountsByOrganization(ids)
   return rows
     .map((org) => ({
       ...org,
@@ -456,16 +371,16 @@ export async function listOrganizations(actor) {
 }
 
 async function assertUniqueOrg(regionId, name, exceptId) {
-  const rows = await db.all('SELECT id, name FROM organizations WHERE region_id = ?', regionId)
+  const rows = await organizationsRepo.listOrganizationNames(regionId)
   if (rows.some((row) => row.id !== exceptId && sameText(row.name, name))) fail('Такая организация в регионе уже есть', 409)
 }
 
 async function assertGroupsFree(orgId, groups) {
-  const classes = await db.all('SELECT DISTINCT band FROM classes WHERE organization_id = ?', orgId)
+  const classes = await classesRepo.listBands(orgId)
   for (const row of classes) {
     if (!groups[row.band]) fail('Нельзя снять группу, в которой уже есть классы')
   }
-  const tracks = await count('SELECT COUNT(*) AS n FROM tracks WHERE organization_id = ?', orgId)
+  const tracks = await tracksRepo.countTracks(orgId)
   if (tracks && !groups.students) fail('Нельзя снять группу, в которой уже есть классы')
 }
 
@@ -475,15 +390,7 @@ export async function createOrganization(actor, input) {
   const groups = readGroups(input)
   await assertUniqueOrg(actor.regionId, name)
   const id = crypto.randomUUID()
-  await db.run(
-    `INSERT INTO organizations (id, region_id, name, grades_1_4, grades_5_9, grades_10_11, students, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    id,
-    actor.regionId,
-    name,
-    ...groupNumbers(groups),
-    new Date().toISOString(),
-  )
+  await organizationsRepo.insertOrganization({ id, regionId: actor.regionId, name, groups, createdAt: new Date().toISOString() })
   return mustOrg(id)
 }
 
@@ -494,34 +401,24 @@ export async function updateOrganization(actor, id, input) {
   const groups = readGroups(input)
   await assertUniqueOrg(actor.regionId, name, id)
   await assertGroupsFree(id, groups)
-  await db.run(
-    `UPDATE organizations SET name = ?, grades_1_4 = ?, grades_5_9 = ?, grades_10_11 = ?, students = ? WHERE id = ?`,
-    name,
-    ...groupNumbers(groups),
-    id,
-  )
+  await organizationsRepo.updateOrganization(id, { name, groups })
   return mustOrg(id)
 }
 
 export async function deleteOrganization(actor, id) {
   assertRole(actor, 'regional')
   await orgInRegion(id, actor.regionId)
-  const admins = await count("SELECT COUNT(*) AS n FROM users WHERE role = 'org' AND organization_id = ?", id)
-  const classes = await count('SELECT COUNT(*) AS n FROM classes WHERE organization_id = ?', id)
-  const tracks = await count('SELECT COUNT(*) AS n FROM tracks WHERE organization_id = ?', id)
-  const learners = await count("SELECT COUNT(*) AS n FROM users WHERE role = 'learner' AND organization_id = ?", id)
+  const admins = await usersRepo.countOrgAdmins(id)
+  const classes = await classesRepo.countClasses(id)
+  const tracks = await tracksRepo.countTracks(id)
+  const learners = await usersRepo.countLearnersInOrganization(id)
   if (admins || classes || tracks || learners) fail('Сначала удалите администраторов, классы и тестируемых')
-  await db.run('DELETE FROM organizations WHERE id = ?', id)
+  await organizationsRepo.deleteOrganization(id)
 }
 
 export async function listOrgAdmins(actor) {
   assertRole(actor, 'regional')
-  const rows = await db.all(
-    `SELECT u.id, u.login, u.display_name, u.organization_id, o.name AS organization_name
-     FROM users u JOIN organizations o ON o.id = u.organization_id
-     WHERE u.role = 'org' AND o.region_id = ?`,
-    actor.regionId,
-  )
+  const rows = await usersRepo.listOrgAdminsInRegion(actor.regionId)
   return rows
     .map((row) => ({
       id: row.id,
@@ -548,50 +445,27 @@ export async function createOrgAdmin(actor, input) {
 
 export async function updateOrgAdmin(actor, id, input) {
   assertRole(actor, 'regional')
-  const current = await db.get(
-    `SELECT u.id FROM users u JOIN organizations o ON o.id = u.organization_id
-     WHERE u.id = ? AND u.role = 'org' AND o.region_id = ?`,
-    id,
-    actor.regionId,
-  )
+  const current = await usersRepo.findOrgAdminInRegion(id, actor.regionId)
   if (!current) fail('Администратор не найден', 404)
   const org = await orgInRegion(input?.organizationId, actor.regionId)
   const displayName = cleanLabel(input?.displayName, 2, 80, 'Имя')
-  await db.run('UPDATE users SET display_name = ?, organization_id = ? WHERE id = ?', displayName, org.id, id)
+  await usersRepo.updateOrgAdmin(id, { displayName, organizationId: org.id })
   await setPassword(id, input?.password)
   return profile(id)
 }
 
 export async function deleteOrgAdmin(actor, id) {
   assertRole(actor, 'regional')
-  const current = await db.get(
-    `SELECT u.id FROM users u JOIN organizations o ON o.id = u.organization_id
-     WHERE u.id = ? AND u.role = 'org' AND o.region_id = ?`,
-    id,
-    actor.regionId,
-  )
+  const current = await usersRepo.findOrgAdminInRegion(id, actor.regionId)
   if (!current) fail('Администратор не найден', 404)
-  await db.run('DELETE FROM users WHERE id = ?', id)
+  await usersRepo.deleteUser(id)
 }
 
 export async function structure(actor) {
   assertRole(actor, 'org')
   const org = await mustOrg(actor.organizationId)
-  const classes = await db.all(
-    `SELECT c.id, c.name, c.band, c.grade, c.track_id,
-            (SELECT COUNT(*) FROM users u WHERE u.role = 'learner' AND u.class_id = c.id) AS learners
-     FROM classes c WHERE c.organization_id = ?`,
-    org.id,
-  )
-  const tracks = await db.all('SELECT id, name FROM tracks WHERE organization_id = ?', org.id)
-  const mapped = classes.map((row) => ({
-    id: row.id,
-    name: row.name,
-    band: row.band,
-    grade: row.grade == null ? null : Number(row.grade),
-    trackId: row.track_id,
-    learners: Number(row.learners),
-  }))
+  const mapped = await classesRepo.listOrganizationClasses(org.id)
+  const tracks = await tracksRepo.listTracks(org.id)
   const sections = []
   for (const band of BANDS) {
     if (!org.groups[band.id]) continue
@@ -624,12 +498,7 @@ export async function structure(actor) {
   return { organization: org, sections }
 }
 
-async function assertUniqueClass(organizationId, name, scopeSql, scopeParams, exceptId) {
-  const rows = await db.all(
-    `SELECT id, name FROM classes WHERE organization_id = ? AND ${scopeSql}`,
-    organizationId,
-    ...scopeParams,
-  )
+function assertUniqueClass(rows, name, exceptId) {
   if (rows.some((row) => row.id !== exceptId && sameText(row.name, name))) fail('Такой класс уже есть', 409)
 }
 
@@ -638,37 +507,31 @@ export async function createTrack(actor, input) {
   const org = await mustOrg(actor.organizationId)
   if (!org.groups.students) fail('В организации не отмечены студенты')
   const name = cleanLabel(input?.name, 2, 40, 'Название курса')
-  const rows = await db.all('SELECT id, name FROM tracks WHERE organization_id = ?', org.id)
+  const rows = await tracksRepo.listTracks(org.id)
   if (rows.some((row) => sameText(row.name, name))) fail('Такой курс уже есть', 409)
   const id = crypto.randomUUID()
-  await db.run(
-    'INSERT INTO tracks (id, organization_id, name, created_at) VALUES (?, ?, ?, ?)',
-    id,
-    org.id,
-    name,
-    new Date().toISOString(),
-  )
+  await tracksRepo.insertTrack({ id, organizationId: org.id, name, createdAt: new Date().toISOString() })
   return { id, name }
 }
 
 export async function updateTrack(actor, id, input) {
   assertRole(actor, 'org')
-  const current = await db.get('SELECT id FROM tracks WHERE id = ? AND organization_id = ?', id, actor.organizationId)
+  const current = await tracksRepo.findTrack(id, actor.organizationId)
   if (!current) fail('Курс не найден', 404)
   const name = cleanLabel(input?.name, 2, 40, 'Название курса')
-  const rows = await db.all('SELECT id, name FROM tracks WHERE organization_id = ?', actor.organizationId)
+  const rows = await tracksRepo.listTracks(actor.organizationId)
   if (rows.some((row) => row.id !== id && sameText(row.name, name))) fail('Такой курс уже есть', 409)
-  await db.run('UPDATE tracks SET name = ? WHERE id = ?', name, id)
+  await tracksRepo.renameTrack(id, name)
   return { id, name }
 }
 
 export async function deleteTrack(actor, id) {
   assertRole(actor, 'org')
-  const current = await db.get('SELECT id FROM tracks WHERE id = ? AND organization_id = ?', id, actor.organizationId)
+  const current = await tracksRepo.findTrack(id, actor.organizationId)
   if (!current) fail('Курс не найден', 404)
-  const classes = await count('SELECT COUNT(*) AS n FROM classes WHERE track_id = ?', id)
+  const classes = await classesRepo.countTrackClasses(id)
   if (classes) fail('Сначала удалите группы этого курса')
-  await db.run('DELETE FROM tracks WHERE id = ?', id)
+  await tracksRepo.deleteTrack(id)
 }
 
 export async function createClass(actor, input) {
@@ -677,58 +540,41 @@ export async function createClass(actor, input) {
   const name = cleanLabel(input?.name, 1, 20, 'Название класса')
   if (input?.trackId) {
     if (!org.groups.students) fail('В организации не отмечены студенты')
-    const track = await db.get('SELECT id FROM tracks WHERE id = ? AND organization_id = ?', input.trackId, org.id)
+    const track = await tracksRepo.findTrack(input.trackId, org.id)
     if (!track) fail('Курс не найден', 404)
-    await assertUniqueClass(org.id, name, 'track_id = ?', [input.trackId])
+    assertUniqueClass(await classesRepo.listTrackClassNames(org.id, input.trackId), name)
     const id = crypto.randomUUID()
-    await db.run(
-      `INSERT INTO classes (id, organization_id, band, grade, track_id, name, created_at)
-       VALUES (?, ?, 'students', NULL, ?, ?, ?)`,
-      id,
-      org.id,
-      input.trackId,
-      name,
-      new Date().toISOString(),
-    )
+    await classesRepo.insertTrackClass({ id, organizationId: org.id, trackId: input.trackId, name, createdAt: new Date().toISOString() })
     return { id, name, band: 'students', trackId: input.trackId }
   }
   const grade = Number(input?.grade)
   const band = bandForGrade(grade)
   if (!band) fail('Такой параллели нет')
   if (!org.groups[band.id]) fail('Эта группа в организации не отмечена')
-  await assertUniqueClass(org.id, name, 'band = ? AND grade = ?', [band.id, grade])
+  assertUniqueClass(await classesRepo.listGradeClassNames(org.id, band.id, grade), name)
   const id = crypto.randomUUID()
-  await db.run(
-    `INSERT INTO classes (id, organization_id, band, grade, track_id, name, created_at)
-     VALUES (?, ?, ?, ?, NULL, ?, ?)`,
-    id,
-    org.id,
-    band.id,
-    grade,
-    name,
-    new Date().toISOString(),
-  )
+  await classesRepo.insertGradeClass({ id, organizationId: org.id, band: band.id, grade, name, createdAt: new Date().toISOString() })
   return { id, name, band: band.id, grade }
 }
 
 export async function updateClass(actor, id, input) {
   assertRole(actor, 'org')
-  const current = await db.get('SELECT * FROM classes WHERE id = ? AND organization_id = ?', id, actor.organizationId)
+  const current = await classesRepo.findClass(id, actor.organizationId)
   if (!current) fail('Класс не найден', 404)
   const name = cleanLabel(input?.name, 1, 20, 'Название класса')
-  if (current.track_id) await assertUniqueClass(actor.organizationId, name, 'track_id = ?', [current.track_id], id)
-  else await assertUniqueClass(actor.organizationId, name, 'band = ? AND grade = ?', [current.band, current.grade], id)
-  await db.run('UPDATE classes SET name = ? WHERE id = ?', name, id)
+  if (current.track_id) assertUniqueClass(await classesRepo.listTrackClassNames(actor.organizationId, current.track_id), name, id)
+  else assertUniqueClass(await classesRepo.listGradeClassNames(actor.organizationId, current.band, current.grade), name, id)
+  await classesRepo.renameClass(id, name)
   return { id, name }
 }
 
 export async function deleteClass(actor, id) {
   assertRole(actor, 'org')
-  const current = await db.get('SELECT id FROM classes WHERE id = ? AND organization_id = ?', id, actor.organizationId)
+  const current = await classesRepo.findClassId(id, actor.organizationId)
   if (!current) fail('Класс не найден', 404)
-  const learners = await count("SELECT COUNT(*) AS n FROM users WHERE role = 'learner' AND class_id = ?", id)
+  const learners = await usersRepo.countLearnersInClass(id)
   if (learners) fail('В классе есть тестируемые. Сначала переведите или удалите их')
-  await db.run('DELETE FROM classes WHERE id = ?', id)
+  await classesRepo.deleteClass(id)
 }
 
 function mapLearner(row) {
@@ -749,43 +595,10 @@ export async function listLearners(actor, query = {}) {
   const offset = Math.max(0, Number(query.offset) || 0)
   const classId = typeof query.classId === 'string' && query.classId ? query.classId : null
   const search = cleanText(query.search)
-  const where = ["u.role = 'learner'", 'u.organization_id = ?']
-  const params = [actor.organizationId]
-  if (classId) {
-    where.push('u.class_id = ?')
-    params.push(classId)
-  }
-  if (search) {
-    where.push('(lower(u.display_name) LIKE lower(?) OR lower(u.login) LIKE lower(?))')
-    params.push(`%${search}%`, `%${search}%`)
-  }
-  const total = await count(
-    `SELECT COUNT(*) AS n FROM users u WHERE ${where.join(' AND ')}`,
-    ...params,
-  )
-  const rows = await db.all(
-    `SELECT u.id, u.login, u.display_name, u.class_id, c.name AS class_name, c.grade, c.band, t.name AS track_name
-     FROM users u
-     JOIN classes c ON c.id = u.class_id
-     LEFT JOIN tracks t ON t.id = c.track_id
-     WHERE ${where.join(' AND ')}
-     ORDER BY c.band, c.grade, t.name, c.name, u.display_name, u.login
-     LIMIT ? OFFSET ?`,
-    ...params,
-    limit,
-    offset,
-  )
+  const filter = { organizationId: actor.organizationId, classId, search }
+  const total = await usersRepo.countLearners(filter)
+  const rows = await usersRepo.listLearners(filter, { limit, offset })
   return { learners: rows.map(mapLearner), total, offset, limit }
-}
-
-async function orgClasses(organizationId) {
-  const rows = await db.all(
-    `SELECT c.id, c.band, c.name AS class_name, c.grade, t.name AS track_name
-     FROM classes c LEFT JOIN tracks t ON t.id = c.track_id
-     WHERE c.organization_id = ?`,
-    organizationId,
-  )
-  return rows.map((row) => ({ ...row, label: classCaption(row) }))
 }
 
 export async function learnersTemplate() {
@@ -830,7 +643,9 @@ export async function importLearners(actor, buffer) {
   if (!sheet) fail('В файле нет листа')
 
   const org = await mustOrg(actor.organizationId)
-  const classes = (await orgClasses(actor.organizationId)).filter((item) => org.groups[item.band])
+  const classes = (await classesRepo.listClassesWithTracks(actor.organizationId))
+    .map((row) => ({ ...row, label: classCaption(row) }))
+    .filter((item) => org.groups[item.band])
   const byName = new Map()
   for (const item of classes) {
     for (const key of [item.class_name, item.label]) {
@@ -885,14 +700,7 @@ export async function importLearners(actor, buffer) {
     fail('В файле нет тестируемых')
   }
 
-  const logins = rows.map((row) => row.login.toLowerCase())
-  const taken = new Set()
-  for (let start = 0; start < logins.length; start += 500) {
-    const chunk = logins.slice(start, start + 500)
-    const marks = chunk.map(() => '?').join(',')
-    const found = await db.all(`SELECT login FROM users WHERE lower(login) IN (${marks})`, ...chunk)
-    for (const item of found) taken.add(String(item.login).toLowerCase())
-  }
+  const taken = await usersRepo.findTakenLogins(rows.map((row) => row.login.toLowerCase()))
   const fresh = []
   for (const row of rows) {
     if (taken.has(row.login.toLowerCase())) errors.push(`Логин «${row.login}» уже занят`)
@@ -904,20 +712,14 @@ export async function importLearners(actor, buffer) {
   for (let start = 0; start < fresh.length; start += 100) {
     const chunk = fresh.slice(start, start + 100)
     const hashes = await Promise.all(chunk.map((row) => hashPassword(row.password)))
-    const values = []
-    const params = []
+    const batch = []
     chunk.forEach((row, index) => {
       const id = crypto.randomUUID()
-      values.push('(?, ?, ?, ?, ?, ?, ?, ?)')
-      params.push(id, row.login, hashes[index], now, 'learner', row.displayName, actor.organizationId, row.klass.id)
+      batch.push({ id, login: row.login, passwordHash: hashes[index], createdAt: now, displayName: row.displayName, organizationId: actor.organizationId, classId: row.klass.id })
       created.push({ id, displayName: row.displayName, login: row.login, password: row.password, classLabel: row.klass.label })
     })
     try {
-      await db.run(
-        `INSERT INTO users (id, login, password_hash, created_at, role, display_name, organization_id, class_id)
-         VALUES ${values.join(', ')}`,
-        ...params,
-      )
+      await usersRepo.insertLearners(batch)
     } catch (error) {
       if (!isUniqueViolation(error)) throw error
       // Кто-то занял логин между проверкой и вставкой: пачку повторяем по одному.
@@ -925,11 +727,7 @@ export async function importLearners(actor, buffer) {
       for (const [index, row] of chunk.entries()) {
         const id = crypto.randomUUID()
         try {
-          await db.run(
-            `INSERT INTO users (id, login, password_hash, created_at, role, display_name, organization_id, class_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            id, row.login, hashes[index], now, 'learner', row.displayName, actor.organizationId, row.klass.id,
-          )
+          await usersRepo.insertLearner({ id, login: row.login, passwordHash: hashes[index], createdAt: now, displayName: row.displayName, organizationId: actor.organizationId, classId: row.klass.id })
           created.push({ id, displayName: row.displayName, login: row.login, password: row.password, classLabel: row.klass.label })
         } catch (inner) {
           if (!isUniqueViolation(inner)) throw inner
@@ -942,13 +740,7 @@ export async function importLearners(actor, buffer) {
 }
 
 async function classInOrg(classId, organizationId) {
-  const row = await db.get(
-    `SELECT c.id, c.band, c.name AS class_name, c.grade, t.name AS track_name
-     FROM classes c LEFT JOIN tracks t ON t.id = c.track_id
-     WHERE c.id = ? AND c.organization_id = ?`,
-    classId,
-    organizationId,
-  )
+  const row = await classesRepo.findClassWithTrack(classId, organizationId)
   if (!row) fail('Класс не найден', 404)
   const org = await mustOrg(organizationId)
   if (!org.groups[row.band]) fail('Эта группа в организации не отмечена')
@@ -972,15 +764,11 @@ export async function createLearner(actor, input) {
 
 export async function updateLearner(actor, id, input) {
   assertRole(actor, 'org')
-  const current = await db.get(
-    "SELECT id FROM users WHERE id = ? AND role = 'learner' AND organization_id = ?",
-    id,
-    actor.organizationId,
-  )
+  const current = await usersRepo.findLearner(id, actor.organizationId)
   if (!current) fail('Тестируемый не найден', 404)
   const klass = await classInOrg(input?.classId, actor.organizationId)
   const displayName = cleanLabel(input?.displayName, 2, 80, 'Имя')
-  await db.run('UPDATE users SET display_name = ?, class_id = ? WHERE id = ?', displayName, klass.id, id)
+  await usersRepo.updateLearner(id, { displayName, classId: klass.id })
   await setPassword(id, input?.password)
   const user = await profile(id)
   return { ...user, classLabel: classCaption(klass) }
@@ -988,10 +776,6 @@ export async function updateLearner(actor, id, input) {
 
 export async function deleteLearner(actor, id) {
   assertRole(actor, 'org')
-  const result = await db.run(
-    "DELETE FROM users WHERE id = ? AND role = 'learner' AND organization_id = ?",
-    id,
-    actor.organizationId,
-  )
-  if (!result.changes) fail('Тестируемый не найден', 404)
+  const changes = await usersRepo.deleteLearner(id, actor.organizationId)
+  if (!changes) fail('Тестируемый не найден', 404)
 }
