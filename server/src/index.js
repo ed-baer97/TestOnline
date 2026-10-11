@@ -44,25 +44,23 @@ import { lanAddresses } from './infrastructure/network.js'
 import { readSession, signSession } from './infrastructure/session.js'
 import { checkLesson, createLesson, deleteLesson, getLesson, importPptx, listLessons, openLessonFile, openLessonMedia, saveLessonVideo, updateLesson } from './lessons.js'
 import { questionsFromXlsx, templateWorkbook } from './excel.js'
+import { authenticate } from './services/accounts.js'
+import { createQuiz, deleteQuiz, getQuiz, listQuizzes, updateQuiz } from './services/quizzes.js'
 import {
   advance,
   createRoom,
-  getRoom,
   hostView,
   joinPlayer,
-  markOffline,
   openRoom,
   playerByToken,
   playerView,
   publicInfo,
-  push,
+  publishRoom,
   remember,
   submitAnswer,
-  watch,
-} from './rooms.js'
-import { authenticate } from './services/accounts.js'
-import { createQuiz, deleteQuiz, getQuiz, listQuizzes, updateQuiz } from './services/quizzes.js'
+} from './services/rooms.js'
 import { listResults, quizStats, statsOverview } from './services/stats.js'
+import { attachRealtime } from './transport/realtime/socket.js'
 
 async function loadUser(req, res) {
   const session = readSession(req.cookies.session)
@@ -478,12 +476,12 @@ export function createApp() {
       res.status(404).json({ error: 'Комната не найдена' })
       return
     }
-    if (!advance(room, io)) {
+    if (!advance(room)) {
       res.status(400).json({ error: 'Сейчас это действие недоступно' })
       return
     }
     await remember(room)
-    push(io, room)
+    publishRoom(room)
     res.json(hostView(room))
   }))
 
@@ -500,7 +498,7 @@ export function createApp() {
     }
     result.player.online = true
     await remember(room)
-    push(io, room)
+    publishRoom(room)
     res.json(playerView(room, result.player.id))
   }))
 
@@ -535,7 +533,7 @@ export function createApp() {
       return
     }
     await remember(room)
-    push(io, room)
+    publishRoom(room)
     res.json(result)
   }))
 
@@ -548,77 +546,7 @@ export function createApp() {
     res.json(publicInfo(room))
   }))
 
-  io.on('connection', (socket) => {
-    watch(socket)
-
-    socket.on('host:join', async ({ code, hostToken } = {}, ack) => {
-      const room = getRoom(code) || await openRoom(code)
-      if (!room || room.hostToken !== hostToken) {
-        ack?.({ error: 'Комната не найдена или сессия ведущего устарела' })
-        return
-      }
-      socket.data.role = 'host'
-      socket.data.code = room.code
-      socket.join(room.code)
-      ack?.({ ok: true })
-      push(io, room)
-    })
-
-    socket.on('player:join', async ({ code, name, playerToken } = {}, ack) => {
-      const room = getRoom(code) || await openRoom(code)
-      if (!room) {
-        ack?.({ error: 'Комната не найдена' })
-        return
-      }
-      const result = joinPlayer(room, { name, playerToken })
-      if (result.error) {
-        ack?.({ error: result.error })
-        return
-      }
-      result.player.online = true
-      result.player.socketId = socket.id
-      socket.data.role = 'player'
-      socket.data.code = room.code
-      socket.data.playerId = result.player.id
-      socket.join(room.code)
-      await remember(room)
-      ack?.({ ok: true, name: result.player.name })
-      push(io, room)
-    })
-
-    socket.on('host:advance', async (ack) => {
-      const room = getRoom(socket.data.code) || await openRoom(socket.data.code)
-      if (socket.data.role !== 'host' || !room) {
-        ack?.({ error: 'Нет доступа' })
-        return
-      }
-      if (!advance(room, io)) {
-        ack?.({ error: 'Сейчас это действие недоступно' })
-        return
-      }
-      await remember(room)
-      ack?.({ ok: true, status: room.status })
-      push(io, room)
-    })
-
-    socket.on('player:answer', async ({ optionIndex } = {}, ack) => {
-      const room = getRoom(socket.data.code) || await openRoom(socket.data.code)
-      if (socket.data.role !== 'player' || !room) {
-        ack?.({ error: 'Вы не в комнате' })
-        return
-      }
-      const result = submitAnswer(room, socket.data.playerId, optionIndex)
-      if (result.ok) await remember(room)
-      ack?.(result)
-      if (result.ok) push(io, room)
-    })
-
-    socket.on('disconnect', () => {
-      const room = getRoom(socket.data.code)
-      if (!room || socket.data.role !== 'player') return
-      if (markOffline(room, socket.data.playerId, socket.id)) push(io, room)
-    })
-  })
+  attachRealtime(io)
 
   app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'Такого запроса нет' })

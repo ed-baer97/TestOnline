@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
-import { cleanName, scorePoints } from './domain/quiz.js'
-import { deleteLiveRoom, readLiveRoom, saveLiveRoom } from './repositories/liveRooms.js'
-import { saveResult } from './services/stats.js'
+import { cleanName, scorePoints } from '../domain/quiz.js'
+import { deleteLiveRoom, readLiveRoom, saveLiveRoom } from '../repositories/liveRooms.js'
+import { saveResult } from './stats.js'
 
 const rooms = new Map()
 const ROOM_TTL_MS = 4 * 60 * 60 * 1000
@@ -151,7 +151,7 @@ function optionCounts(room) {
   return counts
 }
 
-export function viewFor(room, socket) {
+export function viewFor(room, viewer) {
   const question = room.questionIndex >= 0 ? room.quiz.questions[room.questionIndex] : null
   const reveal = room.status === 'reveal'
   const board = leaderboard(room)
@@ -168,7 +168,7 @@ export function viewFor(room, socket) {
     answeredCount: [...room.players.values()].filter((player) => player.answered).length,
   }
 
-  if (socket.data?.role === 'host') {
+  if (viewer?.role === 'host') {
     return {
       ...base,
       role: 'host',
@@ -191,7 +191,7 @@ export function viewFor(room, socket) {
     }
   }
 
-  const player = room.players.get(socket.data?.playerId)
+  const player = room.players.get(viewer?.playerId)
   const me = player ? board.find((entry) => entry.id === player.id) : null
   const top = board.slice(0, 5).map(({ name, score, rank }) => ({ name, score, rank }))
   return {
@@ -214,29 +214,26 @@ export function viewFor(room, socket) {
 }
 
 export function hostView(room) {
-  return viewFor(room, { data: { role: 'host' } })
+  return viewFor(room, { role: 'host' })
 }
 
 export function playerView(room, playerId) {
-  return viewFor(room, { data: { role: 'player', playerId } })
+  return viewFor(room, { role: 'player', playerId })
 }
 
 export function playerByToken(room, token) {
   return findByToken(room, token)
 }
 
-const watchers = new Set()
+const listeners = new Set()
 
-export function watch(socket) {
-  watchers.add(socket)
-  socket.on('disconnect', () => watchers.delete(socket))
+// Транспорт подписывается на изменения комнат; publishRoom вызывают после каждого изменения состояния.
+export function onRoomChange(listener) {
+  listeners.add(listener)
 }
 
-export function push(_io, room) {
-  for (const socket of watchers) {
-    if (socket.data?.code !== room.code) continue
-    socket.emit('sync', viewFor(room, socket))
-  }
+export function publishRoom(room) {
+  for (const listener of listeners) listener(room)
 }
 
 function findByToken(room, token) {
@@ -279,17 +276,17 @@ export function joinPlayer(room, { name, playerToken }) {
   return { player }
 }
 
-function armTimer(room, io) {
+function armTimer(room) {
   clearTimer(room)
   const delay = Math.max(0, room.endsAt - Date.now())
   room.timer = setTimeout(() => {
     room.timer = null
     if (!closeQuestion(room)) return
-    push(io, room)
+    publishRoom(room)
   }, delay)
 }
 
-function openNext(room, io) {
+function openNext(room) {
   const next = room.questionIndex + 1
   if (next >= room.quiz.questions.length) {
     finish(room)
@@ -307,7 +304,7 @@ function openNext(room, io) {
     player.lastPoints = 0
     player.lastCorrect = null
   }
-  armTimer(room, io)
+  armTimer(room)
 }
 
 function rememberAnswer(room, player) {
@@ -366,10 +363,10 @@ export function closeQuestion(room) {
   return true
 }
 
-export function advance(room, io) {
+export function advance(room) {
   if (room.status === 'question') return closeQuestion(room)
   if (room.status === 'lobby' || room.status === 'reveal') {
-    openNext(room, io)
+    openNext(room)
     return true
   }
   return false
