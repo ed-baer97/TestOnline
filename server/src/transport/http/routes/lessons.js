@@ -36,8 +36,9 @@ export function registerLessonRoutes(app) {
     let start = 0
     let end = total - 1
     if (match) {
-      start = match[1] ? Number(match[1]) : 0
-      end = match[2] ? Number(match[2]) : total - 1
+      const suffix = !match[1] && Boolean(match[2])
+      start = suffix ? Math.max(0, total - Number(match[2])) : match[1] ? Number(match[1]) : 0
+      end = match[2] && !suffix ? Number(match[2]) : total - 1
       if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= total) {
         res.status(416).setHeader('Content-Range', `bytes */${total}`).end()
         return
