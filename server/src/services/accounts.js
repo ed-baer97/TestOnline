@@ -105,6 +105,8 @@ export async function createAccount({ role, login, password, displayName, region
   return profile(id)
 }
 
+// Вызывающий проверяет пароль через readPassword до записи остальных полей, иначе неверный пароль
+// даст 400 уже после сохранения имени.
 export async function changePassword(id, password) {
   const next = readPassword(password)
   if (!next) return

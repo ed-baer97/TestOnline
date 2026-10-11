@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import { assertRole } from '../../domain/access.js'
+import { readPassword } from '../../domain/accounts.js'
 import { fail } from '../../domain/errors.js'
 import { readGroups } from '../../domain/structure.js'
 import { cleanLabel, sameText } from '../../domain/text.js'
@@ -106,8 +107,9 @@ export async function updateOrgAdmin(actor, id, input) {
   if (!current) fail('Администратор не найден', 404)
   const org = await orgInRegion(input?.organizationId, actor.regionId)
   const displayName = cleanLabel(input?.displayName, 2, 80, 'Имя')
+  const password = readPassword(input?.password)
   await usersRepo.updateOrgAdmin(id, { displayName, organizationId: org.id })
-  await changePassword(id, input?.password)
+  await changePassword(id, password)
   return profile(id)
 }
 

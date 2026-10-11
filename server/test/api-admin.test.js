@@ -90,7 +90,7 @@ test('админка по HTTP: регионы, организации, клас
 
   const badPassword = await su(`/api/admin/regional-admins/${regional.body.id}`, { method: 'PATCH', json: { displayName: 'Айгуль Н.', regionId, password: '123' } })
   expectError(badPassword, 400, 'Пароль от 6 до 72 символов')
-  assert.equal((await su('/api/admin/regional-admins')).body.admins[0].displayName, 'Айгуль Н.')
+  assert.equal((await su('/api/admin/regional-admins')).body.admins[0].displayName, 'Айгуль')
   const updatedRegional = await su(`/api/admin/regional-admins/${regional.body.id}`, { method: 'PATCH', json: { displayName: 'Айгуль', regionId, password: 'secret2' } })
   assert.equal(updatedRegional.status, 200)
   assert.equal(updatedRegional.body.displayName, 'Айгуль')
@@ -133,6 +133,8 @@ test('админка по HTTP: регионы, организации, клас
   assert.deepEqual((await mang('/api/admin/org-admins')).body, {
     admins: [{ id: orgAdmin.body.id, login: 'school3', displayName: 'Мадина', organizationId: orgId, organizationName: 'Школа №3' }],
   })
+  expectError(await mang(`/api/admin/org-admins/${orgAdmin.body.id}`, { method: 'PATCH', json: { displayName: 'Не сохранится', organizationId: lyceum, password: '123' } }), 400, 'Пароль от 6 до 72 символов')
+  assert.deepEqual((await mang('/api/admin/org-admins')).body.admins.map((item) => [item.displayName, item.organizationId]), [['Мадина', orgId]])
   const movedAdmin = await mang(`/api/admin/org-admins/${orgAdmin.body.id}`, { method: 'PATCH', json: { displayName: 'Мадина К.', organizationId: orgId, password: '' } })
   assert.equal(movedAdmin.body.displayName, 'Мадина К.')
   expectError(await mang('/api/admin/org-admins/missing', { method: 'PATCH', json: { displayName: 'Мадина', organizationId: orgId } }), 404, 'Администратор не найден')
@@ -224,6 +226,8 @@ test('админка по HTTP: регионы, организации, клас
   assert.deepEqual((await org('/api/admin/learners?limit=9999&offset=-5')).body.limit, 500)
   assert.equal((await org('/api/admin/learners?limit=abc')).body.limit, 100)
 
+  expectError(await org(`/api/admin/learners/${learner.body.id}`, { method: 'PATCH', json: { displayName: 'Не сохранится', classId: group.body.id, password: '123' } }), 400, 'Пароль от 6 до 72 символов')
+  assert.deepEqual((await org('/api/admin/learners?search=arman')).body.learners.map((item) => [item.displayName, item.classId]), [['Арман', classA.body.id]])
   const moved = await org(`/api/admin/learners/${learner.body.id}`, { method: 'PATCH', json: { displayName: 'Арман С.', classId: group.body.id, password: '' } })
   assert.equal(moved.status, 200)
   assert.equal(moved.body.displayName, 'Арман С.')
