@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { api } from '../api/index.js'
-import { AdminFrame } from '../components/layout/AdminFrame.jsx'
-import { Classes, Learners } from './admin/OrgPanels.jsx'
-import { Organizations, OrgStaff } from './admin/RegionalPanels.jsx'
-import { LessonEditor, MaterialList } from './admin/Materials.jsx'
-import { Regions, RegionalStaff } from './admin/SuperPanels.jsx'
-import { DashboardView } from '../components/admin/ui.jsx'
-import LessonView from './LessonView.jsx'
+import { api } from '../../api/index.js'
+import { AdminFrame } from '../../components/layout/AdminFrame.jsx'
+import { Classes, Learners } from './OrgPanels.jsx'
+import { Organizations, OrgStaff } from './RegionalPanels.jsx'
+import { LessonEditor, MaterialList } from './Materials.jsx'
+import { Regions, RegionalStaff } from './SuperPanels.jsx'
+import { DashboardView } from '../../components/admin/ui.jsx'
+import LessonView from '../lessons/LessonView.jsx'
 
 function tabsFor(role) {
   if (role === 'super') {

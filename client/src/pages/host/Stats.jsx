@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api } from '../api/index.js'
-import { formatCode, formatWhen, shortWhen } from '../lib/format.js'
-import { BarChart, RateList } from '../components/charts.jsx'
+import { api } from '../../api/index.js'
+import { formatCode, formatWhen, shortWhen } from '../../lib/format.js'
+import { BarChart, RateList } from '../../components/charts.jsx'
 
 function launchWhen(session) {
   return session.startedAt || session.finishedAt

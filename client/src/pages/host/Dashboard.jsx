@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api/index.js'
-import { BarChart } from '../components/charts.jsx'
-import { HostFrame } from '../components/layout/HostFrame.jsx'
+import { api } from '../../api/index.js'
+import { BarChart } from '../../components/charts.jsx'
+import { HostFrame } from '../../components/layout/HostFrame.jsx'
 
 export default function Dashboard({ onLogout }) {
   const [stats, setStats] = useState(null)

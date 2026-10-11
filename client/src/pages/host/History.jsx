@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/index.js'
-import { formatWhen } from '../lib/format.js'
-import { HostFrame } from '../components/layout/HostFrame.jsx'
+import { api } from '../../api/index.js'
+import { formatWhen } from '../../lib/format.js'
+import { HostFrame } from '../../components/layout/HostFrame.jsx'
 
 function when(result) {
   return Date.parse(result.startedAt || result.finishedAt) || 0

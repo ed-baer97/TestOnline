@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api } from '../api/index.js'
-import { TopbarExtra } from '../components/layout/topbar.jsx'
-import { FitLegend } from '../components/lesson/FitLegend.jsx'
-import { Slide } from '../components/lesson/Slide.jsx'
+import { api } from '../../api/index.js'
+import { TopbarExtra } from '../../components/layout/topbar.jsx'
+import { FitLegend } from '../../components/lesson/FitLegend.jsx'
+import { Slide } from '../../components/lesson/Slide.jsx'
 
 export default function LessonView({ backTo }) {
   const { id } = useParams()

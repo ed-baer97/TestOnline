@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/index.js'
-import { LearnFrame } from '../components/layout/LearnFrame.jsx'
-import LessonView from './LessonView.jsx'
+import { api } from '../../api/index.js'
+import { LearnFrame } from '../../components/layout/LearnFrame.jsx'
+import LessonView from '../lessons/LessonView.jsx'
 
 export default function LearnerHome({ onLogout }) {
   const [me, setMe] = useState(null)

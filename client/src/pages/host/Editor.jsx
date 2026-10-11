@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api } from '../api/index.js'
-import { COLOR_NAMES } from '../components/shapes.jsx'
-import { newId } from '../lib/ids.js'
-import { saveHostToken } from '../state/roomTokens.js'
+import { api } from '../../api/index.js'
+import { COLOR_NAMES } from '../../components/shapes.jsx'
+import { newId } from '../../lib/ids.js'
+import { saveHostToken } from '../../state/roomTokens.js'
 
 function blankQuestion() {
   return {

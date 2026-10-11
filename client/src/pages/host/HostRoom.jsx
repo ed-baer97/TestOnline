@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { formatCode } from '../lib/format.js'
-import { useCountdown } from '../state/countdown.js'
-import { useHostRoom, useJoinLink } from '../state/hostRoom.js'
-import { COLOR_NAMES, SHAPES, Shape } from '../components/shapes.jsx'
+import { formatCode } from '../../lib/format.js'
+import { useCountdown } from '../../state/countdown.js'
+import { useHostRoom, useJoinLink } from '../../state/hostRoom.js'
+import { COLOR_NAMES, SHAPES, Shape } from '../../components/shapes.jsx'
 
 export default function HostRoom() {
   const { code } = useParams()

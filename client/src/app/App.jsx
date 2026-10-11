@@ -1,27 +1,18 @@
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
-import { ThemeToggle } from './components/ThemeToggle.jsx'
-import { homeFor } from './lib/roles.js'
-import Admin from './pages/Admin.jsx'
-import Dashboard from './pages/Dashboard.jsx'
-import Editor from './pages/Editor.jsx'
-import History from './pages/History.jsx'
-import Home from './pages/Home.jsx'
-import HostRoom from './pages/HostRoom.jsx'
-import LearnerHome, { LearnLesson } from './pages/LearnerHome.jsx'
-import Login from './pages/Login.jsx'
-import Play from './pages/Play.jsx'
-import Quizzes from './pages/Quizzes.jsx'
-import Stats from './pages/Stats.jsx'
-import { signOut, useSession } from './state/session.js'
-
-function RequireAuth({ roles, children }) {
-  const me = useSession()
-
-  if (me === undefined) return <p className="center muted">Загрузка…</p>
-  if (!me) return <Navigate to="/login" replace />
-  if (roles && !roles.includes(me.role)) return <Navigate to={homeFor(me.role)} replace />
-  return children
-}
+import { ThemeToggle } from '../components/ThemeToggle.jsx'
+import Admin from '../pages/admin/Admin.jsx'
+import Dashboard from '../pages/host/Dashboard.jsx'
+import Editor from '../pages/host/Editor.jsx'
+import History from '../pages/host/History.jsx'
+import Home from '../pages/Home.jsx'
+import HostRoom from '../pages/host/HostRoom.jsx'
+import LearnerHome, { LearnLesson } from '../pages/learn/LearnerHome.jsx'
+import Login from '../pages/Login.jsx'
+import Play from '../pages/play/Play.jsx'
+import Quizzes from '../pages/host/Quizzes.jsx'
+import Stats from '../pages/host/Stats.jsx'
+import { signOut } from '../state/session.js'
+import { RequireAuth } from './RequireAuth.jsx'
 
 export default function App() {
   const navigate = useNavigate()
