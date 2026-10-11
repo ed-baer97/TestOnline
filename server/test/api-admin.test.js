@@ -80,9 +80,8 @@ test('админка по HTTP: регионы, организации, клас
     band: null,
   })
   expectError(await su('/api/admin/regional-admins', { method: 'POST', json: { login: 'MANG', password: 'secret1', displayName: 'Двойник', regionId } }), 409, 'Такой логин уже занят')
-  // normalizeAccount бросает ошибку без status, поэтому неверный логин или пароль при создании — 500.
-  expectError(await su('/api/admin/regional-admins', { method: 'POST', json: { login: 'ab', password: 'secret1', displayName: 'Имя', regionId } }), 500, 'Ошибка сервера')
-  expectError(await su('/api/admin/regional-admins', { method: 'POST', json: { login: 'abc', password: '123', displayName: 'Имя', regionId } }), 500, 'Ошибка сервера')
+  expectError(await su('/api/admin/regional-admins', { method: 'POST', json: { login: 'ab', password: 'secret1', displayName: 'Имя', regionId } }), 400, 'Логин: 3–32 символа, буквы, цифры, точка, _ или -')
+  expectError(await su('/api/admin/regional-admins', { method: 'POST', json: { login: 'abc', password: '123', displayName: 'Имя', regionId } }), 400, 'Пароль от 6 до 72 символов')
   expectError(await su('/api/admin/regional-admins', { method: 'POST', json: { login: 'abc', password: 'secret1', displayName: 'Имя', regionId: 'missing' } }), 404, 'Регион не найден')
   expectError(await su('/api/admin/regional-admins', { method: 'POST', json: { login: 'abc', password: 'secret1', displayName: 'И', regionId } }), 400, 'Имя: от 2 до 80 символов')
   assert.deepEqual((await su('/api/admin/regional-admins')).body, {
@@ -130,6 +129,7 @@ test('админка по HTTP: регионы, организации, клас
   assert.equal(orgAdmin.body.organizationName, 'Школа №3')
   assert.equal(orgAdmin.body.regionId, null)
   expectError(await mang('/api/admin/org-admins', { method: 'POST', json: { login: 'x-admin', password: 'secret1', displayName: 'Мадина', organizationId: 'missing' } }), 404, 'Организация не найдена')
+  expectError(await mang('/api/admin/org-admins', { method: 'POST', json: { login: '-admin', password: 'secret1', displayName: 'Мадина', organizationId: orgId } }), 400, 'Логин: 3–32 символа, буквы, цифры, точка, _ или -')
   assert.deepEqual((await mang('/api/admin/org-admins')).body, {
     admins: [{ id: orgAdmin.body.id, login: 'school3', displayName: 'Мадина', organizationId: orgId, organizationName: 'Школа №3' }],
   })
@@ -199,6 +199,7 @@ test('админка по HTTP: регионы, организации, клас
     band: 'grades_5_9',
   })
   expectError(await org('/api/admin/learners', { method: 'POST', json: { login: 'nobody', password: 'secret1', displayName: 'Нет', classId: 'missing' } }), 404, 'Класс не найден')
+  expectError(await org('/api/admin/learners', { method: 'POST', json: { login: 'nobody', password: '12345', displayName: 'Нет', classId: classA.body.id } }), 400, 'Пароль от 6 до 72 символов')
   const student = (await org('/api/admin/learners', { method: 'POST', json: { login: 'aida', password: 'secret1', displayName: 'Аида', classId: group.body.id } })).body
   assert.equal(student.classLabel, 'ИС-21 · Первый курс')
 

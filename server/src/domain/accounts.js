@@ -2,16 +2,11 @@ import crypto from 'node:crypto'
 import { fail } from './errors.js'
 import { cleanText } from './text.js'
 
-// Ошибки без status: при создании аккаунта через HTTP это 500, при импорте — строка в списке ошибок.
 export function normalizeAccount({ login, password }) {
   const name = cleanText(login)
-  if (!/^[\p{L}\p{N}][\p{L}\p{N}._-]{2,31}$/u.test(name)) {
-    throw new Error('Логин: 3–32 символа, буквы, цифры, точка, _ или -')
-  }
+  if (!/^[\p{L}\p{N}][\p{L}\p{N}._-]{2,31}$/u.test(name)) fail('Логин: 3–32 символа, буквы, цифры, точка, _ или -')
   const pass = String(password ?? '')
-  if (pass.length < 6 || pass.length > 72) {
-    throw new Error('Пароль от 6 до 72 символов')
-  }
+  if (pass.length < 6 || pass.length > 72) fail('Пароль от 6 до 72 символов')
   return { login: name, password: pass }
 }
 
