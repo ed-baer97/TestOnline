@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import { cleanName, scorePoints } from './domain/quiz.js'
-import { deleteLiveRoom, readLiveRoom, saveLiveRoom, saveResult } from './db.js'
+import { deleteLiveRoom, readLiveRoom, saveLiveRoom } from './repositories/liveRooms.js'
+import { saveResult } from './services/stats.js'
 
 const rooms = new Map()
 const ROOM_TTL_MS = 4 * 60 * 60 * 1000
@@ -68,7 +69,7 @@ function thaw(data) {
 }
 
 export async function remember(room) {
-  await saveLiveRoom(room.code, JSON.stringify(freeze(room)))
+  await saveLiveRoom(room.code, JSON.stringify(freeze(room)), new Date().toISOString())
 }
 
 function expired(room, now = Date.now()) {

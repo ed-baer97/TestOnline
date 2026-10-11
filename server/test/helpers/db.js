@@ -32,7 +32,7 @@ export async function useTestDatabase(name) {
 
 // Ведущих через API не создают, поэтому характеризационные тесты заводят их напрямую.
 export async function createHost(login, password) {
-  const { registerUser } = await import('../../src/db.js')
+  const { registerUser } = await import('../../src/services/accounts.js')
   return registerUser({ login, password })
 }
 

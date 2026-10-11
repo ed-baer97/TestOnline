@@ -91,7 +91,7 @@ test('регион видит своих, организация собирае�
   assert.ok(imported.errors.some((line) => line.includes('7в')))
   assert.ok(imported.errors.some((line) => line.includes('arman') && line.includes('занят')))
   assert.ok(imported.errors.some((line) => line.includes('повторяется')))
-  const { authenticate } = await import('../src/db.js')
+  const { authenticate } = await import('../src/services/accounts.js')
   assert.equal((await authenticate('erlan', imported.learners[1].password)).role, 'learner')
 
   const page = await admin.listLearners(orgAdmin, { limit: 2 })

@@ -6,7 +6,9 @@ await useTestDatabase('stats')
 process.env.SESSION_SECRET = 'test-secret'
 
 test('сводка считает запуски, средний балл и долю верных ответов', async () => {
-  const { createQuiz, quizStats, registerUser, saveResult, statsOverview } = await import('../src/db.js')
+  const { registerUser } = await import('../src/services/accounts.js')
+  const { createQuiz } = await import('../src/services/quizzes.js')
+  const { quizStats, saveResult, statsOverview } = await import('../src/services/stats.js')
   const user = await registerUser({ login: 'stat', password: 'secret1' })
   const quiz = await createQuiz(user.id, {
     title: 'География',

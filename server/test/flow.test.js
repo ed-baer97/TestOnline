@@ -14,7 +14,7 @@ test('комната: QR-вход, вопрос без правильного о
   const port = httpServer.address().port
   const base = `http://127.0.0.1:${port}`
 
-  const { registerUser } = await import('../src/db.js')
+  const { registerUser } = await import('../src/services/accounts.js')
   await registerUser({ login: 'host', password: 'secret1' })
   await assert.rejects(() => registerUser({ login: 'host', password: 'secret1' }), (error) => error.status === 409)
   const session = await fetch(`${base}/api/login`, {

@@ -100,7 +100,7 @@ test('импорт через API доступен после входа', async
   await new Promise((resolve) => httpServer.listen(0, '127.0.0.1', resolve))
   const base = `http://127.0.0.1:${httpServer.address().port}`
   try {
-    const { registerUser } = await import('../src/db.js')
+    const { registerUser } = await import('../src/services/accounts.js')
     await registerUser({ login: 'importer', password: 'secret1' })
     const register = await fetch(`${base}/api/login`, {
       method: 'POST',

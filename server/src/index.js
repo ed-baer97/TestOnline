@@ -39,12 +39,10 @@ import {
   updateRegionalAdmin,
   updateTrack,
 } from './admin.js'
-import { authenticate, createQuiz, deleteQuiz, getQuiz, listQuizzes, listResults, quizStats, statsOverview, updateQuiz } from './db.js'
 import { config } from './infrastructure/config.js'
 import { lanAddresses } from './infrastructure/network.js'
 import { readSession, signSession } from './infrastructure/session.js'
 import { checkLesson, createLesson, deleteLesson, getLesson, importPptx, listLessons, openLessonFile, openLessonMedia, saveLessonVideo, updateLesson } from './lessons.js'
-import { normalizeQuiz } from './domain/quiz.js'
 import { questionsFromXlsx, templateWorkbook } from './excel.js'
 import {
   advance,
@@ -62,6 +60,9 @@ import {
   submitAnswer,
   watch,
 } from './rooms.js'
+import { authenticate } from './services/accounts.js'
+import { createQuiz, deleteQuiz, getQuiz, listQuizzes, updateQuiz } from './services/quizzes.js'
+import { listResults, quizStats, statsOverview } from './services/stats.js'
 
 async function loadUser(req, res) {
   const session = readSession(req.cookies.session)
@@ -421,7 +422,7 @@ export function createApp() {
 
   app.post('/api/quizzes', requireHost, route(async (req, res) => {
     try {
-      res.status(201).json(await createQuiz(req.userId, normalizeQuiz(req.body)))
+      res.status(201).json(await createQuiz(req.userId, req.body))
     } catch (error) {
       res.status(400).json({ error: error.message })
     }
@@ -429,7 +430,7 @@ export function createApp() {
 
   app.put('/api/quizzes/:id', requireHost, route(async (req, res) => {
     try {
-      const quiz = await updateQuiz(req.params.id, req.userId, normalizeQuiz(req.body))
+      const quiz = await updateQuiz(req.params.id, req.userId, req.body)
       if (!quiz) {
         res.status(404).json({ error: 'Квиз не найден' })
         return
