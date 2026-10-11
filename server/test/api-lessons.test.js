@@ -211,7 +211,8 @@ test('уроки по HTTP: список, правка, тест, картинк
   const ranges = [
     ['bytes=0-3', 206, 'bytes 0-3/22', 'vide'],
     ['bytes=5-', 206, 'bytes 5-21/22', bytes.subarray(5).toString()],
-    ['bytes=-4', 206, 'bytes 0-4/22', 'video'],
+    ['bytes=-4', 206, 'bytes 18-21/22', '6789'],
+    ['bytes=-100', 206, 'bytes 0-21/22', bytes.toString()],
     ['bytes=0-100', 206, 'bytes 0-21/22', bytes.toString()],
     ['items=0-1', 200, null, bytes.toString()],
   ]
@@ -219,9 +220,10 @@ test('уроки по HTTP: список, правка, тест, картинк
     const response = await call(base, `/api/lessons/${lesson.id}/media`, { cookie: who.pupil, headers: { Range: range } })
     assert.equal(response.status, status, range)
     assert.equal(response.headers.get('content-range'), contentRange, range)
+    assert.equal(response.headers.get('content-length'), String(body.length), range)
     assert.equal(response.text, body, range)
   }
-  for (const range of ['bytes=30-40', 'bytes=10-5']) {
+  for (const range of ['bytes=30-40', 'bytes=10-5', 'bytes=-0']) {
     const response = await call(base, `/api/lessons/${lesson.id}/media`, { cookie: who.pupil, headers: { Range: range } })
     assert.equal(response.status, 416, range)
     assert.equal(response.headers.get('content-range'), 'bytes */22', range)

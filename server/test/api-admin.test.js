@@ -10,6 +10,7 @@ process.env.SUPER_LOGIN = 'root'
 process.env.SUPER_PASSWORD = 'rootpass'
 
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+const LOGIN_RULE = 'Логин: 3–32 символа, латинские буквы, цифры, точка, _ или -'
 
 function expectError(response, status, error) {
   assert.equal(response.status, status, `${error}: ${response.text}`)
@@ -80,9 +81,8 @@ test('админка по HTTP: регионы, организации, клас
     band: null,
   })
   expectError(await su('/api/admin/regional-admins', { method: 'POST', json: { login: 'MANG', password: 'secret1', displayName: 'Двойник', regionId } }), 409, 'Такой логин уже занят')
-  // normalizeAccount бросает ошибку без status, поэтому неверный логин или пароль при создании — 500.
-  expectError(await su('/api/admin/regional-admins', { method: 'POST', json: { login: 'ab', password: 'secret1', displayName: 'Имя', regionId } }), 500, 'Ошибка сервера')
-  expectError(await su('/api/admin/regional-admins', { method: 'POST', json: { login: 'abc', password: '123', displayName: 'Имя', regionId } }), 500, 'Ошибка сервера')
+  expectError(await su('/api/admin/regional-admins', { method: 'POST', json: { login: 'ab', password: 'secret1', displayName: 'Имя', regionId } }), 400, LOGIN_RULE)
+  expectError(await su('/api/admin/regional-admins', { method: 'POST', json: { login: 'abc', password: '123', displayName: 'Имя', regionId } }), 400, 'Пароль от 6 до 72 символов')
   expectError(await su('/api/admin/regional-admins', { method: 'POST', json: { login: 'abc', password: 'secret1', displayName: 'Имя', regionId: 'missing' } }), 404, 'Регион не найден')
   expectError(await su('/api/admin/regional-admins', { method: 'POST', json: { login: 'abc', password: 'secret1', displayName: 'И', regionId } }), 400, 'Имя: от 2 до 80 символов')
   assert.deepEqual((await su('/api/admin/regional-admins')).body, {
@@ -91,7 +91,7 @@ test('админка по HTTP: регионы, организации, клас
 
   const badPassword = await su(`/api/admin/regional-admins/${regional.body.id}`, { method: 'PATCH', json: { displayName: 'Айгуль Н.', regionId, password: '123' } })
   expectError(badPassword, 400, 'Пароль от 6 до 72 символов')
-  assert.equal((await su('/api/admin/regional-admins')).body.admins[0].displayName, 'Айгуль Н.')
+  assert.equal((await su('/api/admin/regional-admins')).body.admins[0].displayName, 'Айгуль')
   const updatedRegional = await su(`/api/admin/regional-admins/${regional.body.id}`, { method: 'PATCH', json: { displayName: 'Айгуль', regionId, password: 'secret2' } })
   assert.equal(updatedRegional.status, 200)
   assert.equal(updatedRegional.body.displayName, 'Айгуль')
@@ -130,9 +130,12 @@ test('админка по HTTP: регионы, организации, клас
   assert.equal(orgAdmin.body.organizationName, 'Школа №3')
   assert.equal(orgAdmin.body.regionId, null)
   expectError(await mang('/api/admin/org-admins', { method: 'POST', json: { login: 'x-admin', password: 'secret1', displayName: 'Мадина', organizationId: 'missing' } }), 404, 'Организация не найдена')
+  expectError(await mang('/api/admin/org-admins', { method: 'POST', json: { login: '-admin', password: 'secret1', displayName: 'Мадина', organizationId: orgId } }), 400, LOGIN_RULE)
   assert.deepEqual((await mang('/api/admin/org-admins')).body, {
     admins: [{ id: orgAdmin.body.id, login: 'school3', displayName: 'Мадина', organizationId: orgId, organizationName: 'Школа №3' }],
   })
+  expectError(await mang(`/api/admin/org-admins/${orgAdmin.body.id}`, { method: 'PATCH', json: { displayName: 'Не сохранится', organizationId: lyceum, password: '123' } }), 400, 'Пароль от 6 до 72 символов')
+  assert.deepEqual((await mang('/api/admin/org-admins')).body.admins.map((item) => [item.displayName, item.organizationId]), [['Мадина', orgId]])
   const movedAdmin = await mang(`/api/admin/org-admins/${orgAdmin.body.id}`, { method: 'PATCH', json: { displayName: 'Мадина К.', organizationId: orgId, password: '' } })
   assert.equal(movedAdmin.body.displayName, 'Мадина К.')
   expectError(await mang('/api/admin/org-admins/missing', { method: 'PATCH', json: { displayName: 'Мадина', organizationId: orgId } }), 404, 'Администратор не найден')
@@ -199,6 +202,8 @@ test('админка по HTTP: регионы, организации, клас
     band: 'grades_5_9',
   })
   expectError(await org('/api/admin/learners', { method: 'POST', json: { login: 'nobody', password: 'secret1', displayName: 'Нет', classId: 'missing' } }), 404, 'Класс не найден')
+  expectError(await org('/api/admin/learners', { method: 'POST', json: { login: 'nobody', password: '12345', displayName: 'Нет', classId: classA.body.id } }), 400, 'Пароль от 6 до 72 символов')
+  expectError(await org('/api/admin/learners', { method: 'POST', json: { login: 'мирас', password: 'secret1', displayName: 'Мирас', classId: classA.body.id } }), 400, LOGIN_RULE)
   const student = (await org('/api/admin/learners', { method: 'POST', json: { login: 'aida', password: 'secret1', displayName: 'Аида', classId: group.body.id } })).body
   assert.equal(student.classLabel, 'ИС-21 · Первый курс')
 
@@ -216,6 +221,8 @@ test('админка по HTTP: регионы, организации, клас
   assert.deepEqual((await org('/api/admin/learners?limit=9999&offset=-5')).body.limit, 500)
   assert.equal((await org('/api/admin/learners?limit=abc')).body.limit, 100)
 
+  expectError(await org(`/api/admin/learners/${learner.body.id}`, { method: 'PATCH', json: { displayName: 'Не сохранится', classId: group.body.id, password: '123' } }), 400, 'Пароль от 6 до 72 символов')
+  assert.deepEqual((await org('/api/admin/learners?search=arman')).body.learners.map((item) => [item.displayName, item.classId]), [['Арман', classA.body.id]])
   const moved = await org(`/api/admin/learners/${learner.body.id}`, { method: 'PATCH', json: { displayName: 'Арман С.', classId: group.body.id, password: '' } })
   assert.equal(moved.status, 200)
   assert.equal(moved.body.displayName, 'Арман С.')
@@ -236,6 +243,7 @@ test('админка по HTTP: регионы, организации, клас
   sheet.addRow(['Класс', 'Имя', 'Логин', 'Пароль'])
   sheet.addRow(['5а · 5 класс', 'Дана Ким', 'dana.kim', 'secret9'])
   sheet.addRow(['5а', 'Двусмысленно', 'twice', 'secret9'])
+  sheet.addRow(['5а · 5 класс', 'Мирас', 'мирас', 'secret9'])
   sheet.addRow(['ИС-21', 'Нурай', 'nuray', ''])
   sheet.addRow(['ИС-21', 'Арман второй', 'arman', 'secret9'])
   const upload = await org('/api/admin/learners/import', { method: 'POST', body: Buffer.from(await book.xlsx.writeBuffer()), headers: { 'Content-Type': 'application/octet-stream' } })
@@ -249,6 +257,7 @@ test('админка по HTTP: регионы, организации, клас
   assert.match(upload.body.learners[1].password, /^[a-z0-9]{8}$/)
   assert.deepEqual(upload.body.errors, [
     'Строка 3: класс «5а» есть в нескольких параллелях, укажите «5а · 5 класс»',
+    `Строка 4: ${LOGIN_RULE}`,
     'Логин «arman» уже занят',
   ])
   expectError(await org('/api/admin/learners/import', { method: 'POST', body: Buffer.alloc(0), headers: { 'Content-Type': 'application/octet-stream' } }), 400, 'Файл пустой')

@@ -105,6 +105,7 @@ test('realtime: ошибки событий, подтверждения, пуш 
   await call(base, `/api/rooms/${code}/answer`, { method: 'POST', json: { playerToken: 'player-token-borya-0001', optionIndex: 1 } })
   assert.deepEqual((await restAnswer).players.map((item) => item.answered), [false, true])
 
+  assert.deepEqual(await emit(back, 'player:answer', { optionIndex: null }), { error: 'Нет такого варианта' })
   const answered = await emit(back, 'player:answer', { optionIndex: 0 })
   assert.equal(answered.ok, true)
   assert.deepEqual(await emit(back, 'player:answer', { optionIndex: 1 }), { error: 'Ответ уже принят' })
@@ -161,4 +162,54 @@ test('realtime: вопрос закрывается по таймеру и со�
     t.mock.timers.reset()
   }
   assert.deepEqual(ack, { ok: true, status: 'question' })
+})
+
+test('realtime: REST-запрос перечитывает комнату, но не теряет сокеты игроков и таймер вопроса', async (t) => {
+  const server = await startServer()
+  const sockets = []
+  t.after(async () => {
+    for (const socket of sockets) socket.disconnect()
+    await server.close()
+  })
+  const { base } = server
+  await createHost('reload', 'secret1')
+  const cookie = await login(base, 'reload', 'secret1')
+  const quiz = (await call(base, '/api/quizzes', {
+    method: 'POST',
+    cookie,
+    json: { title: 'Перечитать', questions: [{ text: 'Успеешь?', timeLimit: 10, correctIndex: 1, options: [{ text: 'Нет' }, { text: 'Да' }] }] },
+  })).body
+  const { code, hostToken } = (await call(base, '/api/rooms', { method: 'POST', cookie, json: { quizId: quiz.id } })).body
+
+  const host = connect(base)
+  const anya = connect(base)
+  const borya = connect(base)
+  sockets.push(host, anya, borya)
+  assert.deepEqual(await emit(host, 'host:join', { code, hostToken }), { ok: true })
+  assert.deepEqual(await emit(anya, 'player:join', { code, name: 'Аня', playerToken: 'player-token-anya-0001' }), { ok: true, name: 'Аня' })
+  assert.deepEqual(await emit(borya, 'player:join', { code, name: 'Боря', playerToken: 'player-token-borya-0001' }), { ok: true, name: 'Боря' })
+
+  assert.equal((await call(base, `/api/rooms/${code}`)).status, 200)
+  const hostSeesOffline = nextSync(host, (state) => state.players.some((item) => item.name === 'Аня' && !item.online))
+  anya.disconnect()
+  await hostSeesOffline
+  const afterReload = (await call(base, `/api/rooms/${code}/host?token=${hostToken}`)).body
+  assert.deepEqual(afterReload.players.map((item) => [item.name, item.online]), [['Аня', false], ['Боря', true]])
+
+  const opened = nextSync(borya, (state) => state.status === 'question')
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  try {
+    assert.deepEqual(await emit(host, 'host:advance'), { ok: true, status: 'question' })
+    await opened
+    assert.equal((await call(base, `/api/rooms/${code}/play?token=player-token-borya-0001`)).body.status, 'question')
+    const boryaReveal = nextSync(borya, (state) => state.status === 'reveal')
+    const hostReveal = nextSync(host, (state) => state.status === 'reveal')
+    t.mock.timers.tick(10_000)
+    const [mine, hosts] = await Promise.all([boryaReveal, hostReveal])
+    assert.equal(mine.question.correctIndex, 1)
+    assert.equal(mine.me.lastCorrect, false)
+    assert.deepEqual(hosts.question.optionCounts, [0, 0])
+  } finally {
+    t.mock.timers.reset()
+  }
 })

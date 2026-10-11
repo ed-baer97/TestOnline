@@ -1,4 +1,5 @@
 import { assertRole } from '../../domain/access.js'
+import { readPassword } from '../../domain/accounts.js'
 import { fail } from '../../domain/errors.js'
 import { classCaption } from '../../domain/structure.js'
 import { cleanLabel, cleanText } from '../../domain/text.js'
@@ -51,8 +52,9 @@ export async function updateLearner(actor, id, input) {
   if (!current) fail('Тестируемый не найден', 404)
   const klass = await classInOrg(input?.classId, actor.organizationId)
   const displayName = cleanLabel(input?.displayName, 2, 80, 'Имя')
+  const password = readPassword(input?.password)
   await usersRepo.updateLearner(id, { displayName, classId: klass.id })
-  await changePassword(id, input?.password)
+  await changePassword(id, password)
   const user = await profile(id)
   return { ...user, classLabel: classCaption(klass) }
 }

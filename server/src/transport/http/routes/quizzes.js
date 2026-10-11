@@ -18,12 +18,12 @@ export function registerQuizRoutes(app) {
     res.json(stats)
   }))
 
-  app.get('/api/template', requireHost, async (_req, res) => {
+  app.get('/api/template', requireHost, route(async (_req, res) => {
     const buffer = await templateWorkbook()
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     res.setHeader('Content-Disposition', 'attachment; filename="testonline-shablon.xlsx"')
     res.send(Buffer.from(buffer))
-  })
+  }))
 
   app.get('/api/quizzes', requireHost, route(async (req, res) => {
     res.json({ quizzes: await listQuizzes(req.userId) })

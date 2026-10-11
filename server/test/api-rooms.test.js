@@ -317,16 +317,22 @@ test('комната хранится в live_rooms: закрытие вопро
   assert.equal((await call(base, `/api/rooms/${third.room.code}`)).body.status, 'podium')
 })
 
-test('пустой optionIndex считается вариантом 0', async (t) => {
+test('optionIndex — целое число или строка из цифр, пустые и логические значения отклоняются', async (t) => {
   const server = await startServer()
   t.after(() => server.close())
   const { base } = server
   const { room } = await setup(base, 'nulls')
   await call(base, `/api/rooms/${room.code}/join`, { method: 'POST', json: { name: 'Аня', playerToken: token(1) } })
   await call(base, `/api/rooms/${room.code}/advance`, { method: 'POST', json: { hostToken: room.hostToken } })
-  const answer = await call(base, `/api/rooms/${room.code}/answer`, { method: 'POST', json: { playerToken: token(1), optionIndex: null } })
+  for (const optionIndex of [null, true, false, '', ' 1', '1.0', [1], undefined]) {
+    const response = await call(base, `/api/rooms/${room.code}/answer`, { method: 'POST', json: { playerToken: token(1), optionIndex } })
+    assert.equal(response.status, 400, JSON.stringify(optionIndex))
+    assert.deepEqual(response.body, { error: 'Нет такого варианта' })
+  }
+  assert.equal((await call(base, `/api/rooms/${room.code}/play?token=${token(1)}`)).body.me.answered, false)
+  const answer = await call(base, `/api/rooms/${room.code}/answer`, { method: 'POST', json: { playerToken: token(1), optionIndex: '1' } })
   assert.equal(answer.body.ok, true)
-  assert.equal((await call(base, `/api/rooms/${room.code}/play?token=${token(1)}`)).body.me.answerIndex, 0)
+  assert.equal((await call(base, `/api/rooms/${room.code}/play?token=${token(1)}`)).body.me.answerIndex, 1)
 })
 
 test('в комнате не больше 300 участников', async (t) => {

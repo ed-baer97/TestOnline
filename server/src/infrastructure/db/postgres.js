@@ -132,5 +132,6 @@ export async function openPostgres(postgresUrl) {
     get: async (sql, ...params) => (await pool.query(toPg(sql), params)).rows[0],
     all: async (sql, ...params) => (await pool.query(toPg(sql), params)).rows,
     run: async (sql, ...params) => ({ changes: (await pool.query(toPg(sql), params)).rowCount }),
+    close: () => pool.end(),
   }
 }

@@ -20,10 +20,11 @@ test('квиз без правильного ответа не сохраняе�
   )
 })
 
-test('короткий пароль и пустой логин не проходят регистрацию', () => {
+test('логин — от 3 символов латиницей, пароль — от 6 символов', () => {
   assert.throws(() => normalizeAccount({ login: 'ab', password: '123456' }), /Логин/)
-  assert.throws(() => normalizeAccount({ login: 'анна', password: '123' }), /Пароль/)
-  assert.equal(normalizeAccount({ login: ' Анна ', password: 'secret' }).login, 'Анна')
+  assert.throws(() => normalizeAccount({ login: 'анна', password: '123456' }), (error) => error.status === 400 && /латинские/.test(error.message))
+  assert.throws(() => normalizeAccount({ login: 'anna', password: '123' }), /Пароль/)
+  assert.equal(normalizeAccount({ login: ' Anna.K ', password: 'secret' }).login, 'Anna.K')
 })
 
 test('пустые варианты отбрасываются до проверки числа ответов', () => {

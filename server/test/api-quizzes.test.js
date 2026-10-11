@@ -135,6 +135,14 @@ test('шаблон и импорт Excel по API', async (t) => {
   assert.deepEqual(book.worksheets[0].getRow(1).values.slice(1), ['Вопрос', 'Вариант 1', 'Вариант 2', 'Вариант 3', 'Вариант 4'])
   assert.equal(book.worksheets[0].rowCount, 3)
 
+  const broken = t.mock.method(ExcelJS.Workbook.prototype, 'addWorksheet', () => {
+    throw new Error('шаблон не собрался')
+  })
+  const failed = await call(base, '/api/template', { cookie })
+  broken.mock.restore()
+  assert.equal(failed.status, 500)
+  assert.deepEqual(failed.body, { error: 'Ошибка сервера' })
+
   const octet = { 'Content-Type': 'application/octet-stream' }
   const empty = await call(base, '/api/import', { method: 'POST', cookie, headers: octet, body: Buffer.alloc(0) })
   assert.equal(empty.status, 400)

@@ -25,9 +25,7 @@ export const config = {
   get mediaAccel() {
     return process.env.MEDIA_ACCEL === '1'
   },
-  // DB_PATH всегда означает SQLite, даже если задан POSTGRES_URL.
   get postgresUrl() {
-    if (process.env.DB_PATH) return ''
     return process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || ''
   },
   // PG_SSL=0 — Postgres рядом (docker compose, локальная сеть), без TLS.
@@ -37,12 +35,8 @@ export const config = {
   get pgPoolMax() {
     return Number(process.env.PG_POOL_MAX) > 0 ? Number(process.env.PG_POOL_MAX) : 20
   },
-  get sqliteFile() {
-    return process.env.DB_PATH || path.join(DATA_DIR, 'testonline.sqlite')
-  },
   get mediaDir() {
     if (process.env.MEDIA_DIR) return path.resolve(process.env.MEDIA_DIR)
-    if (process.env.DB_PATH) return path.resolve(path.dirname(process.env.DB_PATH), 'media')
     return path.join(DATA_DIR, 'media')
   },
   get lessonMaxAttempts() {

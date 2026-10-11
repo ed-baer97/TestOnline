@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import { assertRole } from '../../domain/access.js'
+import { readPassword } from '../../domain/accounts.js'
 import { fail } from '../../domain/errors.js'
 import { cleanLabel, sameText } from '../../domain/text.js'
 import * as organizationsRepo from '../../repositories/organizations.js'
@@ -83,8 +84,9 @@ export async function updateRegionalAdmin(actor, id, input) {
   if (!current) fail('Администратор не найден', 404)
   const region = await mustRegion(input?.regionId)
   const displayName = cleanLabel(input?.displayName, 2, 80, 'Имя')
+  const password = readPassword(input?.password)
   await usersRepo.updateRegionalAdmin(id, { displayName, regionId: region.id })
-  await changePassword(id, input?.password)
+  await changePassword(id, password)
   return profile(id)
 }
 

@@ -114,7 +114,7 @@ export function OrgStaff() {
         </label>
         <label>
           Логин
-          <input name="login" autoComplete="off" value={form.login} onChange={patch} />
+          <input name="login" autoComplete="off" placeholder="school.admin" title="3–32 символа латиницей: буквы, цифры, точка, _ или -" value={form.login} onChange={patch} />
         </label>
         <label>
           Пароль
