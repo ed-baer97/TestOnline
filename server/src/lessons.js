@@ -1,14 +1,21 @@
 import crypto from 'node:crypto'
-import fs from 'node:fs'
-import path from 'node:path'
 import { config } from './infrastructure/config.js'
 import { db } from './infrastructure/db/index.js'
+import {
+  ensureMediaDir,
+  ensureSlidesDir,
+  isMediaId,
+  mediaFileSize,
+  removeMediaFile,
+  slideFilePath,
+  videoFilePath,
+  writeMediaFile,
+} from './infrastructure/mediaStorage.js'
 import { slidesFromPptx } from './pptx.js'
 
 const VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg'])
 const MAX_VIDEO = 80 * 1024 * 1024
 const MAX_IMAGE = 1_500_000
-const UUID = /^[0-9a-f-]{36}$/i
 
 const GROUP_KEYS = ['grades_1_4', 'grades_5_9', 'grades_10_11', 'students']
 const TONES = ['sun', 'orbit', 'planets', 'earth']
@@ -158,17 +165,9 @@ export async function ensureDemoLesson() {
 // Файлы слайдов и видео лежат на диске. Раньше картинки хранились в lesson_files.data_base64;
 // при старте такие строки один раз переносятся на диск, колонка остаётся пустой.
 
-function mediaRoot() {
-  return config.mediaDir
-}
-
-function filesRoot() {
-  return path.join(mediaRoot(), 'files')
-}
-
 function filePath(fileId) {
-  if (!UUID.test(String(fileId || ''))) fail('Файл не найден', 404)
-  return path.join(filesRoot(), fileId)
+  if (!isMediaId(fileId)) fail('Файл не найден', 404)
+  return slideFilePath(fileId)
 }
 
 function fileUrl(fileId) {
@@ -177,15 +176,15 @@ function fileUrl(fileId) {
 
 async function storeFile(lessonId, mime, bytes) {
   const id = crypto.randomUUID()
-  await fs.promises.mkdir(filesRoot(), { recursive: true })
-  await fs.promises.writeFile(filePath(id), bytes)
+  await ensureSlidesDir()
+  await writeMediaFile(filePath(id), bytes)
   await db.run('INSERT INTO lesson_files (id, lesson_id, mime, data_base64) VALUES (?, ?, ?, ?)', id, lessonId, mime, '')
   return id
 }
 
 async function dropFiles(ids) {
   for (const id of ids) {
-    if (UUID.test(String(id))) await fs.promises.rm(filePath(id), { force: true })
+    if (isMediaId(id)) await removeMediaFile(filePath(id))
     await db.run('DELETE FROM lesson_files WHERE id = ?', id)
   }
 }
@@ -198,13 +197,13 @@ async function dropLessonFiles(lessonId) {
 export async function migrateLessonFiles() {
   const rows = await db.all("SELECT id FROM lesson_files WHERE data_base64 <> ''")
   if (!rows.length) return 0
-  await fs.promises.mkdir(filesRoot(), { recursive: true })
+  await ensureSlidesDir()
   let moved = 0
   for (const { id } of rows) {
-    if (!UUID.test(String(id))) continue
+    if (!isMediaId(id)) continue
     const row = await db.get('SELECT data_base64 FROM lesson_files WHERE id = ?', id)
     if (!row?.data_base64) continue
-    await fs.promises.writeFile(filePath(id), Buffer.from(row.data_base64, 'base64'))
+    await writeMediaFile(filePath(id), Buffer.from(row.data_base64, 'base64'))
     await db.run("UPDATE lesson_files SET data_base64 = '' WHERE id = ?", id)
     moved += 1
   }
@@ -382,12 +381,12 @@ export async function openLessonFile(actor, fileId) {
 }
 
 function mediaPath(lessonId) {
-  if (!UUID.test(String(lessonId || ''))) fail('Урок не найден', 404)
-  return path.join(mediaRoot(), lessonId)
+  if (!isMediaId(lessonId)) fail('Урок не найден', 404)
+  return videoFilePath(lessonId)
 }
 
 async function removeVideoFile(lessonId) {
-  await fs.promises.rm(mediaPath(lessonId), { force: true })
+  await removeMediaFile(mediaPath(lessonId))
 }
 
 function normalizeFrame(slide) {
@@ -565,8 +564,8 @@ export async function saveLessonVideo(actor, id, buffer, mime, name) {
   const bytes = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer || [])
   if (!bytes.length) fail('Файл пустой')
   if (bytes.length > MAX_VIDEO) fail('Видео больше 80 МБ')
-  await fs.promises.mkdir(mediaRoot(), { recursive: true })
-  await fs.promises.writeFile(mediaPath(id), bytes)
+  await ensureMediaDir()
+  await writeMediaFile(mediaPath(id), bytes)
   const safeName = clean(name).slice(0, 120) || 'video'
   await db.run(
     'UPDATE lessons SET video_mime = ?, video_name = ?, updated_at = ? WHERE id = ?',
@@ -583,13 +582,13 @@ export async function openLessonMedia(actor, id) {
   const row = await mustLesson(id)
   if (!(await canSee(actor, row)) || lessonFormat(row) !== 'video' || !row.video_mime) fail('Видео не найдено', 404)
   const target = mediaPath(id)
-  let stat
+  let size
   try {
-    stat = await fs.promises.stat(target)
+    size = await mediaFileSize(target)
   } catch {
     fail('Видео не найдено', 404)
   }
-  return { mime: row.video_mime, size: stat.size, path: target, name: row.video_name || 'video' }
+  return { mime: row.video_mime, size, path: target, name: row.video_name || 'video' }
 }
 
 export async function importPptx(actor, buffer) {
