@@ -29,3 +29,14 @@ export async function useTestDatabase(name) {
   process.env.MEDIA_DIR = path.join(dir, 'media')
   return dir
 }
+
+// Ведущих через API не создают, поэтому характеризационные тесты заводят их напрямую.
+export async function createHost(login, password) {
+  const { registerUser } = await import('../../src/db.js')
+  return registerUser({ login, password })
+}
+
+export async function rawDb() {
+  const { db } = await import('../../src/db.js')
+  return db
+}
