@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import ExcelJS from 'exceljs'
-import { appError } from './domain/errors.js'
+import { appError } from '../domain/errors.js'
 
 const THEME = ['FFFFFF', '000000', 'E7E6E6', '44546A', '5B9BD5', 'ED7D31', 'A9D08E', 'FFC000', '4472C4', '70AD47']
 const INDEXED = [

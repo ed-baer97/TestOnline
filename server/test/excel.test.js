@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import ExcelJS from 'exceljs'
-import { questionsFromXlsx, templateWorkbook } from '../src/excel.js'
+import { questionsFromXlsx, templateWorkbook } from '../src/services/quizExcel.js'
 import { useTestDatabase } from './helpers/db.js'
 
 await useTestDatabase('excel')
