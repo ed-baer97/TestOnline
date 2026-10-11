@@ -44,7 +44,7 @@ import { config } from './infrastructure/config.js'
 import { lanAddresses } from './infrastructure/network.js'
 import { readSession, signSession } from './infrastructure/session.js'
 import { checkLesson, createLesson, deleteLesson, getLesson, importPptx, listLessons, openLessonFile, openLessonMedia, saveLessonVideo, updateLesson } from './lessons.js'
-import { normalizeQuiz } from './domain.js'
+import { normalizeQuiz } from './domain/quiz.js'
 import { questionsFromXlsx, templateWorkbook } from './excel.js'
 import {
   advance,

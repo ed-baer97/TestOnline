@@ -1,60 +1,16 @@
 import crypto from 'node:crypto'
-import { normalizeAccount } from './domain.js'
+import { assertRole } from './domain/access.js'
+import { generatePassword, normalizeAccount, readPassword } from './domain/accounts.js'
+import { fail } from './domain/errors.js'
+import { BANDS, bandForGrade, classCaption, GROUP_KEYS, groupNumbers, groupsFromRow, readGroups } from './domain/structure.js'
+import { cleanLabel, cleanText, sameText } from './domain/text.js'
 import { config } from './infrastructure/config.js'
 import { db, isUniqueViolation } from './infrastructure/db/index.js'
 import { hashPassword } from './infrastructure/passwords.js'
 
-export const BANDS = [
-  { id: 'grades_1_4', label: '1–4 классы', grades: [1, 2, 3, 4] },
-  { id: 'grades_5_9', label: '5–9 классы', grades: [5, 6, 7, 8, 9] },
-  { id: 'grades_10_11', label: '10–11 классы', grades: [10, 11] },
-  { id: 'students', label: 'Студенты', grades: [] },
-]
-
-const GROUP_KEYS = BANDS.map((band) => band.id)
-
-function fail(message, status = 400) {
-  const error = new Error(message)
-  error.status = status
-  throw error
-}
-
-function clean(value) {
-  return String(value || '').replace(/[\u0000-\u001F]/g, '').trim().replace(/\s+/g, ' ')
-}
-
-function cleanLabel(value, min, max, label) {
-  const text = clean(value)
-  if (text.length < min || text.length > max) fail(`${label}: от ${min} до ${max} символов`)
-  return text
-}
-
-function sameText(left, right) {
-  return left.localeCompare(right, 'ru', { sensitivity: 'accent' }) === 0
-}
-
 async function count(sql, ...params) {
   const row = await db.get(sql, ...params)
   return Number(row?.n || 0)
-}
-
-function readPassword(value) {
-  if (value == null || String(value) === '') return null
-  const pass = String(value)
-  if (pass.length < 6 || pass.length > 72) fail('Пароль от 6 до 72 символов')
-  return pass
-}
-
-function readGroups(input) {
-  const source = input?.groups || input || {}
-  const groups = {}
-  for (const key of GROUP_KEYS) groups[key] = Boolean(source[key])
-  if (!GROUP_KEYS.some((key) => groups[key])) fail('Отметьте хотя бы одну группу')
-  return groups
-}
-
-function bandForGrade(grade) {
-  return BANDS.find((band) => band.grades.includes(grade)) || null
 }
 
 function mapOrg(row) {
@@ -62,21 +18,9 @@ function mapOrg(row) {
     id: row.id,
     regionId: row.region_id,
     name: row.name,
-    groups: {
-      grades_1_4: Boolean(row.grades_1_4),
-      grades_5_9: Boolean(row.grades_5_9),
-      grades_10_11: Boolean(row.grades_10_11),
-      students: Boolean(row.students),
-    },
+    groups: groupsFromRow(row),
     createdAt: row.created_at,
   }
-}
-
-function classCaption(row) {
-  if (!row) return null
-  const name = row.class_name || row.name
-  if (row.band === 'students') return `${name} · ${row.track_name || row.trackName || 'Студенты'}`
-  return `${name} · ${row.grade} класс`
 }
 
 export async function profile(id) {
@@ -147,10 +91,6 @@ export async function ensureSuperAdmin() {
     'Суперглавный',
   )
   return profile(id)
-}
-
-function assertRole(actor, ...roles) {
-  if (!actor || !roles.includes(actor.role)) fail('Недостаточно прав', 403)
 }
 
 async function insertUser({ role, login, password, displayName, regionId, organizationId, classId }) {
@@ -529,10 +469,6 @@ async function assertGroupsFree(orgId, groups) {
   if (tracks && !groups.students) fail('Нельзя снять группу, в которой уже есть классы')
 }
 
-function groupNumbers(groups) {
-  return GROUP_KEYS.map((key) => (groups[key] ? 1 : 0))
-}
-
 export async function createOrganization(actor, input) {
   assertRole(actor, 'regional')
   const name = cleanLabel(input?.name, 2, 120, 'Название организации')
@@ -812,7 +748,7 @@ export async function listLearners(actor, query = {}) {
   const limit = Math.min(500, Math.max(1, Number(query.limit) || LEARNERS_PAGE))
   const offset = Math.max(0, Number(query.offset) || 0)
   const classId = typeof query.classId === 'string' && query.classId ? query.classId : null
-  const search = clean(query.search)
+  const search = cleanText(query.search)
   const where = ["u.role = 'learner'", 'u.organization_id = ?']
   const params = [actor.organizationId]
   if (classId) {
@@ -852,13 +788,6 @@ async function orgClasses(organizationId) {
   return rows.map((row) => ({ ...row, label: classCaption(row) }))
 }
 
-function generatePassword() {
-  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789'
-  let out = ''
-  for (const byte of crypto.randomBytes(8)) out += alphabet[byte % alphabet.length]
-  return out
-}
-
 export async function learnersTemplate() {
   const ExcelJS = (await import('exceljs')).default
   const workbook = new ExcelJS.Workbook()
@@ -878,12 +807,12 @@ export async function learnersTemplate() {
 function cellText(value) {
   if (value == null) return ''
   if (typeof value === 'object') {
-    if (Array.isArray(value.richText)) return clean(value.richText.map((part) => part.text || '').join(''))
+    if (Array.isArray(value.richText)) return cleanText(value.richText.map((part) => part.text || '').join(''))
     if (value.result != null) return cellText(value.result)
-    if (typeof value.text === 'string') return clean(value.text)
+    if (typeof value.text === 'string') return cleanText(value.text)
     return ''
   }
-  return clean(value)
+  return cleanText(value)
 }
 
 export async function importLearners(actor, buffer) {

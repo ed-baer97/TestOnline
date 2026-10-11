@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import { cleanName, scorePoints } from './domain.js'
+import { cleanName, scorePoints } from './domain/quiz.js'
 import { deleteLiveRoom, readLiveRoom, saveLiveRoom, saveResult } from './db.js'
 
 const rooms = new Map()

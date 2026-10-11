@@ -12,58 +12,29 @@ import {
   writeMediaFile,
 } from './infrastructure/mediaStorage.js'
 import { slidesFromPptx } from './pptx.js'
+import { assertRole } from './domain/access.js'
+import { fail } from './domain/errors.js'
+import {
+  attemptState,
+  gradeAnswers,
+  lessonFormat,
+  MAX_VIDEO,
+  normalizeFrame,
+  normalizeQuestions,
+  presentQuestions,
+  readAnswers,
+  readDataUrl,
+  readFormat,
+  readLessonGroups,
+  VIDEO_TYPES,
+} from './domain/lesson.js'
+import { GROUP_KEYS, groupNumbers, groupsFromRow } from './domain/structure.js'
+import { cleanLabel, cleanText } from './domain/text.js'
 
-const VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg'])
-const MAX_VIDEO = 80 * 1024 * 1024
-const MAX_IMAGE = 1_500_000
-
-const GROUP_KEYS = ['grades_1_4', 'grades_5_9', 'grades_10_11', 'students']
-const TONES = ['sun', 'orbit', 'planets', 'earth']
 const DEMO_KEY = 'solar-system'
-
-function fail(message, status = 400) {
-  const error = new Error(message)
-  error.status = status
-  throw error
-}
-
-function clean(value) {
-  return String(value || '').replace(/[\u0000-\u001F]/g, '').trim().replace(/\s+/g, ' ')
-}
-
-function cleanLabel(value, min, max, label) {
-  const text = clean(value)
-  if (text.length < min || text.length > max) fail(`${label}: от ${min} до ${max} символов`)
-  return text
-}
-
-function assertRole(actor, ...roles) {
-  if (!actor || !roles.includes(actor.role)) fail('Недостаточно прав', 403)
-}
 
 function attemptLimit() {
   return config.lessonMaxAttempts
-}
-
-function readGroups(input) {
-  const source = input?.groups || {}
-  const groups = {}
-  for (const key of GROUP_KEYS) groups[key] = Boolean(source[key])
-  if (!GROUP_KEYS.some((key) => groups[key])) fail('Отметьте хотя бы одну группу')
-  return groups
-}
-
-function groupNumbers(groups) {
-  return GROUP_KEYS.map((key) => (groups[key] ? 1 : 0))
-}
-
-function mapGroups(row) {
-  return {
-    grades_1_4: Boolean(row.grades_1_4),
-    grades_5_9: Boolean(row.grades_5_9),
-    grades_10_11: Boolean(row.grades_10_11),
-    students: Boolean(row.students),
-  }
 }
 
 const DEMO_SLIDES = [
@@ -224,16 +195,12 @@ async function canSee(actor, row) {
   return Boolean(row[band])
 }
 
-function lessonFormat(row) {
-  return row.format === 'video' ? 'video' : 'slides'
-}
-
 function summary(row, best) {
   return {
     id: row.id,
     title: row.title,
     format: lessonFormat(row),
-    groups: mapGroups(row),
+    groups: groupsFromRow(row),
     slideCount: JSON.parse(row.slides).length,
     questionCount: JSON.parse(row.questions).length,
     best: best ? { score: Number(best.score), total: Number(best.total) } : null,
@@ -276,45 +243,10 @@ function presentSlides(slides) {
   })
 }
 
-function presentQuestions(questions, withKey) {
-  return questions.map((question) => {
-    const item = {
-      id: question.id,
-      text: question.text,
-      options: question.options.map((option) => ({ text: option.text })),
-    }
-    if (withKey) item.correctIndex = question.correctIndex
-    return item
-  })
-}
-
 async function mustLesson(id) {
   const row = await db.get('SELECT * FROM lessons WHERE id = ?', id)
   if (!row) fail('Урок не найден', 404)
   return row
-}
-
-function readAnswers(answers) {
-  const given = new Map()
-  for (const item of Array.isArray(answers) ? answers : []) {
-    if (typeof item?.questionId !== 'string') continue
-    const chosen = Number(item?.optionIndex ?? item?.chosen)
-    given.set(item.questionId, Number.isInteger(chosen) && chosen >= 0 ? chosen : -1)
-  }
-  return given
-}
-
-function gradeAnswers(questions, given) {
-  const results = questions.map((question) => {
-    const chosen = given.has(question.id) ? given.get(question.id) : -1
-    return {
-      questionId: question.id,
-      chosen,
-      correctIndex: question.correctIndex,
-      ok: chosen === question.correctIndex,
-    }
-  })
-  return { score: results.filter((item) => item.ok).length, total: questions.length, results }
 }
 
 async function attemptsOf(lessonId, userId) {
@@ -338,10 +270,6 @@ function presentAttempt(row, questions) {
     }
   }
   return { score: Number(row.score), total: Number(row.total), finishedAt: row.finished_at, results }
-}
-
-function attemptState(rows, max) {
-  return { used: rows.length, max, locked: rows.length >= max }
 }
 
 export async function getLesson(actor, id) {
@@ -389,34 +317,6 @@ async function removeVideoFile(lessonId) {
   await removeMediaFile(mediaPath(lessonId))
 }
 
-function normalizeFrame(slide) {
-  const title = cleanLabel(slide?.title, 2, 80, 'Заголовок слайда')
-  const kicker = clean(slide?.kicker)
-  if (kicker.length > 40) fail('Подпись слайда длиннее 40 символов')
-  const source = Array.isArray(slide?.lines) ? slide.lines : []
-  const lines = source.map((line) => clean(line)).filter(Boolean)
-  if (lines.length < 1 || lines.length > 6) fail('На слайде от 1 до 6 строк')
-  if (lines.some((line) => line.length > 160)) fail('Строка слайда длиннее 160 символов')
-  const tone = TONES.includes(slide?.tone) ? slide.tone : 'orbit'
-  const id = typeof slide?.id === 'string' && slide.id ? slide.id : crypto.randomUUID()
-  return { id, kind: 'frame', tone, kicker, title, lines }
-}
-
-function readDataUrl(value) {
-  const match = /^data:image\/(png|jpeg|jpg|webp);base64,([A-Za-z0-9+/=\s]+)$/.exec(String(value || ''))
-  if (!match) fail('Слайд: нужна картинка PNG, JPEG или WebP')
-  const mime = match[1] === 'jpg' ? 'image/jpeg' : `image/${match[1]}`
-  let bytes
-  try {
-    bytes = Buffer.from(match[2].replace(/\s/g, ''), 'base64')
-  } catch {
-    fail('Слайд: картинка повреждена')
-  }
-  if (!bytes.length) fail('Слайд: картинка повреждена')
-  if (bytes.length > MAX_IMAGE) fail('Картинка слайда больше 1,5 МБ после сжатия')
-  return { mime, bytes }
-}
-
 async function normalizeSlides(slides, lessonId) {
   if (!Array.isArray(slides) || slides.length < 1 || slides.length > 20) {
     fail('Нужен хотя бы один слайд, максимум 20')
@@ -444,7 +344,7 @@ async function normalizeSlides(slides, lessonId) {
       continue
     }
     if (slide?.kind !== 'image') fail(`${label}: неизвестный вид слайда`)
-    const caption = clean(slide?.caption)
+    const caption = cleanText(slide?.caption)
     if (caption.length > 120) fail(`${label}: подпись длиннее 120 символов`)
     let fileId = slide?.fileId
     if (slide?.dataUrl) {
@@ -472,44 +372,9 @@ async function claimImportedFile(fileId, lessonId, owned) {
   return fileId
 }
 
-function normalizeQuestions(questions) {
-  if (!Array.isArray(questions) || questions.length < 1 || questions.length > 20) {
-    fail('Нужен хотя бы один вопрос, максимум 20')
-  }
-  return questions.map((question, index) => {
-    const label = `Вопрос ${index + 1}`
-    const text = clean(question?.text)
-    if (text.length < 2 || text.length > 500) fail(`${label}: текст от 2 до 500 символов`)
-    const options = []
-    let correctIndex = -1
-    const source = Array.isArray(question?.options) ? question.options : []
-    source.forEach((option, optionIndex) => {
-      const optionText = clean(option?.text)
-      if (!optionText) return
-      if (optionIndex === Number(question?.correctIndex)) correctIndex = options.length
-      options.push({ text: optionText })
-    })
-    if (options.length < 2 || options.length > 4) fail(`${label}: от 2 до 4 вариантов`)
-    if (options.some((option) => option.text.length > 400)) fail(`${label}: вариант длиннее 400 символов`)
-    if (correctIndex < 0) fail(`${label}: отметьте правильный ответ`)
-    return {
-      id: typeof question?.id === 'string' && question.id ? question.id : crypto.randomUUID(),
-      text,
-      options,
-      correctIndex,
-    }
-  })
-}
-
-function readFormat(input) {
-  if (input?.format == null || input.format === 'slides') return 'slides'
-  if (input.format === 'video') return 'video'
-  fail('Неизвестный вид урока')
-}
-
 async function saveLesson(id, input, seedKey) {
   const title = cleanLabel(input?.title, 2, 80, 'Название урока')
-  const groups = readGroups(input)
+  const groups = readLessonGroups(input)
   const format = readFormat(input)
   const questions = normalizeQuestions(input?.questions)
   const slides = format === 'video' ? [] : await normalizeSlides(input?.slides, id)
@@ -566,7 +431,7 @@ export async function saveLessonVideo(actor, id, buffer, mime, name) {
   if (bytes.length > MAX_VIDEO) fail('Видео больше 80 МБ')
   await ensureMediaDir()
   await writeMediaFile(mediaPath(id), bytes)
-  const safeName = clean(name).slice(0, 120) || 'video'
+  const safeName = cleanText(name).slice(0, 120) || 'video'
   await db.run(
     'UPDATE lessons SET video_mime = ?, video_name = ?, updated_at = ? WHERE id = ?',
     type,

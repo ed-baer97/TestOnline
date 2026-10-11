@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { cleanText } from './text.js'
 
 export const COLORS = ['red', 'blue', 'yellow', 'green']
 export const TIME_LIMITS = [10, 20, 30, 60]
@@ -7,10 +8,6 @@ export function scorePoints(elapsedMs, timeLimitSec) {
   const total = timeLimitSec * 1000
   const elapsed = Math.min(Math.max(Number(elapsedMs) || 0, 0), total)
   return Math.round((1 - elapsed / total / 2) * 1000)
-}
-
-function cleanText(value) {
-  return String(value || '').replace(/[\u0000-\u001F]/g, '').trim().replace(/\s+/g, ' ')
 }
 
 export function normalizeQuiz(input) {
@@ -66,16 +63,4 @@ export function cleanName(value) {
   const name = cleanText(value)
   if (name.length < 2 || name.length > 20) return null
   return name
-}
-
-export function normalizeAccount({ login, password }) {
-  const name = cleanText(login)
-  if (!/^[\p{L}\p{N}][\p{L}\p{N}._-]{2,31}$/u.test(name)) {
-    throw new Error('Логин: 3–32 символа, буквы, цифры, точка, _ или -')
-  }
-  const pass = String(password ?? '')
-  if (pass.length < 6 || pass.length > 72) {
-    throw new Error('Пароль от 6 до 72 символов')
-  }
-  return { login: name, password: pass }
 }
