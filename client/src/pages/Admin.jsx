@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { api } from '../api/index.js'
-import { AdminFrame } from './AdminFrame.jsx'
+import { AdminFrame } from '../components/layout/AdminFrame.jsx'
 import { Classes, Learners } from './admin/OrgPanels.jsx'
 import { Organizations, OrgStaff } from './admin/RegionalPanels.jsx'
 import { LessonEditor, MaterialList } from './admin/Materials.jsx'
 import { Regions, RegionalStaff } from './admin/SuperPanels.jsx'
-import { DashboardView } from './admin/ui.jsx'
+import { DashboardView } from '../components/admin/ui.jsx'
 import LessonView from './LessonView.jsx'
 
 function tabsFor(role) {

@@ -1,7 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api/index.js'
-import { TopbarExtra } from '../topbar.jsx'
+import { TopbarExtra } from '../components/layout/topbar.jsx'
+import { FitLegend } from '../components/lesson/FitLegend.jsx'
+import { Slide } from '../components/lesson/Slide.jsx'
 
 export default function LessonView({ backTo }) {
   const { id } = useParams()
@@ -216,58 +218,5 @@ export default function LessonView({ backTo }) {
         </form>
       )}
     </section>
-  )
-}
-
-function FitLegend({ children }) {
-  const ref = useRef(null)
-  useLayoutEffect(() => {
-    const el = ref.current
-    const parent = el?.parentElement
-    if (!el || !parent) return undefined
-    const fit = () => {
-      const available = parent.clientWidth
-      if (el.dataset.available === String(available)) return
-      el.style.width = '100%'
-      const max = el.offsetWidth
-      const height = el.offsetHeight
-      let low = 0
-      let high = max
-      while (low + 1 < high) {
-        const mid = Math.floor((low + high) / 2)
-        el.style.width = `${mid}px`
-        if (el.offsetHeight > height) low = mid
-        else high = mid
-      }
-      el.style.width = `${high}px`
-      el.dataset.available = String(available)
-    }
-    fit()
-    const observer = new ResizeObserver(fit)
-    observer.observe(parent)
-    return () => observer.disconnect()
-  }, [children])
-  return <legend ref={ref}>{children}</legend>
-}
-
-function Slide({ slide }) {
-  const picture = slide.imageUrl || slide.dataUrl
-  if (slide.kind === 'image') {
-    return (
-      <figure className="slide slide-image">
-        {picture && <img src={picture} alt={slide.caption || 'Слайд'} />}
-        {slide.caption && <figcaption>{slide.caption}</figcaption>}
-      </figure>
-    )
-  }
-  return (
-    <article className={`slide ${slide.tone || 'orbit'}`}>
-      {slide.kicker && <p className="slide-kicker">{slide.kicker}</p>}
-      <h2>{slide.title}</h2>
-      <ul>
-        {slide.lines.map((line) => <li key={line}>{line}</li>)}
-      </ul>
-      {picture && <img className="slide-picture" src={picture} alt="" />}
-    </article>
   )
 }

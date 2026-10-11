@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../../api/index.js'
 import { newId } from '../../lib/ids.js'
 import { EMPTY_GROUPS, groupLabels } from '../../lib/bands.js'
-import { GroupChecks, Notice } from './ui.jsx'
+import { GroupChecks, Notice } from '../../components/admin/ui.jsx'
 
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg']
 

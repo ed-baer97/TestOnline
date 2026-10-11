@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api/index.js'
 import { EMPTY_GROUPS, groupLabels } from '../../lib/bands.js'
-import { GroupChecks, Notice } from './ui.jsx'
+import { GroupChecks, Notice } from '../../components/admin/ui.jsx'
 
 export function Organizations() {
   const [organizations, setOrganizations] = useState(null)

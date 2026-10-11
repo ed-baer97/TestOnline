@@ -1,25 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/index.js'
-import { TopbarSlot, TopbarSlots } from '../topbar.jsx'
+import { LearnFrame } from '../components/layout/LearnFrame.jsx'
 import LessonView from './LessonView.jsx'
-
-export function LearnFrame({ onLogout, children }) {
-  return (
-    <TopbarSlots>
-      <main className="sheet admin-sheet">
-        <header className="topbar">
-          <Link className="brand" to="/learn">TestOnline</Link>
-          <div className="top-actions">
-            <TopbarSlot />
-            <button className="ghost" type="button" onClick={onLogout}>Выйти</button>
-          </div>
-        </header>
-        {children}
-      </main>
-    </TopbarSlots>
-  )
-}
 
 export default function LearnerHome({ onLogout }) {
   const [me, setMe] = useState(null)

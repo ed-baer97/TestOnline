@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useCountdown } from '../state/countdown.js'
 import { usePlayerRoom } from '../state/playerRoom.js'
-import { COLOR_NAMES, SHAPES, Shape } from '../shapes.jsx'
+import { COLOR_NAMES, SHAPES, Shape } from '../components/shapes.jsx'
 
 export default function Play() {
   const { code } = useParams()

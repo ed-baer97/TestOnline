@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api/index.js'
-import { Notice } from './ui.jsx'
+import { Notice } from '../../components/admin/ui.jsx'
 
 export function Classes() {
   const [tree, setTree] = useState(null)

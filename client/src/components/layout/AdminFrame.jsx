@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
-import { roleLabel } from '../lib/roles.js'
-import { TopbarSlot, TopbarSlots } from '../topbar.jsx'
+import { roleLabel } from '../../lib/roles.js'
+import { TopbarSlot, TopbarSlots } from './topbar.jsx'
 
 export function AdminFrame({ me, onLogout, tabs, children }) {
   const scope = me.regionName || me.organizationName || 'Вся платформа'

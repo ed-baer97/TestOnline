@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/index.js'
+import { COLOR_NAMES } from '../components/shapes.jsx'
 import { newId } from '../lib/ids.js'
 import { saveHostToken } from '../state/roomTokens.js'
 
@@ -158,7 +159,7 @@ export default function Editor({ onLogout }) {
           </label>
           <div className="option-edit">
             {question.options.map((option, optionIndex) => (
-              <label key={optionIndex} className={`option-line ${COLOR_CLASS(optionIndex)}`}>
+              <label key={optionIndex} className={`option-line ${COLOR_NAMES[optionIndex]}`}>
                 <input
                   type="radio"
                   name={`correct-${question.id}`}
@@ -180,8 +181,4 @@ export default function Editor({ onLogout }) {
       <button className="ghost add" type="button" onClick={() => setQuestions((current) => [...current, blankQuestion()])}>Добавить вопрос</button>
     </main>
   )
-}
-
-function COLOR_CLASS(index) {
-  return ['red', 'blue', 'yellow', 'green'][index]
 }

@@ -1,4 +1,4 @@
-import { BarChart } from '../../charts.jsx'
+import { BarChart } from '../charts.jsx'
 import { BANDS } from '../../lib/bands.js'
 
 export function Notice({ error, notice }) {

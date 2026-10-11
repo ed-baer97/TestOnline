@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api/index.js'
 import { saveHostToken } from '../state/roomTokens.js'
-import { HostFrame } from './HostFrame.jsx'
+import { HostFrame } from '../components/layout/HostFrame.jsx'
 
 export default function Quizzes({ onLogout }) {
   const navigate = useNavigate()
