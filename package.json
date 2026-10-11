@@ -4,12 +4,17 @@
   "scripts": {
     "setup": "npm install && npm install --prefix server && npm install --prefix client",
     "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
-    "test": "npm test --prefix server",
+    "test": "npm test --prefix server && npm test --prefix client && node --test \"test/*.test.mjs\"",
     "build": "npm run build --prefix client",
+    "lint": "eslint .",
     "start": "npm run start --prefix server"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^9.1.2",
+    "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0"
   },
   "engines": {
     "node": "22.x"

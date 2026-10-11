@@ -1,34 +1,9 @@
-import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { api } from '../api.js'
-import { homeFor } from '../roles.js'
+import { useLogin } from '../state/session.js'
 
 export default function Login() {
   const navigate = useNavigate()
-  const [login, setLogin] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [pending, setPending] = useState(false)
-
-  useEffect(() => {
-    api.me().then((data) => {
-      if (data.ok) navigate(homeFor(data.role), { replace: true })
-    }).catch(() => {})
-  }, [navigate])
-
-  async function submit(event) {
-    event.preventDefault()
-    setError('')
-    setPending(true)
-    try {
-      const data = await api.login(login, password)
-      navigate(homeFor(data.role))
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setPending(false)
-    }
-  }
+  const { login, setLogin, password, setPassword, error, pending, submit } = useLogin(navigate)
 
   return (
     <main className="auth">

@@ -1,49 +1,28 @@
-import { useEffect, useState } from 'react'
-import { api } from '../../api.js'
-import { EMPTY_GROUPS, groupLabels } from '../../bands.js'
-import { GroupChecks, Notice } from './ui.jsx'
+import { useState } from 'react'
+import { GroupChecks, Notice } from '../../components/admin/ui.jsx'
+import { groupLabels } from '../../lib/bands.js'
+import { useOrganizations, useOrgStaff } from '../../state/admin/organizations.js'
 
 export function Organizations() {
-  const [organizations, setOrganizations] = useState(null)
-  const [name, setName] = useState('')
-  const [groups, setGroups] = useState(EMPTY_GROUPS)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [editing, setEditing] = useState(null)
+  const {
+    organizations,
+    name,
+    setName,
+    groups,
+    setGroups,
+    error,
+    setError,
+    notice,
+    editing,
+    setEditing,
+    create,
+    remove,
+    saveOrganization,
+    organizationSaved,
+  } = useOrganizations()
 
-  function load() {
-    return api.organizations().then((data) => setOrganizations(data.organizations))
-  }
-
-  useEffect(() => {
-    load().catch((err) => setError(err.message))
-  }, [])
-
-  async function create(event) {
-    event.preventDefault()
-    setError('')
-    setNotice('')
-    try {
-      await api.createOrganization({ name, groups })
-      setName('')
-      setGroups(EMPTY_GROUPS)
-      setNotice('Организация создана')
-      await load()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function remove(org) {
-    if (!window.confirm(`Удалить организацию «${org.name}»?`)) return
-    setError('')
-    setNotice('')
-    try {
-      await api.deleteOrganization(org.id)
-      await load()
-    } catch (err) {
-      setError(err.message)
-    }
+  function confirmRemove(org) {
+    if (window.confirm(`Удалить организацию «${org.name}»?`)) remove(org)
   }
 
   return (
@@ -72,17 +51,14 @@ export function Organizations() {
                 <button className="ghost" type="button" onClick={() => setEditing(editing === org.id ? null : org.id)}>
                   {editing === org.id ? 'Закрыть' : 'Изменить'}
                 </button>
-                <button className="ghost" type="button" onClick={() => remove(org)}>Удалить</button>
+                <button className="ghost" type="button" onClick={() => confirmRemove(org)}>Удалить</button>
               </div>
             </header>
             {editing === org.id && (
               <OrgEditor
                 org={org}
-                onSaved={async () => {
-                  setNotice('Организация сохранена')
-                  setEditing(null)
-                  await load()
-                }}
+                onSave={(body) => saveOrganization(org.id, body)}
+                onSaved={organizationSaved}
                 onError={setError}
               />
             )}
@@ -93,7 +69,7 @@ export function Organizations() {
   )
 }
 
-function OrgEditor({ org, onSaved, onError }) {
+function OrgEditor({ org, onSave, onSaved, onError }) {
   const [name, setName] = useState(org.name)
   const [groups, setGroups] = useState(org.groups)
 
@@ -101,7 +77,7 @@ function OrgEditor({ org, onSaved, onError }) {
     event.preventDefault()
     onError('')
     try {
-      await api.updateOrganization(org.id, { name, groups })
+      await onSave({ name, groups })
       await onSaved()
     } catch (err) {
       onError(err.message)
@@ -121,56 +97,10 @@ function OrgEditor({ org, onSaved, onError }) {
 }
 
 export function OrgStaff() {
-  const [admins, setAdmins] = useState(null)
-  const [organizations, setOrganizations] = useState([])
-  const [form, setForm] = useState({ displayName: '', login: '', password: '', organizationId: '' })
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
+  const { admins, organizations, form, error, setError, notice, load, patch, create, remove, saveAdmin } = useOrgStaff()
 
-  function load() {
-    return Promise.all([api.orgAdmins(), api.organizations()]).then(([people, orgs]) => {
-      setAdmins(people.admins)
-      setOrganizations(orgs.organizations)
-      setForm((current) => ({
-        ...current,
-        organizationId: current.organizationId || orgs.organizations[0]?.id || '',
-      }))
-    })
-  }
-
-  useEffect(() => {
-    load().catch((err) => setError(err.message))
-  }, [])
-
-  function patch(event) {
-    const { name, value } = event.target
-    setForm((current) => ({ ...current, [name]: value }))
-  }
-
-  async function create(event) {
-    event.preventDefault()
-    setError('')
-    setNotice('')
-    try {
-      await api.createOrgAdmin(form)
-      setForm((current) => ({ ...current, displayName: '', login: '', password: '' }))
-      setNotice('Администратор создан. Передайте ему логин и пароль.')
-      await load()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function remove(person) {
-    if (!window.confirm(`Удалить администратора ${person.displayName}?`)) return
-    setError('')
-    setNotice('')
-    try {
-      await api.deleteOrgAdmin(person.id)
-      await load()
-    } catch (err) {
-      setError(err.message)
-    }
+  function confirmRemove(person) {
+    if (window.confirm(`Удалить администратора ${person.displayName}?`)) remove(person)
   }
 
   return (
@@ -205,8 +135,9 @@ export function OrgStaff() {
             key={person.id}
             person={person}
             organizations={organizations}
+            onSave={(body) => saveAdmin(person.id, body)}
             onChanged={load}
-            onDelete={() => remove(person)}
+            onDelete={() => confirmRemove(person)}
             onError={setError}
           />
         ))}
@@ -215,7 +146,7 @@ export function OrgStaff() {
   )
 }
 
-function OrgAdminRow({ person, organizations, onChanged, onDelete, onError }) {
+function OrgAdminRow({ person, organizations, onSave, onChanged, onDelete, onError }) {
   const [displayName, setDisplayName] = useState(person.displayName)
   const [organizationId, setOrganizationId] = useState(person.organizationId)
   const [password, setPassword] = useState('')
@@ -224,7 +155,7 @@ function OrgAdminRow({ person, organizations, onChanged, onDelete, onError }) {
     event.preventDefault()
     onError('')
     try {
-      await api.updateOrgAdmin(person.id, { displayName, organizationId, password })
+      await onSave({ displayName, organizationId, password })
       setPassword('')
       await onChanged()
     } catch (err) {

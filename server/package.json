@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "test": "node --test src/logic.test.js src/excel.test.js src/stats.test.js src/flow.test.js src/admin.test.js src/lessons.test.js"
+    "test": "node --test \"test/*.test.js\""
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",

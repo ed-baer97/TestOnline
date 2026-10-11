@@ -1,40 +1,10 @@
-import { useEffect, useState } from 'react'
-import { api } from '../../api.js'
-import { Notice } from './ui.jsx'
+import { useState } from 'react'
+import { Notice } from '../../components/admin/ui.jsx'
+import { useLearners } from '../../state/admin/learners.js'
+import { useClassTree } from '../../state/admin/structure.js'
 
 export function Classes() {
-  const [tree, setTree] = useState(null)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [trackName, setTrackName] = useState('')
-
-  function load() {
-    return api.structure().then(setTree)
-  }
-
-  useEffect(() => {
-    load().catch((err) => setError(err.message))
-  }, [])
-
-  async function run(action) {
-    setError('')
-    setNotice('')
-    try {
-      await action()
-      await load()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function addTrack(event) {
-    event.preventDefault()
-    await run(async () => {
-      await api.createTrack({ name: trackName })
-      setTrackName('')
-      setNotice('Курс создан')
-    })
-  }
+  const { tree, error, notice, trackName, setTrackName, run, addTrack, actions } = useClassTree()
 
   return (
     <section className="stack">
@@ -53,9 +23,9 @@ export function Classes() {
                     <span className="muted"> {grade.classes.length ? grade.classes.map((item) => item.name).join(', ') : 'нет классов'}</span>
                   </summary>
                   {grade.classes.map((item) => (
-                    <ClassLine key={item.id} item={item} onRun={run} />
+                    <ClassLine key={item.id} item={item} actions={actions} onRun={run} />
                   ))}
-                  <AddLine placeholder={`${grade.grade}а`} onAdd={(name) => api.createClass({ grade: grade.grade, name })} onRun={run} />
+                  <AddLine placeholder={`${grade.grade}а`} onAdd={(name) => actions.createClass({ grade: grade.grade, name })} onRun={run} />
                 </details>
               ))}
             </div>
@@ -73,11 +43,11 @@ export function Classes() {
                       {track.name}
                       <span className="muted"> {track.classes.length ? track.classes.map((item) => item.name).join(', ') : 'нет групп'}</span>
                     </summary>
-                    <TrackName track={track} onRun={run} />
+                    <TrackName track={track} actions={actions} onRun={run} />
                     {track.classes.map((item) => (
-                      <ClassLine key={item.id} item={item} onRun={run} />
+                      <ClassLine key={item.id} item={item} actions={actions} onRun={run} />
                     ))}
-                    <AddLine placeholder="ИС-21" onAdd={(name) => api.createClass({ trackId: track.id, name })} onRun={run} />
+                    <AddLine placeholder="ИС-21" onAdd={(name) => actions.createClass({ trackId: track.id, name })} onRun={run} />
                   </details>
                 ))}
               </div>
@@ -108,7 +78,7 @@ function AddLine({ placeholder, onAdd, onRun }) {
   )
 }
 
-function ClassLine({ item, onRun }) {
+function ClassLine({ item, actions, onRun }) {
   const [name, setName] = useState(item.name)
 
   return (
@@ -117,7 +87,7 @@ function ClassLine({ item, onRun }) {
         className="add-line"
         onSubmit={(event) => {
           event.preventDefault()
-          onRun(() => api.updateClass(item.id, { name }))
+          onRun(() => actions.updateClass(item.id, { name }))
         }}
       >
         <input aria-label={`Класс ${item.name}`} value={name} onChange={(event) => setName(event.target.value)} />
@@ -128,7 +98,7 @@ function ClassLine({ item, onRun }) {
         className="ghost"
         type="button"
         onClick={() => {
-          if (window.confirm(`Удалить «${item.name}»?`)) onRun(() => api.deleteClass(item.id))
+          if (window.confirm(`Удалить «${item.name}»?`)) onRun(() => actions.deleteClass(item.id))
         }}
       >
         Удалить
@@ -137,7 +107,7 @@ function ClassLine({ item, onRun }) {
   )
 }
 
-function TrackName({ track, onRun }) {
+function TrackName({ track, actions, onRun }) {
   const [name, setName] = useState(track.name)
 
   return (
@@ -145,7 +115,7 @@ function TrackName({ track, onRun }) {
       className="add-line"
       onSubmit={(event) => {
         event.preventDefault()
-        onRun(() => api.updateTrack(track.id, { name }))
+        onRun(() => actions.updateTrack(track.id, { name }))
       }}
     >
       <input aria-label="Название курса" value={name} onChange={(event) => setName(event.target.value)} />
@@ -154,7 +124,7 @@ function TrackName({ track, onRun }) {
         className="ghost"
         type="button"
         onClick={() => {
-          if (window.confirm(`Удалить курс «${track.name}»?`)) onRun(() => api.deleteTrack(track.id))
+          if (window.confirm(`Удалить курс «${track.name}»?`)) onRun(() => actions.deleteTrack(track.id))
         }}
       >
         Удалить курс
@@ -163,121 +133,33 @@ function TrackName({ track, onRun }) {
   )
 }
 
-function classGroups(sections) {
-  const groups = []
-  for (const section of sections || []) {
-    if (section.kind === 'school') {
-      for (const grade of section.grades) {
-        if (grade.classes.length) groups.push({ label: grade.label, classes: grade.classes })
-      }
-    } else {
-      for (const track of section.tracks) {
-        if (track.classes.length) groups.push({ label: track.name, classes: track.classes })
-      }
-    }
-  }
-  return groups
-}
-
-const PAGE = 100
-
 export function Learners() {
-  const [learners, setLearners] = useState(null)
-  const [total, setTotal] = useState(0)
-  const [groups, setGroups] = useState([])
-  const [filter, setFilter] = useState({ classId: '', search: '' })
-  const [searchText, setSearchText] = useState('')
-  const [form, setForm] = useState({ displayName: '', login: '', password: '', classId: '' })
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [imported, setImported] = useState(null)
-  const [importing, setImporting] = useState(false)
+  const {
+    learners,
+    total,
+    groups,
+    filter,
+    setFilter,
+    searchText,
+    setSearchText,
+    form,
+    error,
+    setError,
+    notice,
+    imported,
+    setImported,
+    importing,
+    loadPage,
+    load,
+    patch,
+    create,
+    remove,
+    upload,
+    saveLearner,
+  } = useLearners()
 
-  function loadGroups() {
-    return api.structure().then((tree) => {
-      const nextGroups = classGroups(tree.sections)
-      const first = nextGroups[0]?.classes[0]?.id || ''
-      setGroups(nextGroups)
-      setForm((current) => ({ ...current, classId: current.classId || first }))
-    })
-  }
-
-  function loadPage(offset = 0) {
-    return api.learners({ ...filter, offset, limit: PAGE }).then((data) => {
-      setTotal(data.total)
-      setLearners((current) => (offset > 0 && current ? [...current, ...data.learners] : data.learners))
-    })
-  }
-
-  function load() {
-    return Promise.all([loadGroups(), loadPage(0)])
-  }
-
-  useEffect(() => {
-    loadGroups().catch((err) => setError(err.message))
-  }, [])
-
-  useEffect(() => {
-    loadPage(0).catch((err) => setError(err.message))
-  }, [filter])
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setFilter((current) => (current.search === searchText.trim() ? current : { ...current, search: searchText.trim() }))
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [searchText])
-
-  function patch(event) {
-    const { name, value } = event.target
-    setForm((current) => ({ ...current, [name]: value }))
-  }
-
-  async function create(event) {
-    event.preventDefault()
-    setError('')
-    setNotice('')
-    try {
-      await api.createLearner(form)
-      setForm((current) => ({ ...current, displayName: '', login: '', password: '' }))
-      setNotice('Тестируемый создан. Передайте логин и пароль.')
-      await load()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function remove(person) {
-    if (!window.confirm(`Удалить ${person.displayName}?`)) return
-    setError('')
-    setNotice('')
-    try {
-      await api.deleteLearner(person.id)
-      await load()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  async function upload(event) {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    setError('')
-    setNotice('')
-    setImported(null)
-    setImporting(true)
-    try {
-      const data = await api.importLearners(file)
-      setImported(data)
-      if (data.created) setNotice(`Создано тестируемых: ${data.created}. Сохраните таблицу с паролями: повторно их увидеть нельзя.`)
-      else if (!data.errors?.length) setNotice('В файле не нашлось новых тестируемых')
-      await load()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setImporting(false)
-    }
+  function confirmRemove(person) {
+    if (window.confirm(`Удалить ${person.displayName}?`)) remove(person)
   }
 
   function downloadPasswords() {
@@ -392,7 +274,7 @@ export function Learners() {
       </div>
       <div className="stack">
         {learners?.map((person) => (
-          <LearnerRow key={person.id} person={person} groups={groups} onChanged={load} onDelete={() => remove(person)} onError={setError} />
+          <LearnerRow key={person.id} person={person} groups={groups} onSave={(body) => saveLearner(person.id, body)} onChanged={load} onDelete={() => confirmRemove(person)} onError={setError} />
         ))}
       </div>
       {learners && shown < total && (
@@ -404,7 +286,7 @@ export function Learners() {
   )
 }
 
-function LearnerRow({ person, groups, onChanged, onDelete, onError }) {
+function LearnerRow({ person, groups, onSave, onChanged, onDelete, onError }) {
   const [displayName, setDisplayName] = useState(person.displayName)
   const [classId, setClassId] = useState(person.classId)
   const [password, setPassword] = useState('')
@@ -413,7 +295,7 @@ function LearnerRow({ person, groups, onChanged, onDelete, onError }) {
     event.preventDefault()
     onError('')
     try {
-      await api.updateLearner(person.id, { displayName, classId, password })
+      await onSave({ displayName, classId, password })
       setPassword('')
       await onChanged()
     } catch (err) {
