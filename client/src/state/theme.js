@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 
+// Выбор темы хранится в localStorage под ключом theme; index.html читает его до загрузки скриптов.
 const STORAGE_KEY = 'theme'
 
 export function currentTheme() {
@@ -13,7 +14,7 @@ function paint(theme) {
   if (meta) meta.setAttribute('content', theme === 'light' ? '#f4f8fc' : '#071422')
 }
 
-export function ThemeToggle() {
+export function useTheme() {
   const [theme, setTheme] = useState(currentTheme)
 
   useEffect(() => {
@@ -26,16 +27,5 @@ export function ThemeToggle() {
     setTheme(next)
   }
 
-  const light = theme === 'light'
-  return (
-    <button
-      type="button"
-      className="theme-toggle"
-      onClick={toggle}
-      aria-pressed={light}
-      aria-label={light ? 'Включить тёмную тему' : 'Включить светлую тему'}
-    >
-      {light ? 'Тёмная' : 'Светлая'}
-    </button>
-  )
+  return { theme, toggle }
 }

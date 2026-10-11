@@ -1,65 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api } from '../api/index.js'
-import { newId } from '../lib/ids.js'
-import { forgetPlayerToken, readPlayerToken, savePlayerToken } from '../state/roomTokens.js'
+import { useCountdown } from '../state/countdown.js'
+import { usePlayerRoom } from '../state/playerRoom.js'
 import { COLOR_NAMES, SHAPES, Shape } from '../shapes.jsx'
-import { useCountdown } from '../useCountdown.js'
 
 export default function Play() {
   const { code } = useParams()
-  const [info, setInfo] = useState(null)
-  const [missing, setMissing] = useState(false)
-  const [name, setName] = useState('')
-  const [error, setError] = useState('')
-  const [state, setState] = useState(null)
-  const [online, setOnline] = useState(true)
-  const [identity, setIdentity] = useState(() => readPlayerToken(code) || '')
+  const { info, missing, name, setName, error, state, online, identity, enter, answer } = usePlayerRoom(code)
   const seconds = useCountdown(state?.endsAt, state?.serverNow)
-
-  useEffect(() => {
-    api.room(code).then(setInfo).catch(() => setMissing(true))
-  }, [code])
-
-  useEffect(() => {
-    if (!identity) return undefined
-    let stopped = false
-    api.joinRoom(code, { name, playerToken: identity }).catch((err) => {
-      if (stopped) return
-      forgetPlayerToken(code)
-      setIdentity('')
-      setError(err.message)
-    })
-    async function pull() {
-      try {
-        const next = await api.playRoom(code, identity)
-        if (stopped) return
-        setState(next)
-        setOnline(true)
-      } catch {
-        if (!stopped) setOnline(false)
-      }
-    }
-    pull()
-    const timer = setInterval(pull, 1000)
-    return () => {
-      stopped = true
-      clearInterval(timer)
-    }
-  }, [code, identity, name])
-
-  function enter(event) {
-    event.preventDefault()
-    const nickname = name.trim()
-    if (nickname.length < 2) {
-      setError('Имя от 2 до 20 символов')
-      return
-    }
-    const token = newId()
-    savePlayerToken(code, token)
-    setError('')
-    setIdentity(token)
-  }
 
   if (missing) {
     return (
@@ -92,7 +40,7 @@ export default function Play() {
 
   if (!state) return <p className="center muted">{error || 'Подключаемся…'}</p>
 
-  return <PlayerStage state={state} seconds={seconds} online={online} onAnswer={(optionIndex) => api.answerRoom(code, identity, optionIndex)} />
+  return <PlayerStage state={state} seconds={seconds} online={online} onAnswer={answer} />
 }
 
 function PlayerStage({ state, seconds, online, onAnswer }) {

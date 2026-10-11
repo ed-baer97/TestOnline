@@ -1,81 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import QRCode from 'qrcode'
-import { api } from '../api/index.js'
 import { formatCode } from '../lib/format.js'
-import { readHostToken } from '../state/roomTokens.js'
+import { useCountdown } from '../state/countdown.js'
+import { useHostRoom, useJoinLink } from '../state/hostRoom.js'
 import { COLOR_NAMES, SHAPES, Shape } from '../shapes.jsx'
-import { useCountdown } from '../useCountdown.js'
 
 export default function HostRoom() {
   const { code } = useParams()
-  const [state, setState] = useState(null)
-  const [error, setError] = useState('')
-  const [online, setOnline] = useState(true)
-  const [qr, setQr] = useState('')
-  const [joinUrl, setJoinUrl] = useState('')
+  const { state, error, online, advance } = useHostRoom(code)
+  const { joinUrl, qr } = useJoinLink(code)
   const seconds = useCountdown(state?.endsAt, state?.serverNow)
-
-  useEffect(() => {
-    const token = readHostToken(code)
-    if (!token) {
-      setError('Откройте комнату кнопкой «Запустить» в панели ведущего.')
-      return undefined
-    }
-    let stopped = false
-    async function pull() {
-      try {
-        const next = await api.hostRoom(code, token)
-        if (stopped) return
-        setState(next)
-        setOnline(true)
-        setError('')
-      } catch (err) {
-        if (stopped) return
-        setOnline(false)
-        setError(err.message)
-      }
-    }
-    pull()
-    const timer = setInterval(pull, 1000)
-    return () => {
-      stopped = true
-      clearInterval(timer)
-    }
-  }, [code])
-
-  useEffect(() => {
-    let ignore = false
-    api.network().then((data) => {
-      if (ignore) return
-      const local = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
-      const ip = data.addresses?.[0]
-      const origin = local && ip ? `${location.protocol}//${ip}${location.port ? `:${location.port}` : ''}` : location.origin
-      setJoinUrl(`${origin}/play/${code}`)
-    }).catch(() => setJoinUrl(`${location.origin}/play/${code}`))
-    return () => {
-      ignore = true
-    }
-  }, [code])
-
-  useEffect(() => {
-    if (!joinUrl) return undefined
-    QRCode.toDataURL(joinUrl, { margin: 1, width: 360, color: { dark: '#17191f', light: '#ffffff' } })
-      .then(setQr)
-      .catch(() => setQr(''))
-    return undefined
-  }, [joinUrl])
-
-  async function advance() {
-    const token = readHostToken(code)
-    if (!token || state?.status === 'podium') return
-    try {
-      setState(await api.advanceRoom(code, token))
-      setError('')
-    } catch (err) {
-      if (err.message !== 'Сейчас это действие недоступно') setError(err.message)
-    }
-  }
 
   useEffect(() => {
     const onKey = (event) => {

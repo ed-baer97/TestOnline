@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
-import { api } from './api/index.js'
+import { ThemeToggle } from './components/ThemeToggle.jsx'
 import { homeFor } from './lib/roles.js'
 import Admin from './pages/Admin.jsx'
 import Dashboard from './pages/Dashboard.jsx'
@@ -13,14 +12,10 @@ import Login from './pages/Login.jsx'
 import Play from './pages/Play.jsx'
 import Quizzes from './pages/Quizzes.jsx'
 import Stats from './pages/Stats.jsx'
-import { ThemeToggle } from './theme.jsx'
+import { signOut, useSession } from './state/session.js'
 
 function RequireAuth({ roles, children }) {
-  const [me, setMe] = useState(undefined)
-
-  useEffect(() => {
-    api.me().then((data) => setMe(data.ok ? data : null)).catch(() => setMe(null))
-  }, [])
+  const me = useSession()
 
   if (me === undefined) return <p className="center muted">Загрузка…</p>
   if (!me) return <Navigate to="/login" replace />
@@ -32,7 +27,7 @@ export default function App() {
   const navigate = useNavigate()
 
   async function logout() {
-    await api.logout()
+    await signOut()
     navigate('/login')
   }
 
