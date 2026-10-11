@@ -1,6 +1,5 @@
 import crypto from 'node:crypto'
 import { config } from './infrastructure/config.js'
-import { db } from './infrastructure/db/index.js'
 import {
   ensureMediaDir,
   ensureSlidesDir,
@@ -12,6 +11,10 @@ import {
   writeMediaFile,
 } from './infrastructure/mediaStorage.js'
 import { slidesFromPptx } from './pptx.js'
+import * as classesRepo from './repositories/classes.js'
+import * as lessonAttemptsRepo from './repositories/lessonAttempts.js'
+import * as lessonFilesRepo from './repositories/lessonFiles.js'
+import * as lessonsRepo from './repositories/lessons.js'
 import { assertRole } from './domain/access.js'
 import { fail } from './domain/errors.js'
 import {
@@ -28,7 +31,7 @@ import {
   readLessonGroups,
   VIDEO_TYPES,
 } from './domain/lesson.js'
-import { GROUP_KEYS, groupNumbers, groupsFromRow } from './domain/structure.js'
+import { GROUP_KEYS, groupsFromRow } from './domain/structure.js'
 import { cleanLabel, cleanText } from './domain/text.js'
 
 const DEMO_KEY = 'solar-system'
@@ -112,24 +115,20 @@ const DEMO_QUESTIONS = [
 ]
 
 export async function ensureDemoLesson() {
-  const existing = await db.get('SELECT id FROM lessons WHERE seed_key = ?', DEMO_KEY)
+  const existing = await lessonsRepo.findSeededLesson(DEMO_KEY)
   if (existing) return existing.id
-  const count = await db.get('SELECT COUNT(*) AS n FROM lessons')
-  if (Number(count?.n || 0) > 0) return null
+  if ((await lessonsRepo.countLessons()) > 0) return null
   const now = new Date().toISOString()
   const id = crypto.randomUUID()
-  await db.run(
-    `INSERT INTO lessons (
-      id, title, seed_key, grades_1_4, grades_5_9, grades_10_11, students, slides, questions, created_at, updated_at
-    ) VALUES (?, ?, ?, 0, 1, 0, 0, ?, ?, ?, ?)`,
+  await lessonsRepo.insertSeedLesson({
     id,
-    'Солнечная система',
-    DEMO_KEY,
-    JSON.stringify(DEMO_SLIDES),
-    JSON.stringify(DEMO_QUESTIONS),
-    now,
-    now,
-  )
+    title: 'Солнечная система',
+    seedKey: DEMO_KEY,
+    slides: DEMO_SLIDES,
+    questions: DEMO_QUESTIONS,
+    createdAt: now,
+    updatedAt: now,
+  })
   return id
 }
 
@@ -149,33 +148,33 @@ async function storeFile(lessonId, mime, bytes) {
   const id = crypto.randomUUID()
   await ensureSlidesDir()
   await writeMediaFile(filePath(id), bytes)
-  await db.run('INSERT INTO lesson_files (id, lesson_id, mime, data_base64) VALUES (?, ?, ?, ?)', id, lessonId, mime, '')
+  await lessonFilesRepo.insertLessonFile({ id, lessonId, mime })
   return id
 }
 
 async function dropFiles(ids) {
   for (const id of ids) {
     if (isMediaId(id)) await removeMediaFile(filePath(id))
-    await db.run('DELETE FROM lesson_files WHERE id = ?', id)
+    await lessonFilesRepo.deleteLessonFile(id)
   }
 }
 
 async function dropLessonFiles(lessonId) {
-  const rows = await db.all('SELECT id FROM lesson_files WHERE lesson_id = ?', lessonId)
+  const rows = await lessonFilesRepo.listLessonFileIds(lessonId)
   await dropFiles(rows.map((row) => row.id))
 }
 
 export async function migrateLessonFiles() {
-  const rows = await db.all("SELECT id FROM lesson_files WHERE data_base64 <> ''")
+  const rows = await lessonFilesRepo.listLegacyFileIds()
   if (!rows.length) return 0
   await ensureSlidesDir()
   let moved = 0
   for (const { id } of rows) {
     if (!isMediaId(id)) continue
-    const row = await db.get('SELECT data_base64 FROM lesson_files WHERE id = ?', id)
+    const row = await lessonFilesRepo.readLegacyFileData(id)
     if (!row?.data_base64) continue
     await writeMediaFile(filePath(id), Buffer.from(row.data_base64, 'base64'))
-    await db.run("UPDATE lesson_files SET data_base64 = '' WHERE id = ?", id)
+    await lessonFilesRepo.clearLegacyFileData(id)
     moved += 1
   }
   return moved
@@ -183,7 +182,7 @@ export async function migrateLessonFiles() {
 
 async function learnerBand(actor) {
   if (actor.band && GROUP_KEYS.includes(actor.band)) return actor.band
-  const row = await db.get('SELECT band FROM classes WHERE id = ?', actor.classId)
+  const row = await classesRepo.findClassBand(actor.classId)
   if (!row?.band || !GROUP_KEYS.includes(row.band)) fail('Класс тестируемого не найден', 404)
   return row.band
 }
@@ -208,11 +207,7 @@ function summary(row, best) {
 }
 
 async function bestAttempts(userId) {
-  const rows = await db.all(
-    `SELECT lesson_id, score, total FROM lesson_attempts
-     WHERE user_id = ? ORDER BY score DESC, finished_at DESC`,
-    userId,
-  )
+  const rows = await lessonAttemptsRepo.listUserAttempts(userId)
   const best = new Map()
   for (const row of rows) if (!best.has(row.lesson_id)) best.set(row.lesson_id, row)
   return best
@@ -221,11 +216,11 @@ async function bestAttempts(userId) {
 export async function listLessons(actor) {
   assertRole(actor, 'super', 'learner')
   if (actor.role === 'super') {
-    const rows = await db.all('SELECT * FROM lessons ORDER BY created_at DESC')
+    const rows = await lessonsRepo.listAllLessons()
     return rows.map((row) => summary(row, null))
   }
   const band = await learnerBand(actor)
-  const rows = await db.all(`SELECT * FROM lessons WHERE ${band} = 1 ORDER BY created_at DESC`)
+  const rows = await lessonsRepo.listLessonsForBand(band)
   const best = await bestAttempts(actor.id)
   return rows.map((row) => summary(row, best.get(row.id)))
 }
@@ -244,18 +239,13 @@ function presentSlides(slides) {
 }
 
 async function mustLesson(id) {
-  const row = await db.get('SELECT * FROM lessons WHERE id = ?', id)
+  const row = await lessonsRepo.findLesson(id)
   if (!row) fail('Урок не найден', 404)
   return row
 }
 
 async function attemptsOf(lessonId, userId) {
-  return db.all(
-    `SELECT id, score, total, answers, finished_at FROM lesson_attempts
-     WHERE lesson_id = ? AND user_id = ? ORDER BY finished_at ASC, id ASC`,
-    lessonId,
-    userId,
-  )
+  return lessonAttemptsRepo.listAttempts(lessonId, userId)
 }
 
 function presentAttempt(row, questions) {
@@ -298,11 +288,11 @@ export async function getLesson(actor, id) {
 export async function openLessonFile(actor, fileId) {
   assertRole(actor, 'super', 'learner')
   const target = filePath(fileId)
-  const row = await db.get('SELECT lesson_id, mime FROM lesson_files WHERE id = ?', fileId)
+  const row = await lessonFilesRepo.findLessonFile(fileId)
   if (!row) fail('Файл не найден', 404)
   if (actor.role !== 'super') {
     if (String(row.lesson_id).startsWith('import:')) fail('Файл не найден', 404)
-    const lesson = await db.get('SELECT grades_1_4, grades_5_9, grades_10_11, students FROM lessons WHERE id = ?', row.lesson_id)
+    const lesson = await lessonsRepo.findLessonGroups(row.lesson_id)
     if (!lesson || !(await canSee(actor, lesson))) fail('Файл не найден', 404)
   }
   return { path: target, mime: row.mime }
@@ -321,7 +311,7 @@ async function normalizeSlides(slides, lessonId) {
   if (!Array.isArray(slides) || slides.length < 1 || slides.length > 20) {
     fail('Нужен хотя бы один слайд, максимум 20')
   }
-  const ownedRows = await db.all('SELECT id FROM lesson_files WHERE lesson_id = ?', lessonId)
+  const ownedRows = await lessonFilesRepo.listLessonFileIds(lessonId)
   const owned = new Set(ownedRows.map((row) => row.id))
   const used = new Set()
   const result = []
@@ -365,9 +355,9 @@ async function normalizeSlides(slides, lessonId) {
 async function claimImportedFile(fileId, lessonId, owned) {
   if (typeof fileId !== 'string' || !fileId) return ''
   if (owned.has(fileId)) return fileId
-  const row = await db.get('SELECT lesson_id FROM lesson_files WHERE id = ?', fileId)
+  const row = await lessonFilesRepo.findLessonFileOwner(fileId)
   if (!row || !String(row.lesson_id).startsWith('import:')) return ''
-  await db.run('UPDATE lesson_files SET lesson_id = ? WHERE id = ?', lessonId, fileId)
+  await lessonFilesRepo.moveLessonFile(fileId, lessonId)
   owned.add(fileId)
   return fileId
 }
@@ -381,41 +371,11 @@ async function saveLesson(id, input, seedKey) {
   if (format === 'video') await dropLessonFiles(id)
   else await removeVideoFile(id)
   const now = new Date().toISOString()
-  const numbers = groupNumbers(groups)
-  const existing = await db.get('SELECT id FROM lessons WHERE id = ?', id)
+  const existing = await lessonsRepo.lessonExists(id)
   if (!existing) {
-    await db.run(
-      `INSERT INTO lessons (
-        id, title, seed_key, grades_1_4, grades_5_9, grades_10_11, students, format, slides, questions, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      id,
-      title,
-      seedKey || null,
-      ...numbers,
-      format,
-      JSON.stringify(slides),
-      JSON.stringify(questions),
-      now,
-      now,
-    )
+    await lessonsRepo.insertLesson({ id, title, seedKey: seedKey || null, groups, format, slides, questions, createdAt: now, updatedAt: now })
   } else {
-    await db.run(
-      `UPDATE lessons
-       SET title = ?, grades_1_4 = ?, grades_5_9 = ?, grades_10_11 = ?, students = ?, format = ?,
-           video_mime = CASE WHEN ? = 'slides' THEN NULL ELSE video_mime END,
-           video_name = CASE WHEN ? = 'slides' THEN NULL ELSE video_name END,
-           slides = ?, questions = ?, updated_at = ?
-       WHERE id = ?`,
-      title,
-      ...numbers,
-      format,
-      format,
-      format,
-      JSON.stringify(slides),
-      JSON.stringify(questions),
-      now,
-      id,
-    )
+    await lessonsRepo.updateLesson(id, { title, groups, format, slides, questions, updatedAt: now })
   }
   return getLesson({ role: 'super' }, id)
 }
@@ -432,13 +392,7 @@ export async function saveLessonVideo(actor, id, buffer, mime, name) {
   await ensureMediaDir()
   await writeMediaFile(mediaPath(id), bytes)
   const safeName = cleanText(name).slice(0, 120) || 'video'
-  await db.run(
-    'UPDATE lessons SET video_mime = ?, video_name = ?, updated_at = ? WHERE id = ?',
-    type,
-    safeName,
-    new Date().toISOString(),
-    id,
-  )
+  await lessonsRepo.setLessonVideo(id, { mime: type, name: safeName, updatedAt: new Date().toISOString() })
   return getLesson({ role: 'super' }, id)
 }
 
@@ -493,8 +447,8 @@ export async function deleteLesson(actor, id) {
   await mustLesson(id)
   await removeVideoFile(id)
   await dropLessonFiles(id)
-  await db.run('DELETE FROM lesson_attempts WHERE lesson_id = ?', id)
-  await db.run('DELETE FROM lessons WHERE id = ?', id)
+  await lessonAttemptsRepo.deleteLessonAttempts(id)
+  await lessonsRepo.deleteLesson(id)
 }
 
 export async function checkLesson(actor, id, answers) {
@@ -514,25 +468,23 @@ export async function checkLesson(actor, id, answers) {
   }
 
   const attemptId = crypto.randomUUID()
-  await db.run(
-    `INSERT INTO lesson_attempts (id, lesson_id, user_id, score, total, finished_at, answers)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    attemptId,
-    id,
-    actor.id,
-    graded.score,
-    graded.total,
-    new Date().toISOString(),
-    JSON.stringify(questions.map((question) => ({
+  await lessonAttemptsRepo.insertAttempt({
+    id: attemptId,
+    lessonId: id,
+    userId: actor.id,
+    score: graded.score,
+    total: graded.total,
+    finishedAt: new Date().toISOString(),
+    answers: questions.map((question) => ({
       questionId: question.id,
       chosen: given.has(question.id) ? given.get(question.id) : -1,
-    }))),
-  )
+    })),
+  })
 
   // Две одновременные отправки могли пройти проверку выше: оставляем первые max попыток, лишние убираем.
   const after = await attemptsOf(id, actor.id)
   if (after.length > max) {
-    for (const extra of after.slice(max)) await db.run('DELETE FROM lesson_attempts WHERE id = ?', extra.id)
+    for (const extra of after.slice(max)) await lessonAttemptsRepo.deleteAttempt(extra.id)
     const kept = after.slice(0, max)
     const last = kept[kept.length - 1]
     return { ...presentAttempt(last, questions), repeated: last.id !== attemptId, attempts: attemptState(kept, max) }
