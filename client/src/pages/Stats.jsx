@@ -80,7 +80,7 @@ export default function Stats({ onLogout }) {
   return (
     <main className="sheet editor">
       <header className="topbar">
-        <Link className="brand" to="/host">TestOnline</Link>
+        <Link className="brand" to="/host">Saqbol</Link>
         <div className="top-actions">
           <Link to={`/host/quiz/${id}`}>{t('Править')}</Link>
           <button className="ghost" type="button" onClick={onLogout}>{t('Выйти')}</button>
@@ -141,10 +141,12 @@ function AccessReport({ quizId, title, sessions }) {
           <div className="chart-grid">
             <BarChart
               caption={t('Участники по запускам')}
+              layout="vertical"
               items={runs.map((session) => ({ key: session.id, label: shortWhen(launchWhen(session)), value: session.playerCount }))}
             />
             <BarChart
               caption={t('Средний балл по запускам')}
+              layout="vertical"
               items={runs.map((session) => ({ key: session.id, label: shortWhen(launchWhen(session)), value: session.averageScore ?? 0 }))}
             />
           </div>
@@ -205,6 +207,8 @@ function SessionReport({ quizId, session }) {
         <div className="chart-grid">
           <BarChart
             caption={t('Баллы участников')}
+            order="value"
+            limit={15}
             items={session.players.map((person) => ({ key: `${person.rank}-${person.name}`, label: person.name, value: person.score }))}
           />
           {questions.length > 0 && <RateList caption={t('Верные ответы в этом запуске')} items={questions} />}

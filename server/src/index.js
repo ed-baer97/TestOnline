@@ -28,6 +28,7 @@ import {
   importLearners,
   learnersTemplate,
   listLearners,
+  orgStats,
   platformStats,
   listOrgAdmins,
   listOrganizations,
@@ -72,6 +73,7 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.join(__dirname, '..', '.env') })
+dotenv.config({ path: path.join(__dirname, '../..', '.env') })
 
 const SECRET = process.env.SESSION_SECRET || 'testonline-dev-secret'
 const PORT = Number(process.env.PORT || 3001)
@@ -154,13 +156,17 @@ function route(handler) {
   }
 }
 
-function sendSession(res, user, status = 200) {
-  res.cookie('session', signSession(user.id), {
+function sessionCookie() {
+  return {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.COOKIE_SECURE === '1',
     path: '/',
-  })
+  }
+}
+
+function sendSession(res, user, status = 200) {
+  res.cookie('session', signSession(user.id), sessionCookie())
   res.status(status).json({
     ok: true,
     login: user.login,
@@ -193,15 +199,9 @@ export function createApp() {
     pingInterval: 10000,
     pingTimeout: 20000,
     maxHttpBufferSize: 1e5,
-    addTrailingSlash: false,
   })
 
   if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1)
-
-  app.use((req, res, next) => {
-    if (!(req.url || '').startsWith('/socket.io')) return next()
-    io.engine.handleRequest(req, res)
-  })
 
   app.use(cookieParser())
   app.use((req, res, next) => {
@@ -234,7 +234,7 @@ export function createApp() {
   }))
 
   app.post('/api/logout', (_req, res) => {
-    res.clearCookie('session', { path: '/' })
+    res.clearCookie('session', sessionCookie())
     res.json({ ok: true })
   })
 
@@ -251,6 +251,10 @@ export function createApp() {
   app.get('/api/admin/platform-stats', guard, route(async (req, res) => {
     const requested = typeof req.query.regionId === 'string' ? req.query.regionId : null
     res.json(await platformStats(req.user, requested || null))
+  }))
+  app.get('/api/admin/org-stats', guard, route(async (req, res) => {
+    const requested = typeof req.query.organizationId === 'string' ? req.query.organizationId : null
+    res.json(await orgStats(req.user, requested || null))
   }))
   app.get('/api/admin/regions', guard, route(async (req, res) => {
     res.json({ regions: await listRegions(req.user) })
@@ -722,7 +726,6 @@ export function createApp() {
 }
 
 const runtime = createApp()
-export default runtime.app
 
 const entry = process.argv[1] ? path.resolve(process.argv[1]) : ''
 const isMain = entry === fileURLToPath(import.meta.url) || path.basename(entry) === 'start.js'

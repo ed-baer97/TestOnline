@@ -193,7 +193,7 @@ export default function Editor({ onLogout, embedded = false }) {
   return (
     <main className="sheet editor">
       <header className="topbar">
-        <Link className="brand" to="/host">TestOnline</Link>
+        <Link className="brand" to="/host">Saqbol</Link>
         <div className="top-actions">
           <button className="ghost" type="button" onClick={save}>{t('Сохранить')}</button>
           <button className="primary" type="button" onClick={saveAndStart}>{t('Запустить')}</button>

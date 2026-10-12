@@ -182,11 +182,17 @@ export function bootAdmin() {
 }
 
 export async function ensureSuperAdmin() {
-  const existing = await db.get("SELECT id FROM users WHERE role = 'super' LIMIT 1")
-  if (existing) return profile(existing.id)
   const login = process.env.SUPER_LOGIN || 'super'
   const password = process.env.SUPER_PASSWORD || 'super12345'
   const account = normalizeAccount({ login, password })
+  const existing = await db.get("SELECT id, display_name FROM users WHERE role = 'super' LIMIT 1")
+  if (existing) {
+    if (process.env.SUPER_PASSWORD) await setPassword(existing.id, account.password)
+    if (existing.display_name === 'Суперглавный') {
+      await db.run('UPDATE users SET display_name = ? WHERE id = ?', 'Администратор платформы', existing.id)
+    }
+    return profile(existing.id)
+  }
   const taken = await db.get('SELECT id FROM users WHERE lower(login) = lower(?)', account.login)
   if (taken) return profile(taken.id)
   const id = crypto.randomUUID()
@@ -197,7 +203,7 @@ export async function ensureSuperAdmin() {
     account.login,
     await hashPassword(account.password),
     new Date().toISOString(),
-    'Суперглавный',
+    'Администратор платформы',
   )
   return profile(id)
 }
@@ -310,8 +316,10 @@ function rateCell(rate) {
   return rate == null ? '—' : `${rate}%`
 }
 
-function percentItem(key, label, labelKk, rate) {
-  return { key, label, labelKk, value: rate ?? 0, text: `${rate ?? 0}%` }
+function percentItem(key, label, labelKk, rate, answered = null) {
+  const item = { key, label, labelKk, value: rate ?? 0, text: rate == null ? '—' : `${rate}%`, empty: rate == null }
+  if (answered != null) item.answered = answered
+  return item
 }
 
 function addScore(store, key, right) {
@@ -321,12 +329,16 @@ function addScore(store, key, right) {
   store.set(key, score)
 }
 
+function answeredOf(store, key) {
+  return store.get(key)?.answered || 0
+}
+
 async function lessonScores(userIds) {
   const scores = new Map()
   if (!userIds.length) return scores
   const marks = userIds.map(() => '?').join(',')
   const attempts = await db.all(
-    `SELECT lesson_id, user_id, lang, answers FROM lesson_attempts WHERE user_id IN (${marks})`,
+    `SELECT lesson_id, user_id, lang, answers, finished_at FROM lesson_attempts WHERE user_id IN (${marks})`,
     ...userIds,
   )
   if (!attempts.length) return scores
@@ -340,6 +352,10 @@ async function lessonScores(userIds) {
   for (const attempt of attempts) {
     const pack = packs.get(attempt.lesson_id)
     if (!pack) continue
+    const score = scores.get(attempt.user_id) || { correct: 0, answered: 0 }
+    score.attempts = (score.attempts || 0) + 1
+    if (!score.lastAt || String(attempt.finished_at) > String(score.lastAt)) score.lastAt = attempt.finished_at
+    scores.set(attempt.user_id, score)
     const questions = attempt.lang === 'kk' && pack.kk.size ? pack.kk : pack.ru
     const given = parseJson(attempt.answers, [])
     if (!Array.isArray(given)) continue
@@ -802,6 +818,7 @@ function tallyQuiz(row, runs, access, mistakes, orgScores) {
   const byId = new Map(list.filter((item) => item?.id).map((item) => [item.id, item]))
   const players = []
   let correct = 0
+  let answeredTotal = 0
   const kind = access === 'private' ? 'Приватный' : 'Публичный'
   for (const result of runs) {
     const seated = parseJson(result.players, [])
@@ -815,6 +832,7 @@ function tallyQuiz(row, runs, access, mistakes, orgScores) {
         const chosen = answer.chosen
         const answered = chosen != null && String(chosen) !== ''
         if (!answered) continue
+        answeredTotal += 1
         const right = Boolean(answer.ok)
         if (right) correct += 1
         if (access === 'private' && result.organization_id) {
@@ -843,6 +861,8 @@ function tallyQuiz(row, runs, access, mistakes, orgScores) {
     runs: runs.length,
     participants: players.length,
     correct,
+    answered: answeredTotal,
+    rate: answeredTotal ? Math.round((correct / answeredTotal) * 100) : null,
   }
 }
 
@@ -860,16 +880,26 @@ async function regionCatalog() {
   for (const row of learnerRows) learnerCounts.set(row.region_id, (learnerCounts.get(row.region_id) || 0) + 1)
   const byUser = await lessonScores(learnerRows.map((row) => row.id))
   const scores = new Map()
+  const totals = { regions: regions.length, organizations: 0, learners: learnerRows.length, activeLearners: 0, attempts: 0, correct: 0, answered: 0 }
+  for (const value of orgCounts.values()) totals.organizations += value
   for (const row of learnerRows) {
     const score = byUser.get(row.id)
     if (!score) continue
-    const current = scores.get(row.region_id) || { correct: 0, answered: 0 }
+    const current = scores.get(row.region_id) || { correct: 0, answered: 0, attempts: 0, active: 0 }
     current.correct += score.correct
     current.answered += score.answered
+    current.attempts += score.attempts || 0
+    current.active += 1
     scores.set(row.region_id, current)
+    totals.activeLearners += 1
+    totals.attempts += score.attempts || 0
+    totals.correct += score.correct
+    totals.answered += score.answered
   }
+  totals.rate = totals.answered ? Math.round((totals.correct / totals.answered) * 100) : null
   return {
     scope: 'platform',
+    totals,
     regions: regions
       .map((row) => ({
         id: row.id,
@@ -878,6 +908,10 @@ async function regionCatalog() {
         districts: districtCounts.get(row.id) || 0,
         organizations: orgCounts.get(row.id) || 0,
         learners: learnerCounts.get(row.id) || 0,
+        activeLearners: scores.get(row.id)?.active || 0,
+        attempts: scores.get(row.id)?.attempts || 0,
+        correct: scores.get(row.id)?.correct || 0,
+        answered: answeredOf(scores, row.id),
         rate: rateOf(scores.get(row.id)),
       }))
       .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
@@ -1007,11 +1041,14 @@ export async function platformStats(actor, requestedRegionId = null) {
     }
     let user = bucket.users.get(userId)
     if (!user) {
-      user = { id: userId, name: person.name, attempts: 0, correct: 0 }
+      user = { id: userId, name: person.name, attempts: 0, correct: 0, answered: 0 }
       bucket.users.set(userId, user)
     }
     return { bucket, user }
   }
+  const activeLearners = new Set()
+  const activeOrgs = new Set()
+  const totals = { attempts: 0, correct: 0, answered: 0, quizRuns: 0, quizParticipants: 0, quizCorrect: 0, quizAnswered: 0 }
   const lessons = lessonRows.map((row) => {
     const ru = questionMap(row.questions)
     const kk = questionMap(row.questions_kk)
@@ -1019,14 +1056,17 @@ export async function platformStats(actor, requestedRegionId = null) {
     const learners = new Set()
     let taken = 0
     let correct = 0
+    let answeredTotal = 0
     for (const attempt of attempts) {
       if (regionUserIds && !regionUserIds.has(attempt.user_id)) continue
       taken += 1
       learners.add(attempt.user_id)
+      activeLearners.add(attempt.user_id)
       const slot = lessonSlot(row.id, attempt.user_id)
       if (slot) {
         slot.bucket.attempts += 1
         slot.user.attempts += 1
+        activeOrgs.add(peopleById.get(attempt.user_id)?.orgId)
       }
       const pack = attempt.lang === 'kk' && kk.size ? kk : ru
       const given = parseJson(attempt.answers, [])
@@ -1037,6 +1077,8 @@ export async function platformStats(actor, requestedRegionId = null) {
         const chosen = Number(answer.chosen)
         const answered = Number.isInteger(chosen) && chosen >= 0
         if (!answered) continue
+        answeredTotal += 1
+        if (slot) slot.user.answered += 1
         const right = chosen === question.correctIndex
         if (right) {
           correct += 1
@@ -1060,15 +1102,21 @@ export async function platformStats(actor, requestedRegionId = null) {
         else bucket.wrong += 1
       }
     }
+    totals.attempts += taken
+    totals.correct += correct
+    totals.answered += answeredTotal
     return {
       id: row.id,
       title: row.title,
       titleKk: row.title_kk || '',
       format: row.format === 'video' ? 'Видео' : 'Презентация',
       groups: groupLabels(row),
+      bands: BANDS.filter((band) => row[band.id]).map((band) => band.id),
       attempts: taken,
       learners: learners.size,
       correct,
+      answered: answeredTotal,
+      rate: answeredTotal ? Math.round((correct / answeredTotal) * 100) : null,
     }
   })
   for (const district of districts) {
@@ -1087,18 +1135,50 @@ export async function platformStats(actor, requestedRegionId = null) {
     const publicRuns = runs.filter((item) => item.access !== 'private')
     const privateRuns = runs.filter((item) => item.access === 'private')
     publicQuizzes.push(tallyQuiz(row, publicRuns, 'public', mistakes, orgScores))
-    tallyQuiz(row, privateRuns, 'private', mistakes, orgScores)
+    const privateTally = tallyQuiz(row, privateRuns, 'private', mistakes, orgScores)
+    totals.quizRuns += privateTally.runs
+    totals.quizParticipants += privateTally.participants
+    totals.quizCorrect += privateTally.correct
+    totals.quizAnswered += privateTally.answered
+    for (const result of privateRuns) if (result.organization_id) activeOrgs.add(result.organization_id)
     notePublicQuiz(row, publicRuns, quizPublic)
     for (const result of privateRuns) notePrivateQuiz(row, result, quizPrivate, peopleById, learnersByName)
+  }
+  // Доля верных у организации: ответы в тестах уроков и в приватных квизах вместе.
+  for (const [lessonId, byOrg] of lessonOrg) {
+    if (!lessonId) continue
+    for (const [orgId, bucket] of byOrg) {
+      const score = orgScores.get(orgId) || { correct: 0, answered: 0 }
+      for (const user of bucket.users.values()) {
+        score.correct += user.correct
+        score.answered += user.answered
+      }
+      orgScores.set(orgId, score)
+    }
+  }
+  const orgAttempts = new Map()
+  const orgActive = new Map()
+  for (const byOrg of lessonOrg.values()) {
+    for (const [orgId, bucket] of byOrg) {
+      orgAttempts.set(orgId, (orgAttempts.get(orgId) || 0) + bucket.attempts)
+      const active = orgActive.get(orgId) || new Set()
+      for (const userId of bucket.users.keys()) active.add(userId)
+      orgActive.set(orgId, active)
+    }
   }
   for (const org of organizations) {
     const score = orgScores.get(org.id) || { correct: 0, answered: 0 }
     org.correct = score.correct
     org.answered = score.answered
     org.rate = score.answered ? Math.round((score.correct / score.answered) * 100) : null
+    org.attempts = orgAttempts.get(org.id) || 0
+    org.activeLearners = orgActive.get(org.id)?.size || 0
+    org.active = activeOrgs.has(org.id)
   }
+  activeOrgs.delete(undefined)
   const lessonBands = buildLessonBands(lessonRows, districts, organizations, lessonOrg)
   const quizBands = buildQuizBands(quizRows, districts, organizations, quizPrivate, quizPublic)
+  const learnerTotal = organizations.reduce((sum, org) => sum + org.learners, 0)
   return {
     scope: 'region',
     regionId,
@@ -1110,6 +1190,14 @@ export async function platformStats(actor, requestedRegionId = null) {
       { label: 'Уроков', value: lessons.length },
       { label: 'Квизов', value: quizRows.length },
     ],
+    totals: {
+      ...totals,
+      learners: learnerTotal,
+      activeLearners: activeLearners.size,
+      activeOrganizations: activeOrgs.size,
+      rate: totals.answered ? Math.round((totals.correct / totals.answered) * 100) : null,
+      quizRate: totals.quizAnswered ? Math.round((totals.quizCorrect / totals.quizAnswered) * 100) : null,
+    },
     districts,
     organizations,
     lessons,
@@ -1122,25 +1210,262 @@ export async function platformStats(actor, requestedRegionId = null) {
   }
 }
 
+function rateFrom(correct, answered) {
+  return answered ? Math.round((correct / answered) * 100) : null
+}
+
+// Статистика одной организации: классы, тестируемые, уроки, приватные квизы
+// и вопросы с ошибками. Администратор организации видит свою, регион и
+// суперглавный — любую доступную им.
+export async function orgStats(actor, requestedOrgId = null) {
+  let organizationId = null
+  if (actor.role === 'org') organizationId = actor.organizationId
+  else if (actor.role === 'regional' || actor.role === 'super') organizationId = requestedOrgId
+  else fail('Недостаточно прав', 403)
+  if (!organizationId) fail('Организация не найдена', 404)
+  const org = await mustOrg(organizationId)
+  if (actor.role === 'regional' && org.regionId !== actor.regionId) fail('Организация не найдена', 404)
+  const region = await mustRegion(org.regionId)
+  const classRows = await composition([org.id])
+  const learnerRows = await db.all(
+    `SELECT id, display_name, login, class_id FROM users WHERE role = 'learner' AND organization_id = ?`,
+    org.id,
+  )
+  const attemptRows = await db.all(
+    `SELECT a.lesson_id, a.user_id, a.lang, a.answers, a.finished_at
+       FROM lesson_attempts a
+       JOIN users u ON u.id = a.user_id
+      WHERE u.role = 'learner' AND u.organization_id = ?`,
+    org.id,
+  )
+  const lessonRows = await db.all(
+    `SELECT id, title, title_kk, format, grades_1_4, grades_5_9, grades_10_11, students, questions, questions_kk
+       FROM lessons
+      ORDER BY created_at DESC`,
+  )
+  const resultRows = await db.all(
+    `SELECT quiz_id, quiz_title, players, started_at, finished_at
+       FROM results
+      WHERE access = 'private' AND organization_id = ?`,
+    org.id,
+  )
+  const quizIds = [...new Set(resultRows.map((row) => row.quiz_id).filter(Boolean))]
+  const quizRows = quizIds.length
+    ? await db.all(`SELECT id, title, questions FROM quizzes WHERE id IN (${quizIds.map(() => '?').join(',')})`, ...quizIds)
+    : []
+
+  const classById = new Map(classRows.map((item) => [item.id, item]))
+  const people = new Map(learnerRows.map((row) => [row.id, {
+    id: row.id,
+    name: row.display_name || '',
+    login: row.login,
+    classId: row.class_id || '',
+    classCaption: classCaption(classById.get(row.class_id)) || '',
+    band: classById.get(row.class_id)?.band || '',
+    attempts: 0,
+    correct: 0,
+    answered: 0,
+    lastAt: null,
+  }]))
+  const attemptsByLesson = new Map()
+  for (const row of attemptRows) {
+    const list = attemptsByLesson.get(row.lesson_id) || []
+    list.push(row)
+    attemptsByLesson.set(row.lesson_id, list)
+  }
+  const mistakes = new Map()
+  const totals = { attempts: 0, correct: 0, answered: 0, quizRuns: 0, quizParticipants: 0, quizCorrect: 0, quizAnswered: 0 }
+  const lessons = []
+  for (const row of lessonRows) {
+    const assigned = BANDS.some((band) => org.groups[band.id] && row[band.id])
+    const attempts = attemptsByLesson.get(row.id) || []
+    if (!assigned && !attempts.length) continue
+    const ru = questionMap(row.questions)
+    const kk = questionMap(row.questions_kk)
+    const learners = new Set()
+    let correct = 0
+    let answered = 0
+    for (const attempt of attempts) {
+      const person = people.get(attempt.user_id)
+      if (!person) continue
+      learners.add(attempt.user_id)
+      person.attempts += 1
+      if (!person.lastAt || String(attempt.finished_at) > String(person.lastAt)) person.lastAt = attempt.finished_at
+      const pack = attempt.lang === 'kk' && kk.size ? kk : ru
+      const given = parseJson(attempt.answers, [])
+      if (!Array.isArray(given)) continue
+      for (const answer of given) {
+        const question = pack.get(answer?.questionId)
+        if (!question) continue
+        const chosen = Number(answer.chosen)
+        if (!Number.isInteger(chosen) || chosen < 0) continue
+        const right = chosen === question.correctIndex
+        answered += 1
+        person.answered += 1
+        if (right) {
+          correct += 1
+          person.correct += 1
+        }
+        const bucket = mistakeBucket(mistakes, `lesson:${row.id}:${question.id}`, {
+          text: ru.get(question.id)?.text || question.text || '',
+          textKk: kk.get(question.id)?.text || '',
+          source: row.title,
+          sourceKk: row.title_kk || '',
+          kind: 'Урок',
+        })
+        if (right) bucket.correct += 1
+        else bucket.wrong += 1
+      }
+    }
+    totals.attempts += attempts.filter((attempt) => people.has(attempt.user_id)).length
+    totals.correct += correct
+    totals.answered += answered
+    lessons.push({
+      id: row.id,
+      title: row.title,
+      titleKk: row.title_kk || '',
+      format: row.format === 'video' ? 'Видео' : 'Презентация',
+      groups: groupLabels(row),
+      bands: BANDS.filter((band) => row[band.id]).map((band) => band.id),
+      attempts: attempts.length,
+      learners: learners.size,
+      correct,
+      answered,
+      rate: rateFrom(correct, answered),
+    })
+  }
+
+  const quizById = new Map(quizRows.map((row) => [row.id, row]))
+  const quizStats = new Map()
+  for (const result of resultRows) {
+    const row = quizById.get(result.quiz_id) || { id: result.quiz_id || result.quiz_title, title: result.quiz_title, questions: '[]' }
+    let stat = quizStats.get(row.id)
+    if (!stat) {
+      stat = { id: row.id, title: row.title, runs: 0, participants: 0, correct: 0, answered: 0, lastAt: null }
+      quizStats.set(row.id, stat)
+    }
+    stat.runs += 1
+    const when = result.finished_at || result.started_at
+    if (when && (!stat.lastAt || String(when) > String(stat.lastAt))) stat.lastAt = when
+    const seated = parseJson(result.players, [])
+    if (!Array.isArray(seated)) continue
+    const questions = parseJson(row.questions, [])
+    const byId = new Map((Array.isArray(questions) ? questions : []).filter((item) => item?.id).map((item) => [item.id, item]))
+    for (const player of seated) {
+      stat.participants += 1
+      const counts = countedQuizAnswers(row, player)
+      stat.correct += counts.correct
+      stat.answered += counts.answered
+      for (const answer of player.answers || []) {
+        const text = answer.question || byId.get(answer.questionId)?.text || ''
+        if (!text) continue
+        if (answer.chosen == null || String(answer.chosen) === '') continue
+        const bucket = mistakeBucket(mistakes, `quiz:${row.id}:${answer.questionId || text}`, {
+          text,
+          textKk: '',
+          source: row.title,
+          sourceKk: '',
+          kind: 'Квиз',
+        })
+        if (answer.ok) bucket.correct += 1
+        else bucket.wrong += 1
+      }
+    }
+  }
+  const quizzes = [...quizStats.values()].map((stat) => ({ ...stat, rate: rateFrom(stat.correct, stat.answered) }))
+  for (const quiz of quizzes) {
+    totals.quizRuns += quiz.runs
+    totals.quizParticipants += quiz.participants
+    totals.quizCorrect += quiz.correct
+    totals.quizAnswered += quiz.answered
+  }
+
+  const learners = [...people.values()]
+    .map((person) => ({ ...person, rate: rateFrom(person.correct, person.answered) }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+  const classes = classRows
+    .map((item) => {
+      const members = learners.filter((person) => person.classId === item.id)
+      const correct = members.reduce((sum, person) => sum + person.correct, 0)
+      const answered = members.reduce((sum, person) => sum + person.answered, 0)
+      return {
+        id: item.id,
+        name: item.name,
+        caption: classCaption(item),
+        band: item.band,
+        grade: item.grade,
+        trackName: item.trackName || '',
+        learners: item.learners,
+        active: members.filter((person) => person.attempts > 0).length,
+        attempts: members.reduce((sum, person) => sum + person.attempts, 0),
+        correct,
+        answered,
+        rate: rateFrom(correct, answered),
+      }
+    })
+    .sort((a, b) => a.caption.localeCompare(b.caption, 'ru'))
+
+  return {
+    scope: 'organization',
+    organizationId: org.id,
+    regionId: org.regionId,
+    title: org.name,
+    titleKk: org.nameKk,
+    region: region.name,
+    regionKk: region.nameKk,
+    district: org.districtName,
+    districtKk: org.districtNameKk,
+    groups: org.groups,
+    totals: {
+      ...totals,
+      classes: classes.length,
+      learners: learners.length,
+      activeLearners: learners.filter((person) => person.attempts > 0).length,
+      lessons: lessons.length,
+      quizzes: quizzes.length,
+      rate: rateFrom(totals.correct, totals.answered),
+      quizRate: rateFrom(totals.quizCorrect, totals.quizAnswered),
+    },
+    classes,
+    learners,
+    lessons,
+    quizzes,
+    mistakes: [...mistakes.values()]
+      .filter((item) => item.wrong > 0)
+      .sort((a, b) => b.wrong - a.wrong || b.correct - a.correct || a.text.localeCompare(b.text, 'ru')),
+  }
+}
+
 function sumAt(nodes, index) {
   return nodes.reduce((sum, node) => sum + Number(node.summary[index] || 0), 0)
+}
+
+function lessonTotals(nodes) {
+  return {
+    attempts: totalOf(nodes, 'attempts'),
+    learners: totalOf(nodes, 'learners'),
+    correct: totalOf(nodes, 'correct'),
+    answered: totalOf(nodes, 'answered'),
+  }
 }
 
 function orgLessonFold(lessonId, org, lessonOrg) {
   const stat = lessonOrg.get(lessonId)?.get(org.id)
   const users = stat ? [...stat.users.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru')) : []
   const correct = users.reduce((sum, user) => sum + user.correct, 0)
+  const answered = users.reduce((sum, user) => sum + user.answered, 0)
   return {
     key: org.id,
+    kind: 'organization',
+    name: org.name,
+    nameKk: org.nameKk,
+    attempts: stat?.attempts || 0,
+    learners: users.length,
+    correct,
+    answered,
     summary: [{ ru: org.name, kk: org.nameKk }, stat?.attempts || 0, users.length, correct],
     empty: 'нет тестируемых',
-    table: {
-      columns: ['Тестируемый', 'Попытки', 'Верных ответов'],
-      rows: users.map((user) => ({
-        key: user.id,
-        cells: [user.name, user.attempts, user.correct],
-      })),
-    },
+    people: users.map((user) => ({ id: user.id, name: user.name, attempts: user.attempts, correct: user.correct, answered: user.answered })),
   }
 }
 
@@ -1151,6 +1476,10 @@ function districtLessonFolds(lessonId, districts, organizations, lessonOrg) {
       .map((org) => orgLessonFold(lessonId, org, lessonOrg))
     return {
       key: district.id,
+      kind: 'district',
+      name: district.name,
+      nameKk: district.nameKk,
+      ...lessonTotals(groups),
       summary: [{ ru: district.name, kk: district.nameKk }, sumAt(groups, 1), sumAt(groups, 2), sumAt(groups, 3)],
       groupColumns: ['Организация', 'Попытки', 'Тестируемые', 'Верных ответов'],
       empty: 'Нет организаций',
@@ -1162,6 +1491,10 @@ function districtLessonFolds(lessonId, districts, organizations, lessonOrg) {
     const groups = loose.map((org) => orgLessonFold(lessonId, org, lessonOrg))
     folds.push({
       key: 'none',
+      kind: 'district',
+      name: '—',
+      nameKk: '',
+      ...lessonTotals(groups),
       summary: ['—', sumAt(groups, 1), sumAt(groups, 2), sumAt(groups, 3)],
       groupColumns: ['Организация', 'Попытки', 'Тестируемые', 'Верных ответов'],
       empty: 'Нет организаций',
@@ -1177,6 +1510,10 @@ function buildLessonBands(lessonRows, districts, organizations, lessonOrg) {
       const places = districtLessonFolds(row.id, districts, organizations, lessonOrg)
       return {
         key: row.id,
+        kind: 'lesson',
+        name: row.title,
+        nameKk: row.title_kk || '',
+        ...lessonTotals(places),
         summary: [{ ru: row.title, kk: row.title_kk || '' }, sumAt(places, 1), sumAt(places, 2), sumAt(places, 3)],
         groupColumns: ['Район', 'Попытки', 'Тестируемые', 'Верных ответов'],
         empty: 'Нет районов',
@@ -1185,6 +1522,10 @@ function buildLessonBands(lessonRows, districts, organizations, lessonOrg) {
     })
     return {
       key: band.id,
+      kind: 'band',
+      name: band.label,
+      nameKk: '',
+      ...lessonTotals(groups),
       summary: [band.label, groups.length, sumAt(groups, 1), sumAt(groups, 3)],
       groupColumns: ['Урок', 'Попытки', 'Тестируемые', 'Верных ответов'],
       empty: 'Нет уроков',
@@ -1301,23 +1642,32 @@ function totalOf(nodes, field) {
   return nodes.reduce((sum, node) => sum + (node[field] || 0), 0)
 }
 
+function quizTotals(nodes) {
+  return {
+    runs: totalOf(nodes, 'runs'),
+    participants: totalOf(nodes, 'participants'),
+    correct: totalOf(nodes, 'correct'),
+    answered: totalOf(nodes, 'answered'),
+  }
+}
+
 function quizPeopleFold(stat, title) {
   const users = stat ? [...stat.users.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru')) : []
   const correct = users.reduce((sum, user) => sum + user.correct, 0)
   const answered = users.reduce((sum, user) => sum + user.answered, 0)
+  const label = title.label
   return {
     key: title.key,
+    kind: title.kind,
+    name: typeof label === 'object' ? label.ru : label,
+    nameKk: typeof label === 'object' ? label.kk || '' : '',
+    runs: stat?.runs || 0,
+    participants: users.length,
     correct,
     answered,
     summary: [title.label, stat?.runs || 0, users.length, correct, percentCell(correct, answered)],
     empty: 'нет участников',
-    table: {
-      columns: ['Участник', 'Запуски', 'Верных ответов', '%'],
-      rows: users.map((user) => ({
-        key: user.name,
-        cells: [user.name, user.runs, user.correct, percentCell(user.correct, user.answered)],
-      })),
-    },
+    people: users.map((user) => ({ name: user.name, runs: user.runs, correct: user.correct, answered: user.answered })),
   }
 }
 
@@ -1325,14 +1675,15 @@ function quizDistrictFolds(byOrg, districts, organizations) {
   const folds = districts.map((district) => {
     const groups = organizations
       .filter((org) => org.districtId === district.id)
-      .map((org) => quizPeopleFold(byOrg.get(org.id), { key: org.id, label: { ru: org.name, kk: org.nameKk } }))
-    const correct = totalOf(groups, 'correct')
-    const answered = totalOf(groups, 'answered')
+      .map((org) => quizPeopleFold(byOrg.get(org.id), { key: org.id, kind: 'organization', label: { ru: org.name, kk: org.nameKk } }))
+    const sums = quizTotals(groups)
     return {
       key: district.id,
-      correct,
-      answered,
-      summary: [{ ru: district.name, kk: district.nameKk }, sumAt(groups, 1), sumAt(groups, 2), correct, percentCell(correct, answered)],
+      kind: 'district',
+      name: district.name,
+      nameKk: district.nameKk,
+      ...sums,
+      summary: [{ ru: district.name, kk: district.nameKk }, sumAt(groups, 1), sumAt(groups, 2), sums.correct, percentCell(sums.correct, sums.answered)],
       groupColumns: ['Организация', 'Запуски', 'Участники', 'Верных ответов', '%'],
       empty: 'Нет организаций',
       groups,
@@ -1340,14 +1691,15 @@ function quizDistrictFolds(byOrg, districts, organizations) {
   })
   const loose = organizations.filter((org) => !org.districtId)
   if (loose.length) {
-    const groups = loose.map((org) => quizPeopleFold(byOrg.get(org.id), { key: org.id, label: { ru: org.name, kk: org.nameKk } }))
-    const correct = totalOf(groups, 'correct')
-    const answered = totalOf(groups, 'answered')
+    const groups = loose.map((org) => quizPeopleFold(byOrg.get(org.id), { key: org.id, kind: 'organization', label: { ru: org.name, kk: org.nameKk } }))
+    const sums = quizTotals(groups)
     folds.push({
       key: 'none',
-      correct,
-      answered,
-      summary: ['—', sumAt(groups, 1), sumAt(groups, 2), correct, percentCell(correct, answered)],
+      kind: 'district',
+      name: '—',
+      nameKk: '',
+      ...sums,
+      summary: ['—', sumAt(groups, 1), sumAt(groups, 2), sums.correct, percentCell(sums.correct, sums.answered)],
       groupColumns: ['Организация', 'Запуски', 'Участники', 'Верных ответов', '%'],
       empty: 'Нет организаций',
       groups,
@@ -1356,76 +1708,50 @@ function quizDistrictFolds(byOrg, districts, organizations) {
   return folds
 }
 
-function buildQuizBands(quizRows, districts, organizations, quizPrivate, quizPublic) {
-  const publicGroups = quizRows.map((row) => quizPeopleFold(quizPublic.get(row.id), { key: row.id, label: row.title }))
-  const bands = BANDS.map((band) => {
-    const groups = quizRows.filter((row) => quizPrivate.get(row.id)?.has(band.id)).map((row) => {
-      const places = quizDistrictFolds(quizPrivate.get(row.id).get(band.id), districts, organizations)
-      const correct = totalOf(places, 'correct')
-      const answered = totalOf(places, 'answered')
-      return {
-        key: row.id,
-        correct,
-        answered,
-        summary: [row.title, sumAt(places, 1), sumAt(places, 2), correct, percentCell(correct, answered)],
-        groupColumns: ['Район', 'Запуски', 'Участники', 'Верных ответов', '%'],
-        empty: 'Нет районов',
-        groups: places,
-      }
-    })
-    const correct = totalOf(groups, 'correct')
-    const answered = totalOf(groups, 'answered')
-    return {
-      key: band.id,
-      correct,
-      answered,
-      summary: [band.label, groups.length, sumAt(groups, 1), correct, percentCell(correct, answered)],
-      groupColumns: ['Квиз', 'Запуски', 'Участники', 'Верных ответов', '%'],
-      empty: 'Нет квизов',
-      groups,
-    }
-  })
-  const unplaced = quizRows.filter((row) => quizPrivate.get(row.id)?.has('unplaced')).map((row) => {
-    const places = quizDistrictFolds(quizPrivate.get(row.id).get('unplaced'), districts, organizations)
-    const correct = totalOf(places, 'correct')
-    const answered = totalOf(places, 'answered')
-    return {
-      key: row.id,
-      correct,
-      answered,
-      summary: [row.title, sumAt(places, 1), sumAt(places, 2), correct, percentCell(correct, answered)],
-      groupColumns: ['Район', 'Запуски', 'Участники', 'Верных ответов', '%'],
-      empty: 'Нет районов',
-      groups: places,
-    }
-  })
-  if (unplaced.length) {
-    const correct = totalOf(unplaced, 'correct')
-    const answered = totalOf(unplaced, 'answered')
-    bands.push({
-      key: 'unplaced',
-      correct,
-      answered,
-      summary: ['Без группы', unplaced.length, sumAt(unplaced, 1), correct, percentCell(correct, answered)],
-      groupColumns: ['Квиз', 'Запуски', 'Участники', 'Верных ответов', '%'],
-      empty: 'Нет квизов',
-      groups: unplaced,
-    })
+function quizBandNode(key, name, groups, columns) {
+  const sums = quizTotals(groups)
+  return {
+    key,
+    kind: 'band',
+    name,
+    nameKk: '',
+    ...sums,
+    summary: [name, groups.length, sumAt(groups, 1), sums.correct, percentCell(sums.correct, sums.answered)],
+    groupColumns: columns,
+    empty: 'Нет квизов',
+    groups,
   }
-  const publicCorrect = totalOf(publicGroups, 'correct')
-  const publicAnswered = totalOf(publicGroups, 'answered')
-  return [
-    {
-      key: 'public',
-      correct: publicCorrect,
-      answered: publicAnswered,
-      summary: ['Публичные', publicGroups.length, sumAt(publicGroups, 1), publicCorrect, percentCell(publicCorrect, publicAnswered)],
-      groupColumns: ['Квиз', 'Запуски', 'Участники', 'Верных ответов', '%'],
-      empty: 'Нет квизов',
-      groups: publicGroups,
-    },
-    ...bands,
-  ]
+}
+
+function quizPlacesNode(row, places) {
+  const sums = quizTotals(places)
+  return {
+    key: row.id,
+    kind: 'quiz',
+    name: row.title,
+    nameKk: '',
+    ...sums,
+    summary: [row.title, sumAt(places, 1), sumAt(places, 2), sums.correct, percentCell(sums.correct, sums.answered)],
+    groupColumns: ['Район', 'Запуски', 'Участники', 'Верных ответов', '%'],
+    empty: 'Нет районов',
+    groups: places,
+  }
+}
+
+function buildQuizBands(quizRows, districts, organizations, quizPrivate, quizPublic) {
+  const columns = ['Квиз', 'Запуски', 'Участники', 'Верных ответов', '%']
+  const publicGroups = quizRows.map((row) => quizPeopleFold(quizPublic.get(row.id), { key: row.id, kind: 'quiz', label: row.title }))
+  const bands = BANDS.map((band) => {
+    const groups = quizRows
+      .filter((row) => quizPrivate.get(row.id)?.has(band.id))
+      .map((row) => quizPlacesNode(row, quizDistrictFolds(quizPrivate.get(row.id).get(band.id), districts, organizations)))
+    return quizBandNode(band.id, band.label, groups, columns)
+  })
+  const unplaced = quizRows
+    .filter((row) => quizPrivate.get(row.id)?.has('unplaced'))
+    .map((row) => quizPlacesNode(row, quizDistrictFolds(quizPrivate.get(row.id).get('unplaced'), districts, organizations)))
+  if (unplaced.length) bands.push(quizBandNode('unplaced', 'Без группы', unplaced, columns))
+  return [quizBandNode('public', 'Публичные', publicGroups, columns), ...bands]
 }
 
 export async function listRegions(actor) {

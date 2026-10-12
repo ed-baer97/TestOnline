@@ -6,7 +6,7 @@ export function homeFor(role) {
 
 export function roleLabel(role) {
   return {
-    super: 'Суперглавный',
+    super: 'Администратор платформы',
     regional: 'Администратор региона',
     org: 'Администратор организации',
     learner: 'Тестируемый',

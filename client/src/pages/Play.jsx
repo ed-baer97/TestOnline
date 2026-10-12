@@ -91,7 +91,7 @@ export default function Play() {
     return (
       <main className="auth">
         <section className="card">
-          <p className="brand">TestOnline</p>
+          <p className="brand">Saqbol</p>
           <h1>{info.title}</h1>
           <p className="muted">{t('Войдите под своим логином, чтобы подключиться к квизу.')}</p>
           {error && <p className="form-error">{t(error)}</p>}
@@ -105,7 +105,7 @@ export default function Play() {
     return (
       <main className="auth">
         <form className="card" onSubmit={enter}>
-          <p className="brand">TestOnline</p>
+          <p className="brand">Saqbol</p>
           <h1>{info.title}</h1>
           {info.joinable ? <p className="muted">{t('Напишите имя, которое увидит ведущий.')}</p> : <p className="form-error">{t('Игра уже началась. Войти можно было до старта.')}</p>}
           <label>

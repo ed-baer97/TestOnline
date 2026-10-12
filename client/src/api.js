@@ -16,6 +16,7 @@ export const api = {
   logout: () => request('/api/logout', { method: 'POST' }),
   dashboard: () => request('/api/admin/dashboard'),
   platformStats: (regionId) => request(regionId ? `/api/admin/platform-stats?regionId=${encodeURIComponent(regionId)}` : '/api/admin/platform-stats'),
+  orgStats: (organizationId) => request(organizationId ? `/api/admin/org-stats?organizationId=${encodeURIComponent(organizationId)}` : '/api/admin/org-stats'),
   regions: () => request('/api/admin/regions'),
   createRegion: (body) => request('/api/admin/regions', { method: 'POST', body: JSON.stringify(body) }),
   updateRegion: (id, body) => request(`/api/admin/regions/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),

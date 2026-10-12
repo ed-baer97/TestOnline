@@ -1,30 +1,37 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { api } from './api.js'
 import { homeFor } from './roles.js'
-import Admin from './pages/Admin.jsx'
-import Dashboard from './pages/Dashboard.jsx'
-import Editor from './pages/Editor.jsx'
-import History from './pages/History.jsx'
 import Home from './pages/Home.jsx'
-import HostRoom from './pages/HostRoom.jsx'
 import LearnerHome, { LearnLesson } from './pages/LearnerHome.jsx'
 import Login from './pages/Login.jsx'
 import Play from './pages/Play.jsx'
-import Quizzes from './pages/Quizzes.jsx'
-import Stats from './pages/Stats.jsx'
 import { LanguageToggle, useI18n } from './i18n.jsx'
 import { ThemeToggle } from './theme.jsx'
 
-function RequireAuth({ roles, children }) {
+// Кабинеты администраторов и ведущего грузятся отдельными частями:
+// экран участника и уроки тестируемого остаются лёгкими.
+const Admin = lazy(() => import('./pages/Admin.jsx'))
+const Dashboard = lazy(() => import('./pages/Dashboard.jsx'))
+const Editor = lazy(() => import('./pages/Editor.jsx'))
+const History = lazy(() => import('./pages/History.jsx'))
+const HostRoom = lazy(() => import('./pages/HostRoom.jsx'))
+const Quizzes = lazy(() => import('./pages/Quizzes.jsx'))
+const Stats = lazy(() => import('./pages/Stats.jsx'))
+
+function Loading() {
   const { t } = useI18n()
+  return <p className="center muted">{t('Загрузка…')}</p>
+}
+
+function RequireAuth({ roles, children }) {
   const [me, setMe] = useState(undefined)
 
   useEffect(() => {
     api.me().then((data) => setMe(data.ok ? data : null)).catch(() => setMe(null))
   }, [])
 
-  if (me === undefined) return <p className="center muted">{t('Загрузка…')}</p>
+  if (me === undefined) return <Loading />
   if (!me) return <Navigate to="/login" replace />
   if (roles && !roles.includes(me.role)) return <Navigate to={homeFor(me.role)} replace />
   return children
@@ -34,8 +41,12 @@ export default function App() {
   const navigate = useNavigate()
 
   async function logout() {
-    await api.logout()
-    navigate('/login')
+    try {
+      await api.logout()
+    } catch {
+      // Даже если запрос не дошёл, форму входа нужно показать.
+    }
+    navigate('/login', { replace: true, state: { loggedOut: true } })
   }
 
   return (
@@ -44,6 +55,7 @@ export default function App() {
       <LanguageToggle />
       <ThemeToggle />
     </div>
+    <Suspense fallback={<Loading />}>
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
@@ -63,6 +75,7 @@ export default function App() {
       <Route path="/play/:code" element={<Play />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
     </>
   )
 }

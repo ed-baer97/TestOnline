@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api.js'
 import { useI18n } from '../i18n.jsx'
 import { homeFor } from '../roles.js'
@@ -7,16 +7,18 @@ import { homeFor } from '../roles.js'
 export default function Login() {
   const { t } = useI18n()
   const navigate = useNavigate()
+  const location = useLocation()
   const [login, setLogin] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
 
   useEffect(() => {
+    if (location.state?.loggedOut) return
     api.me().then((data) => {
       if (data.ok) navigate(homeFor(data.role), { replace: true })
     }).catch(() => {})
-  }, [navigate])
+  }, [navigate, location.state])
 
   async function submit(event) {
     event.preventDefault()
@@ -35,7 +37,7 @@ export default function Login() {
   return (
     <main className="auth">
       <form className="card" onSubmit={submit}>
-        <p className="brand">TestOnline</p>
+        <p className="brand">Saqbol</p>
         <h1>{t('Вход')}</h1>
         <p className="muted">{t('Логин и пароль выдаёт администратор.')}</p>
         <label>

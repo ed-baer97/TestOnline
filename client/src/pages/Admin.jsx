@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { api } from '../api.js'
 import { useI18n } from '../i18n.jsx'
 import { AdminFrame } from './AdminFrame.jsx'
@@ -34,13 +34,14 @@ function tabsFor(role) {
   }
   return [
     { to: '/admin', label: 'Обзор', end: true },
+    { to: '/admin/stats', label: 'Статистика' },
     { to: '/admin/classes', label: 'Классы' },
     { to: '/admin/learners', label: 'Тестируемые' },
     { to: '/admin/quizzes', label: 'Квизы' },
   ]
 }
 
-function Overview() {
+function Overview({ me }) {
   const { t } = useI18n()
   const [stats, setStats] = useState(null)
   const [error, setError] = useState('')
@@ -51,9 +52,15 @@ function Overview() {
 
   return (
     <section className="stack">
-      <div className="section-head"><h1>{t('Обзор')}</h1></div>
+      <div className="section-head">
+        <div>
+          <h1>{t('Обзор')}</h1>
+          <p className="muted">{t('Состав: кто и где учится. Результаты тестов — в разделе «Статистика».')}</p>
+        </div>
+        <NavLink className="ghost" to="/admin/stats">{t('Открыть статистику')}</NavLink>
+      </div>
       {error && <p className="form-error">{t(error)}</p>}
-      <DashboardView stats={stats} />
+      <DashboardView stats={stats} sections={me.role !== 'org'} />
     </section>
   )
 }
@@ -76,10 +83,10 @@ export default function Admin({ onLogout }) {
   return (
     <AdminFrame me={me} onLogout={onLogout} tabs={tabsFor(me.role)}>
       <Routes>
-        <Route index element={<Overview />} />
+        <Route index element={<Overview me={me} />} />
+        <Route path="stats/*" element={<PlatformStats me={me} />} />
         {me.role === 'super' && (
           <>
-            <Route path="stats/*" element={<PlatformStats />} />
             <Route path="materials" element={<MaterialList />} />
             <Route path="materials/quizzes" element={<MaterialQuizzes />} />
             <Route path="materials/quizzes/new" element={<Editor embedded />} />
@@ -93,7 +100,6 @@ export default function Admin({ onLogout }) {
         )}
         {me.role === 'regional' && (
           <>
-            <Route path="stats/*" element={<PlatformStats />} />
             <Route path="organizations" element={<Organizations />} />
             <Route path="staff" element={<OrgStaff />} />
             <Route path="quizzes" element={<QuizLaunch />} />

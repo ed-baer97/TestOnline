@@ -8,7 +8,7 @@ import { hashPassword, verifyPassword } from './passwords.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.join(__dirname, '..', '.env') })
 
-const postgresUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL_NON_POOLING || ''
+const postgresUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL || ''
 let poolRef = null
 let schemaRef = ''
 
@@ -28,29 +28,23 @@ function isUnique(error) {
   return error?.code === '23505' || String(error?.message || '').includes('UNIQUE')
 }
 
-function postgresConnectionString(url) {
-  if (/[?&]sslmode=/i.test(url)) return url.replace(/([?&])sslmode=[^&]*/gi, '$1sslmode=no-verify')
-  return `${url}${url.includes('?') ? '&' : '?'}sslmode=no-verify`
-}
-
 async function openDatabase() {
   if (!postgresUrl) throw new Error('Задайте POSTGRES_URL: база только Postgres')
   // PG_SSL=0 — Postgres рядом (docker compose, локальная сеть), без TLS.
   const plain = process.env.PG_SSL === '0' || /localhost|127\.0\.0\.1/.test(postgresUrl)
   const poolSize = Number(process.env.PG_POOL_MAX) > 0 ? Number(process.env.PG_POOL_MAX) : 20
-  const connectionString = plain ? postgresUrl : postgresConnectionString(postgresUrl)
-  const ssl = plain ? false : { rejectUnauthorized: false }
+  const ssl = plain ? { ssl: false } : {}
   const schema = schemaName()
   if (schema) {
-    const bootstrap = new pg.Client({ connectionString, ssl })
+    const bootstrap = new pg.Client({ connectionString: postgresUrl, ...ssl })
     await bootstrap.connect()
     await bootstrap.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`)
     await bootstrap.end()
   }
   const pool = new pg.Pool({
-    connectionString,
+    connectionString: postgresUrl,
     max: poolSize,
-    ssl,
+    ...ssl,
     options: schema ? `-c search_path=${schema},public` : undefined,
   })
   poolRef = pool

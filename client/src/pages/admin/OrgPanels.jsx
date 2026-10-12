@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api.js'
+import { formatNumber } from '../../format.js'
 import { useI18n } from '../../i18n.jsx'
+import { Modal } from '../../kit.jsx'
 import { Notice } from './ui.jsx'
 
 export function Classes() {
@@ -198,6 +200,7 @@ export function Learners() {
   const [notice, setNotice] = useState('')
   const [imported, setImported] = useState(null)
   const [importing, setImporting] = useState(false)
+  const [adding, setAdding] = useState(false)
 
   function loadGroups() {
     return api.structure().then((tree) => {
@@ -248,6 +251,7 @@ export function Learners() {
       await api.createLearner(form)
       setForm((current) => ({ ...current, displayName: '', login: '', password: '' }))
       setNotice(`Тестируемый создан. Логин: ${created.login}. Пароль: ${created.password}.`)
+      setAdding(false)
       await load()
     } catch (err) {
       setError(err.message)
@@ -307,26 +311,44 @@ export function Learners() {
   return (
     <section className="stack">
       <div className="section-head">
-        <h1>{t('Тестируемые')}</h1>
+        <div>
+          <h1>{t('Тестируемые')}</h1>
+          {learners && <p className="muted">{t('Всего: {count}', { count: formatNumber(total) })}</p>}
+        </div>
         <div className="row-actions">
           <a className="ghost" href="/api/admin/learners/template">{t('Шаблон Excel')}</a>
           {groups.length === 0 ? (
             <button
-              className="primary is-off"
+              className="ghost is-off"
               type="button"
               onClick={() => setError('Сначала создайте класс, затем сюда можно добавить тестируемого.')}
             >
               {t('Загрузить из Excel')}
             </button>
           ) : (
-            <label className="primary file-button">
+            <label className="ghost file-button">
               {importing ? t('Загрузка…') : t('Загрузить из Excel')}
               <input type="file" accept=".xlsx" disabled={importing} onChange={upload} />
             </label>
           )}
+          <button
+            className="primary"
+            type="button"
+            onClick={() => {
+              if (!groups.length) {
+                setError('Сначала создайте класс, затем сюда можно добавить тестируемого.')
+                return
+              }
+              setError('')
+              setNotice('')
+              setAdding(true)
+            }}
+          >
+            + {t('Добавить')}
+          </button>
         </div>
       </div>
-      <Notice error={error} notice={notice} />
+      <Notice error={adding ? '' : error} notice={notice} />
       {imported && (
         <section className="admin-form">
           {imported.errors?.length > 0 && (
@@ -366,36 +388,42 @@ export function Learners() {
         </section>
       )}
       {groups.length === 0 && <p className="muted">{t('Сначала создайте класс, затем сюда можно добавить тестируемого.')}</p>}
-      <p className="muted">
-        {t('В файле столбцы: Класс, Имя, Логин, Пароль. Имя можно написать по-русски или по-казахски. Если пароль пустой, он будет создан автоматически и показан после загрузки.')}
-      </p>
-      <form className="admin-form" onSubmit={create}>
-        <label>
-          {t('Имя')}
-          <input name="displayName" value={form.displayName} onChange={patch} />
-        </label>
-        <label>
-          {t('Логин')}
-          <input name="login" autoComplete="off" value={form.login} onChange={patch} />
-        </label>
-        <label>
-          {t('Пароль')}
-          <input name="password" type="password" autoComplete="new-password" value={form.password} onChange={patch} />
-        </label>
-        <label>
-          {t('Класс')}
-          <select name="classId" value={form.classId} onChange={patch}>
-            {groups.length === 0 && <option value="">{t('Нет классов')}</option>}
-            {groups.map((group) => (
-              <optgroup key={group.label} label={t(group.label)}>
-                {group.classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </optgroup>
-            ))}
-          </select>
-        </label>
-        <button className="primary add" type="submit" disabled={!groups.length}>{t('Создать тестируемого')}</button>
-      </form>
-      <div className="add-line">
+      <details className="hint">
+        <summary>{t('Как загрузить список из Excel')}</summary>
+        <p className="muted">
+          {t('В файле столбцы: Класс, Имя, Логин, Пароль. Имя можно написать по-русски или по-казахски. Если пароль пустой, он будет создан автоматически и показан после загрузки.')}
+        </p>
+      </details>
+      <Modal open={adding} title={t('Создать тестируемого')} onClose={() => setAdding(false)}>
+        <form className="stack" onSubmit={create}>
+          <Notice error={error} />
+          <label>
+            {t('Имя')}
+            <input name="displayName" value={form.displayName} onChange={patch} autoFocus />
+          </label>
+          <label>
+            {t('Логин')}
+            <input name="login" autoComplete="off" value={form.login} onChange={patch} />
+          </label>
+          <label>
+            {t('Пароль')}
+            <input name="password" type="password" autoComplete="new-password" value={form.password} onChange={patch} />
+          </label>
+          <label>
+            {t('Класс')}
+            <select name="classId" value={form.classId} onChange={patch}>
+              {groups.length === 0 && <option value="">{t('Нет классов')}</option>}
+              {groups.map((group) => (
+                <optgroup key={group.label} label={t(group.label)}>
+                  {group.classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+          <button className="primary add" type="submit" disabled={!groups.length}>{t('Создать тестируемого')}</button>
+        </form>
+      </Modal>
+      <div className="add-line list-tools">
         <select aria-label={t('Класс')} value={filter.classId} onChange={(event) => setFilter((current) => ({ ...current, classId: event.target.value }))}>
           <option value="">{t('Все классы')}</option>
           {groups.map((group) => (

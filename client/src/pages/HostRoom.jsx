@@ -112,7 +112,7 @@ export default function HostRoom() {
   return (
     <main className="stage">
       <header className="stage-bar">
-        <Link to="/host">TestOnline</Link>
+        <Link to="/host">Saqbol</Link>
         <strong data-testid="pin">{formatCode(state.code)}</strong>
         <span>{state.status === 'lobby' ? t('Лобби') : state.status === 'podium' ? t('Итог') : `${state.questionIndex + 1} / ${state.questionCount}`}</span>
       </header>

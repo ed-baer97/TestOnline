@@ -21,7 +21,7 @@ export default function Home() {
   return (
     <div className="landing">
       <header className="landing-bar">
-        <p className="brand">TestOnline</p>
+        <p className="brand">Saqbol</p>
       </header>
 
       <main>

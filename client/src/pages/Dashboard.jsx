@@ -36,6 +36,7 @@ export default function Dashboard({ onLogout }) {
           ) : (
             <BarChart
               caption={t('Запуски по квизам')}
+              order="value"
               items={stats.byQuiz.filter((quiz) => quiz.runs > 0).map((quiz) => ({
                 key: quiz.quizId || quiz.title,
                 label: quiz.title,

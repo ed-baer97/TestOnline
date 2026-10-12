@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../api.js'
+import { formatNumber } from '../../format.js'
 import { pick, useI18n } from '../../i18n.jsx'
+import { Modal, SearchBox } from '../../kit.jsx'
 import { Notice } from './ui.jsx'
 
 export function Regions() {
@@ -12,6 +14,7 @@ export function Regions() {
   const [draftsKk, setDraftsKk] = useState({})
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [adding, setAdding] = useState(false)
 
   function load() {
     return api.regions().then((data) => {
@@ -34,6 +37,7 @@ export function Regions() {
       setName('')
       setNameKk('')
       setNotice('Регион создан')
+      setAdding(false)
       await load()
     } catch (err) {
       setError(err.message)
@@ -67,20 +71,30 @@ export function Regions() {
 
   return (
     <section className="stack">
-      <div className="section-head"><h1>{t('Регионы')}</h1></div>
-      <Notice error={error} notice={notice} />
-      <form className="admin-form" onSubmit={create}>
-        <label>
-          {t('Название, русский')}
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Мангыстауская область')} />
-        </label>
-        <label>
-          {t('Название, қазақша')}
-          <input value={nameKk} onChange={(event) => setNameKk(event.target.value)} placeholder="Маңғыстау облысы" />
-        </label>
-        <button className="primary add" type="submit">{t('Создать регион')}</button>
-      </form>
+      <div className="section-head">
+        <div>
+          <h1>{t('Регионы')}</h1>
+          {regions && <p className="muted">{t('Всего: {count}', { count: formatNumber(regions.length) })}</p>}
+        </div>
+        <button className="primary" type="button" onClick={() => { setError(''); setNotice(''); setAdding(true) }}>+ {t('Добавить')}</button>
+      </div>
+      <Notice error={adding ? '' : error} notice={notice} />
+      <Modal open={adding} title={t('Создать регион')} onClose={() => setAdding(false)}>
+        <form className="stack" onSubmit={create}>
+          <Notice error={error} />
+          <label>
+            {t('Название, русский')}
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Мангыстауская область')} autoFocus />
+          </label>
+          <label>
+            {t('Название, қазақша')}
+            <input value={nameKk} onChange={(event) => setNameKk(event.target.value)} placeholder="Маңғыстау облысы" />
+          </label>
+          <button className="primary add" type="submit">{t('Создать регион')}</button>
+        </form>
+      </Modal>
       {regions === null && !error && <p className="muted">{t('Загрузка…')}</p>}
+      {regions?.length === 0 && <p className="muted">{t('Регионов пока нет. Нажмите «Добавить».')}</p>}
       <div className="stack">
         {regions?.map((region) => (
           <article className="person" key={region.id}>
@@ -115,6 +129,14 @@ export function RegionalStaff() {
   const [form, setForm] = useState({ displayName: '', login: '', password: '', regionId: '' })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [query, setQuery] = useState('')
+  const shown = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    if (!needle) return admins || []
+    const regionName = new Map(regions.map((region) => [region.id, `${region.name} ${region.nameKk || ''}`]))
+    return (admins || []).filter((person) => `${person.displayName} ${person.login} ${regionName.get(person.regionId) || ''}`.toLowerCase().includes(needle))
+  }, [admins, regions, query])
 
   function load() {
     return Promise.all([api.regionalAdmins(), api.regions()]).then(([people, regionData]) => {
@@ -142,6 +164,7 @@ export function RegionalStaff() {
       await api.createRegionalAdmin(form)
       setForm((current) => ({ ...current, displayName: '', login: '', password: '' }))
       setNotice(`Администратор создан. Логин: ${created.login}. Пароль: ${created.password}.`)
+      setAdding(false)
       await load()
     } catch (err) {
       setError(err.message)
@@ -162,32 +185,51 @@ export function RegionalStaff() {
 
   return (
     <section className="stack">
-      <div className="section-head"><h1>{t('Админы областей')}</h1></div>
-      <Notice error={error} notice={notice} />
-      <form className="admin-form" onSubmit={create}>
-        <label>
-          {t('Имя')}
-          <input name="displayName" value={form.displayName} onChange={patch} />
-        </label>
-        <label>
-          {t('Логин')}
-          <input name="login" autoComplete="off" value={form.login} onChange={patch} />
-        </label>
-        <label>
-          {t('Пароль')}
-          <input name="password" type="password" autoComplete="new-password" value={form.password} onChange={patch} />
-        </label>
-        <label>
-          {t('Область')}
-          <select name="regionId" value={form.regionId} onChange={patch}>
-            {regions.length === 0 && <option value="">{t('Сначала создайте регион')}</option>}
-            {regions.map((region) => <option key={region.id} value={region.id}>{pick(lang, region.name, region.nameKk)}</option>)}
-          </select>
-        </label>
-        <button className="primary add" type="submit" disabled={!regions.length}>{t('Создать администратора')}</button>
-      </form>
+      <div className="section-head">
+        <div>
+          <h1>{t('Админы областей')}</h1>
+          {admins && <p className="muted">{t('Всего: {count}', { count: formatNumber(admins.length) })}</p>}
+        </div>
+        <button className="primary" type="button" disabled={!regions.length} onClick={() => { setError(''); setNotice(''); setAdding(true) }}>+ {t('Добавить')}</button>
+      </div>
+      <Notice error={adding ? '' : error} notice={notice} />
+      {regions.length === 0 && admins && <p className="muted">{t('Сначала создайте регион')}</p>}
+      <Modal open={adding} title={t('Создать администратора')} onClose={() => setAdding(false)}>
+        <form className="stack" onSubmit={create}>
+          <Notice error={error} />
+          <label>
+            {t('Имя')}
+            <input name="displayName" value={form.displayName} onChange={patch} autoFocus />
+          </label>
+          <label>
+            {t('Логин')}
+            <input name="login" autoComplete="off" value={form.login} onChange={patch} />
+          </label>
+          <label>
+            {t('Пароль')}
+            <input name="password" type="password" autoComplete="new-password" value={form.password} onChange={patch} />
+          </label>
+          <label>
+            {t('Область')}
+            <select name="regionId" value={form.regionId} onChange={patch}>
+              {regions.length === 0 && <option value="">{t('Сначала создайте регион')}</option>}
+              {regions.map((region) => <option key={region.id} value={region.id}>{pick(lang, region.name, region.nameKk)}</option>)}
+            </select>
+          </label>
+          <button className="primary add" type="submit" disabled={!regions.length}>{t('Создать администратора')}</button>
+        </form>
+      </Modal>
+      {admins && admins.length > 5 && (
+        <div className="list-tools">
+          <SearchBox value={query} onChange={setQuery} placeholder="Имя, логин или область" />
+          <span className="muted">{t('Показано {shown} из {total}', { shown: formatNumber(shown.length), total: formatNumber(admins.length) })}</span>
+        </div>
+      )}
+      {admins === null && !error && <p className="muted">{t('Загрузка…')}</p>}
+      {admins?.length === 0 && <p className="muted">{t('Администраторов пока нет.')}</p>}
+      {admins && admins.length > 0 && shown.length === 0 && <p className="muted">{t('Ничего не найдено')}</p>}
       <div className="stack">
-        {admins?.map((person) => (
+        {shown.map((person) => (
           <RegionAdminRow key={person.id} person={person} regions={regions} onChanged={load} onDelete={() => remove(person)} onError={setError} />
         ))}
       </div>

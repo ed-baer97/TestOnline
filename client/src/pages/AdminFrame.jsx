@@ -14,7 +14,7 @@ export function AdminFrame({ me, onLogout, tabs, children }) {
     <TopbarSlots>
     <main className="sheet admin-sheet">
       <header className="topbar">
-        <NavLink className="brand" to="/admin">TestOnline</NavLink>
+        <NavLink className="brand" to="/admin">Saqbol</NavLink>
         <div className="top-actions">
           <span className="muted">{t(roleLabel(me.role))} · {scope}</span>
           <span>{me.displayName}</span>

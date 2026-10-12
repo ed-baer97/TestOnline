@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { BarChart } from '../../charts.jsx'
 import { BANDS } from '../../bands.js'
+import { formatNumber } from '../../format.js'
 import { pick, useI18n } from '../../i18n.jsx'
+import { Skeleton } from '../../kit.jsx'
+import { DataTable } from '../../table.jsx'
 
 export function Notice({ error, notice }) {
   const { t } = useI18n()
@@ -38,7 +41,7 @@ function showCell(cell, lang, t) {
 
 function ChartBlock({ charts }) {
   const { lang, t } = useI18n()
-  const visible = charts.filter((item) => item.items.length)
+  const visible = (charts || []).filter((item) => item.items.length)
   if (!visible.length) return null
   return (
     <div className="chart-grid">
@@ -46,6 +49,7 @@ function ChartBlock({ charts }) {
         <BarChart
           key={item.caption}
           caption={t(item.caption)}
+          order="value"
           items={item.items.map((entry) => ({
             ...entry,
             label: entry.labelKk != null ? pick(lang, entry.label, entry.labelKk) : t(entry.label),
@@ -56,36 +60,46 @@ function ChartBlock({ charts }) {
   )
 }
 
-function MiniTable({ table }) {
+function sortableCell(cell) {
+  if (cell && typeof cell === 'object' && 'ru' in cell) return cell.ru
+  if (typeof cell === 'string' && /^\d+%$/.test(cell)) return Number(cell.slice(0, -1))
+  if (cell === '—') return null
+  return cell
+}
+
+function numericColumn(table, index) {
+  return table.rows.some((row) => typeof row.cells[index] === 'number' || /^\d+%$/.test(String(row.cells[index] ?? '')))
+}
+
+// Таблица из готовых ячеек сервера (состав), но с сортировкой и поиском.
+function MiniTable({ table, plain = true }) {
   const { lang, t } = useI18n()
   if (!table?.rows?.length) return null
+  const columns = table.columns.map((label, index) => ({
+    key: String(index),
+    label,
+    num: numericColumn(table, index),
+    value: (row) => sortableCell(row.cells[index]),
+    render: (row) => showCell(row.cells[index], lang, t),
+  }))
   return (
-    <div className="table-wrap">
-      <table className="mini-table">
-        <thead>
-          <tr>{table.columns.map((column) => <th key={column}>{t(column)}</th>)}</tr>
-        </thead>
-        <tbody>
-          {table.rows.map((row) => (
-            <tr key={row.key}>
-              {row.cells.map((cell, index) => <td key={`${row.key}-${index}`}>{showCell(cell, lang, t)}</td>)}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      plain={plain}
+      compact={plain}
+      caption={plain ? undefined : table.caption}
+      columns={columns}
+      rows={table.rows}
+      rowKey="key"
+      search={table.rows.length > 10 ? (row) => row.cells.map((cell) => (cell && typeof cell === 'object' ? `${cell.ru} ${cell.kk || ''}` : String(cell ?? ''))).join(' ') : undefined}
+      pageSize={plain ? 30 : 50}
+      exportName={plain ? undefined : 'table'}
+    />
   )
 }
 
 function TableBlock({ table }) {
-  const { t } = useI18n()
   if (!table?.rows?.length) return null
-  return (
-    <figure className="chart">
-      <figcaption>{t(table.caption)}</figcaption>
-      <MiniTable table={table} />
-    </figure>
-  )
+  return <MiniTable table={table} plain={false} />
 }
 
 function foldOf(count) {
@@ -133,34 +147,45 @@ function FoldBody({ group }) {
   return <p className="muted">{t(group.empty || 'нет классов')}</p>
 }
 
-export function DashboardView({ stats }) {
+export function DashboardView({ stats, sections = true }) {
   const { t } = useI18n()
   const [part, setPart] = useState('')
-  if (!stats) return <p className="muted">{t('Загрузка…')}</p>
-  const section = stats.sections?.[part]
+  if (!stats) {
+    return (
+      <section className="dashboard" aria-busy="true">
+        <div className="stat-grid">
+          {Array.from({ length: 4 }, (_, index) => <article className="stat-card" key={index}><Skeleton lines={2} /></article>)}
+        </div>
+        <figure className="chart"><Skeleton lines={5} height={200} /></figure>
+      </section>
+    )
+  }
+  const section = sections ? stats.sections?.[part] : null
   return (
     <section className="dashboard">
-      {stats.note && <p className="muted">{t(stats.note)}</p>}
       <div className="stat-grid">
         {stats.cards.map((card) => {
           const key = card.section
-          if (!key || !stats.sections?.[key]) {
+          if (!sections || !key || !stats.sections?.[key]) {
             return (
               <article className="stat-card" key={card.label}>
                 <span>{t(card.label)}</span>
-                <strong>{card.value}</strong>
+                <strong>{formatCount(card.value)}</strong>
               </article>
             )
           }
+          const active = part === key
           return (
             <button
-              className={`stat-card ${part === key ? 'active' : ''}`}
+              className={`stat-card stat-toggle ${active ? 'active' : ''}`}
               key={card.label}
               type="button"
+              aria-pressed={active}
               onClick={() => setPart((current) => (current === key ? '' : key))}
             >
               <span>{t(card.label)}</span>
-              <strong>{card.value}</strong>
+              <strong>{formatCount(card.value)}</strong>
+              <small>{active ? t('Свернуть') : t('Подробнее')} <i aria-hidden="true">{active ? '▴' : '▾'}</i></small>
             </button>
           )
         })}
@@ -182,4 +207,8 @@ export function DashboardView({ stats }) {
       )}
     </section>
   )
+}
+
+function formatCount(value) {
+  return typeof value === 'number' ? formatNumber(value) : value
 }

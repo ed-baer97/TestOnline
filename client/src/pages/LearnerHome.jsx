@@ -19,7 +19,7 @@ export function LearnFrame({ onLogout, children }) {
     <TopbarSlots>
       <main className="sheet admin-sheet">
         <header className="topbar">
-          <Link className="brand" to="/learn">TestOnline</Link>
+          <Link className="brand" to="/learn">Saqbol</Link>
           <div className="top-actions">
             <TopbarSlot />
             <button className="ghost" type="button" onClick={onLogout}>{t('Выйти')}</button>
