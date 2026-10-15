@@ -72,6 +72,24 @@ test('строка заголовка «Вопрос» без заливки п�
   assert.equal(questions[0].correctIndex, 0)
 })
 
+test('вариант длиннее 80 символов принимается, длиннее 400 — нет', async () => {
+  const long = 'Отказаться, отойти и сразу рассказать родителям или учителю, даже если он кажется добрым'
+  assert.ok(long.length > 80)
+  assert.ok(long.length <= 400)
+  const buffer = await workbook([{
+    values: ['Что делать?', long, 'Согласиться'],
+    fills: { 2: { argb: 'FFFFFF00' } },
+  }])
+  const questions = await questionsFromXlsx(buffer)
+  assert.equal(questions[0].options[0].text, long)
+
+  const huge = await workbook([{
+    values: ['Что делать?', 'А'.repeat(401), 'Согласиться'],
+    fills: { 2: { argb: 'FFFFFF00' } },
+  }])
+  await assert.rejects(questionsFromXlsx(huge), /Строка 1: вариант длиннее 400/)
+})
+
 test('без цветного ответа, с двумя цветами и с лишним вариантом файл отклоняется', async () => {
   const plain = await workbook([{ values: ['Два плюс два?', '4', '5'] }])
   await assert.rejects(questionsFromXlsx(plain), /отличным от белого/)

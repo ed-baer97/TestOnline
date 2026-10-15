@@ -50,8 +50,8 @@ export function normalizeQuiz(input) {
     if (options.length < 2 || options.length > 4) {
       reject(`${label}: от 2 до 4 вариантов`)
     }
-    if (options.some((option) => option.text.length > 80)) {
-      reject(`${label}: вариант длиннее 80 символов`)
+    if (options.some((option) => option.text.length > 400)) {
+      reject(`${label}: вариант длиннее 400 символов`)
     }
     if (correctIndex < 0) {
       reject(`${label}: отметьте правильный ответ`)

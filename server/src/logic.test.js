@@ -25,6 +25,33 @@ test('короткий пароль и пустой логин не проход
   assert.equal(normalizeAccount({ login: ' Анна ', password: 'secret' }).login, 'Анна')
 })
 
+test('вариант длиннее 80 символов сохраняется, длиннее 400 — нет', () => {
+  const long = 'Отказаться, отойти и сразу рассказать родителям или учителю, даже если он кажется добрым'
+  assert.ok(long.length > 80)
+  const quiz = normalizeQuiz({
+    title: 'Длинный',
+    questions: [{
+      text: 'Что делать?',
+      timeLimit: 20,
+      correctIndex: 0,
+      options: [{ text: long }, { text: 'Согласиться' }],
+    }],
+  })
+  assert.equal(quiz.questions[0].options[0].text, long)
+  assert.throws(
+    () => normalizeQuiz({
+      title: 'Длинный',
+      questions: [{
+        text: 'Что делать?',
+        timeLimit: 20,
+        correctIndex: 0,
+        options: [{ text: 'А'.repeat(401) }, { text: 'Согласиться' }],
+      }],
+    }),
+    /вариант длиннее 400/,
+  )
+})
+
 test('пустые варианты отбрасываются до проверки числа ответов', () => {
   const quiz = normalizeQuiz({
     title: 'Короткий',

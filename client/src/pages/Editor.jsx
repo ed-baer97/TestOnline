@@ -160,7 +160,7 @@ export default function Editor({ onLogout, embedded = false }) {
                 />
                 <input
                   value={option.text}
-                  maxLength={80}
+                  maxLength={400}
                   placeholder={t('Вариант {n}', { n: optionIndex + 1 })}
                   onChange={(event) => updateOption(index, optionIndex, event.target.value)}
                 />
