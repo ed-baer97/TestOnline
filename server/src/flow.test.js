@@ -10,6 +10,8 @@ process.env.MEDIA_DIR = path.join(dir, 'media')
 process.env.PG_SCHEMA = `t_${crypto.randomBytes(4).toString('hex')}`
 process.env.ADMIN_PASSWORD = 'admin'
 process.env.SESSION_SECRET = 'test-secret'
+process.env.SUPER_LOGIN = 'super'
+process.env.SUPER_PASSWORD = 'super12345'
 
 test.after(async () => {
   const { closeDatabase } = await import('./db.js')
@@ -267,6 +269,57 @@ test('комната: QR-вход, вопрос без правильного о
   assert.equal(blocked.status, 400)
   const otherList = await fetch(`${base}/api/learn/live`, { headers: { Cookie: otherClassCookie } })
   assert.equal((await otherList.json()).quizzes.length, 0)
+
+  const crowd = 40
+  const burstQuiz = await fetch(`${base}/api/quizzes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({
+      title: 'Зал',
+      questions: [{
+        text: '3 + 3?',
+        timeLimit: 30,
+        correctIndex: 1,
+        options: [{ text: '5' }, { text: '6' }, { text: '7' }, { text: '8' }],
+      }],
+    }),
+  })
+  assert.equal(burstQuiz.status, 201)
+  const burstQuizJson = await burstQuiz.json()
+  const burstRoomRes = await fetch(`${base}/api/rooms`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ quizId: burstQuizJson.id }),
+  })
+  assert.equal(burstRoomRes.status, 201)
+  const burstRoom = await burstRoomRes.json()
+  const joined = await Promise.all(Array.from({ length: crowd }, (_, index) => {
+    const token = `burst-token-${String(index).padStart(8, '0')}-ok`
+    return fetch(`${base}/api/rooms/${burstRoom.code}/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: `Игрок ${index + 1}`, playerToken: token }),
+    }).then(async (res) => ({ status: res.status, token }))
+  }))
+  assert.equal(joined.every((item) => item.status === 200), true)
+  const burstInfo = await fetch(`${base}/api/rooms/${burstRoom.code}`)
+  assert.equal((await burstInfo.json()).playerCount, crowd)
+  const started = await fetch(`${base}/api/rooms/${burstRoom.code}/advance`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hostToken: burstRoom.hostToken }),
+  })
+  assert.equal(started.status, 200)
+  const answered = await Promise.all(joined.map((item, index) => fetch(`${base}/api/rooms/${burstRoom.code}/answer`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ playerToken: item.token, optionIndex: index % 2 }),
+  }).then((res) => res.status)))
+  assert.equal(answered.every((status) => status === 200), true)
+  const hostState = await fetch(`${base}/api/rooms/${burstRoom.code}/host?token=${encodeURIComponent(burstRoom.hostToken)}`)
+  const hostJson = await hostState.json()
+  assert.equal(hostJson.answeredCount, crowd)
+  assert.equal(hostJson.playerCount, crowd)
 
   player.disconnect()
   host.disconnect()

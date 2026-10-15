@@ -5,6 +5,13 @@ import { deleteLiveRoom, listLiveRooms, readLiveRoom, saveLiveRoom, saveResult }
 const rooms = new Map()
 const ROOM_TTL_MS = 4 * 60 * 60 * 1000
 const PODIUM_TTL_MS = 30 * 60 * 1000
+const REMEMBER_MS = 1500
+const CROWD_MS = 250
+const rememberTimers = new Map()
+const saveTails = new Map()
+const lobbyTimers = new Map()
+const hostTimers = new Map()
+const opening = new Map()
 
 const PUBLIC_AUDIENCE = {
   kind: 'public',
@@ -44,6 +51,7 @@ export async function createRoom(quiz, audience = null) {
     timer: null,
     saved: false,
     players: new Map(),
+    byToken: new Map(),
     createdAt: Date.now(),
     podiumAt: null,
     audience: audience?.kind === 'private' ? audience : { ...PUBLIC_AUDIENCE },
@@ -72,15 +80,63 @@ function freeze(room) {
 }
 
 function thaw(data) {
+  const players = new Map((data.players || []).map((player) => [player.id, { ...player, socketId: null }]))
+  const byToken = new Map()
+  for (const player of players.values()) {
+    if (player.token) byToken.set(player.token, player.id)
+  }
   return {
     ...data,
     timer: null,
-    players: new Map((data.players || []).map((player) => [player.id, { ...player, socketId: null }])),
+    players,
+    byToken,
   }
 }
 
+function dropTimer(map, code) {
+  const timer = map.get(code)
+  if (!timer) return
+  clearTimeout(timer)
+  map.delete(code)
+}
+
+function enqueueSave(room) {
+  const code = room.code
+  const payload = JSON.stringify(freeze(room))
+  const prev = saveTails.get(code) || Promise.resolve()
+  const next = prev.then(() => saveLiveRoom(code, payload)).catch((error) => {
+    console.error('Не удалось сохранить комнату', error)
+  })
+  saveTails.set(code, next)
+  return next
+}
+
+export function scheduleRemember(room) {
+  if (rememberTimers.has(room.code)) return
+  const timer = setTimeout(() => {
+    rememberTimers.delete(room.code)
+    const live = rooms.get(room.code)
+    if (live) enqueueSave(live)
+  }, REMEMBER_MS)
+  timer.unref?.()
+  rememberTimers.set(room.code, timer)
+}
+
 export async function remember(room) {
-  await saveLiveRoom(room.code, JSON.stringify(freeze(room)))
+  dropTimer(rememberTimers, room.code)
+  await enqueueSave(room)
+}
+
+function forgetRoom(code) {
+  dropTimer(rememberTimers, code)
+  dropTimer(lobbyTimers, code)
+  dropTimer(hostTimers, code)
+  const tail = saveTails.get(code) || Promise.resolve()
+  saveTails.delete(code)
+  opening.delete(code)
+  void tail.then(() => deleteLiveRoom(code)).catch((error) => {
+    console.error('Не удалось удалить комнату', error)
+  })
 }
 
 function expired(room, now = Date.now()) {
@@ -88,25 +144,54 @@ function expired(room, now = Date.now()) {
   return finished || now - room.createdAt > ROOM_TTL_MS
 }
 
-export async function openRoom(code) {
-  const key = String(code || '')
+function fresh(room) {
+  if (!expired(room)) return room
+  clearTimer(room)
+  rooms.delete(room.code)
+  forgetRoom(room.code)
+  return null
+}
+
+async function loadRoom(key) {
+  const again = rooms.get(key)
+  if (again) return fresh(again)
   const payload = await readLiveRoom(key)
-  const room = payload ? thaw(JSON.parse(payload)) : rooms.get(key)
-  if (!room) return null
+  const won = rooms.get(key)
+  if (won) return fresh(won)
+  if (!payload) return null
+  let data
+  try {
+    data = JSON.parse(payload)
+  } catch {
+    return null
+  }
+  const room = thaw(data)
   if (expired(room)) {
-    clearTimer(room)
-    rooms.delete(key)
     await deleteLiveRoom(key)
     return null
   }
-  const previous = rooms.get(key)
-  if (previous && previous !== room) clearTimer(previous)
   rooms.set(key, room)
-  if (room.status === 'question' && room.endsAt && Date.now() >= room.endsAt) {
-    closeQuestion(room)
-    await remember(room)
+  if (room.status === 'question' && room.endsAt) {
+    if (Date.now() >= room.endsAt) {
+      if (closeQuestion(room)) void remember(room)
+    } else {
+      armTimer(room)
+    }
   }
   return room
+}
+
+export async function openRoom(code) {
+  const key = String(code || '')
+  const live = rooms.get(key)
+  if (live) return fresh(live)
+  const pending = opening.get(key)
+  if (pending) return pending
+  const job = loadRoom(key).finally(() => {
+    if (opening.get(key) === job) opening.delete(key)
+  })
+  opening.set(key, job)
+  return job
 }
 
 export function getRoom(code) {
@@ -163,10 +248,9 @@ function optionCounts(room) {
   return counts
 }
 
-export function viewFor(room, socket) {
+export function viewFor(room, socket, board = leaderboard(room)) {
   const question = room.questionIndex >= 0 ? room.quiz.questions[room.questionIndex] : null
   const reveal = room.status === 'reveal'
-  const board = leaderboard(room)
   const showQuestion = room.status === 'question' || room.status === 'reveal'
   const base = {
     code: room.code,
@@ -273,19 +357,84 @@ export function watch(socket) {
   socket.on('disconnect', () => watchers.delete(socket))
 }
 
-export function push(_io, room) {
+function socketsIn(room) {
+  const found = []
   for (const socket of watchers) {
-    if (socket.data?.code !== room.code) continue
-    socket.emit('sync', viewFor(room, socket))
+    if (socket.data?.code === room.code) found.push(socket)
   }
+  return found
+}
+
+function emitView(room, socket, board) {
+  socket.emit('sync', viewFor(room, socket, board))
+}
+
+export function push(_io, room) {
+  dropTimer(lobbyTimers, room.code)
+  dropTimer(hostTimers, room.code)
+  const board = leaderboard(room)
+  for (const socket of socketsIn(room)) emitView(room, socket, board)
+}
+
+export function pushOne(socket, room) {
+  if (!socket || socket.data?.code !== room.code) return
+  emitView(room, socket, leaderboard(room))
+}
+
+export function noteCrowd(room) {
+  scheduleRemember(room)
+  if (room.status === 'lobby') {
+    if (lobbyTimers.has(room.code)) return
+    const timer = setTimeout(() => {
+      lobbyTimers.delete(room.code)
+      const live = rooms.get(room.code)
+      if (!live || live.status !== 'lobby') return
+      const board = leaderboard(live)
+      for (const socket of socketsIn(live)) emitView(live, socket, board)
+    }, CROWD_MS)
+    timer.unref?.()
+    lobbyTimers.set(room.code, timer)
+    return
+  }
+  if (hostTimers.has(room.code)) return
+  const timer = setTimeout(() => {
+    hostTimers.delete(room.code)
+    const live = rooms.get(room.code)
+    if (!live || live.status === 'lobby' || live.status === 'podium') return
+    const board = leaderboard(live)
+    for (const socket of socketsIn(live)) {
+      if (socket.data?.role !== 'host') continue
+      emitView(live, socket, board)
+    }
+  }, CROWD_MS)
+  timer.unref?.()
+  hostTimers.set(room.code, timer)
+}
+
+export async function notePhase(room) {
+  push(null, room)
+  await remember(room)
 }
 
 function findByToken(room, token) {
   if (!token) return null
+  const id = room.byToken?.get(token)
+  if (id) {
+    const player = room.players.get(id)
+    if (player) return player
+  }
   for (const player of room.players.values()) {
-    if (player.token === token) return player
+    if (player.token !== token) continue
+    bindToken(room, player)
+    return player
   }
   return null
+}
+
+function bindToken(room, player, previous) {
+  if (!room.byToken) room.byToken = new Map()
+  if (previous && previous !== player.token) room.byToken.delete(previous)
+  if (player.token) room.byToken.set(player.token, player.id)
 }
 
 function seatName(value, limit) {
@@ -305,7 +454,9 @@ export function joinPlayer(room, { name, playerToken, user }) {
     }
     const seated = [...room.players.values()].find((player) => player.userId === user.id)
     if (seated) {
+      const previous = seated.token
       seated.token = playerToken
+      bindToken(room, seated, previous)
       return { player: seated }
     }
   }
@@ -338,20 +489,22 @@ export function joinPlayer(room, { name, playerToken, user }) {
     joinedAt: Date.now(),
   }
   room.players.set(player.id, player)
+  bindToken(room, player)
   return { player }
 }
 
-function armTimer(room, io) {
+function armTimer(room) {
   clearTimer(room)
   const delay = Math.max(0, room.endsAt - Date.now())
   room.timer = setTimeout(() => {
     room.timer = null
     if (!closeQuestion(room)) return
-    push(io, room)
+    void notePhase(room)
   }, delay)
+  room.timer.unref?.()
 }
 
-function openNext(room, io) {
+function openNext(room) {
   const next = room.questionIndex + 1
   if (next >= room.quiz.questions.length) {
     finish(room)
@@ -369,7 +522,7 @@ function openNext(room, io) {
     player.lastPoints = 0
     player.lastCorrect = null
   }
-  armTimer(room, io)
+  armTimer(room)
 }
 
 function rememberAnswer(room, player) {
@@ -439,7 +592,7 @@ export function closeQuestion(room) {
 export function advance(room, io) {
   if (room.status === 'question') return closeQuestion(room)
   if (room.status === 'lobby' || room.status === 'reveal') {
-    openNext(room, io)
+    openNext(room)
     return true
   }
   return false
@@ -484,7 +637,7 @@ setInterval(() => {
     if (finished || expired) {
       clearTimer(room)
       rooms.delete(code)
-      void deleteLiveRoom(code)
+      forgetRoom(code)
     }
   }
 }, 60 * 1000).unref?.()

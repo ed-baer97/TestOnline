@@ -61,12 +61,13 @@ import {
   joinPlayer,
   listPrivateForClass,
   markOffline,
+  noteCrowd,
+  notePhase,
   openRoom,
   playerByToken,
   playerView,
   publicInfo,
-  push,
-  remember,
+  pushOne,
   submitAnswer,
   watch,
 } from './rooms.js'
@@ -564,8 +565,7 @@ export function createApp() {
       res.status(400).json({ error: 'Сейчас это действие недоступно' })
       return
     }
-    await remember(room)
-    push(io, room)
+    await notePhase(room)
     res.json(hostView(room))
   }))
 
@@ -583,8 +583,7 @@ export function createApp() {
       return
     }
     result.player.online = true
-    await remember(room)
-    push(io, room)
+    noteCrowd(room)
     res.json(playerView(room, result.player.id))
   }))
 
@@ -618,8 +617,7 @@ export function createApp() {
       res.status(400).json({ error: result.error })
       return
     }
-    await remember(room)
-    push(io, room)
+    noteCrowd(room)
     res.json(result)
   }))
 
@@ -636,7 +634,7 @@ export function createApp() {
     watch(socket)
 
     socket.on('host:join', async ({ code, hostToken } = {}, ack) => {
-      const room = getRoom(code) || await openRoom(code)
+      const room = await openRoom(code)
       if (!room || room.hostToken !== hostToken) {
         ack?.({ error: 'Комната не найдена или сессия ведущего устарела' })
         return
@@ -644,12 +642,12 @@ export function createApp() {
       socket.data.role = 'host'
       socket.data.code = room.code
       socket.join(room.code)
+      pushOne(socket, room)
       ack?.({ ok: true })
-      push(io, room)
     })
 
     socket.on('player:join', async ({ code, name, playerToken } = {}, ack) => {
-      const room = getRoom(code) || await openRoom(code)
+      const room = await openRoom(code)
       if (!room) {
         ack?.({ error: 'Комната не найдена' })
         return
@@ -667,13 +665,13 @@ export function createApp() {
       socket.data.code = room.code
       socket.data.playerId = result.player.id
       socket.join(room.code)
-      await remember(room)
+      noteCrowd(room)
+      pushOne(socket, room)
       ack?.({ ok: true, name: result.player.name })
-      push(io, room)
     })
 
     socket.on('host:advance', async (ack) => {
-      const room = getRoom(socket.data.code) || await openRoom(socket.data.code)
+      const room = await openRoom(socket.data.code)
       if (socket.data.role !== 'host' || !room) {
         ack?.({ error: 'Нет доступа' })
         return
@@ -682,27 +680,25 @@ export function createApp() {
         ack?.({ error: 'Сейчас это действие недоступно' })
         return
       }
-      await remember(room)
+      await notePhase(room)
       ack?.({ ok: true, status: room.status })
-      push(io, room)
     })
 
     socket.on('player:answer', async ({ optionIndex } = {}, ack) => {
-      const room = getRoom(socket.data.code) || await openRoom(socket.data.code)
+      const room = await openRoom(socket.data.code)
       if (socket.data.role !== 'player' || !room) {
         ack?.({ error: 'Вы не в комнате' })
         return
       }
       const result = submitAnswer(room, socket.data.playerId, optionIndex)
-      if (result.ok) await remember(room)
+      if (result.ok) noteCrowd(room)
       ack?.(result)
-      if (result.ok) push(io, room)
     })
 
     socket.on('disconnect', () => {
       const room = getRoom(socket.data.code)
       if (!room || socket.data.role !== 'player') return
-      if (markOffline(room, socket.data.playerId, socket.id)) push(io, room)
+      if (markOffline(room, socket.data.playerId, socket.id)) noteCrowd(room)
     })
   })
 

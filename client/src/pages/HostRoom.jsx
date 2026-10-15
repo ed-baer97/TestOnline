@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import QRCode from 'qrcode'
+import { io } from 'socket.io-client'
 import { api, formatCode, hostKey } from '../api.js'
 import { pick, useI18n } from '../i18n.jsx'
 import { COLOR_NAMES, SHAPES, Shape } from '../shapes.jsx'
@@ -14,6 +15,7 @@ export default function HostRoom() {
   const [online, setOnline] = useState(true)
   const [qr, setQr] = useState('')
   const [joinUrl, setJoinUrl] = useState('')
+  const socketRef = useRef(null)
   const seconds = useCountdown(state?.endsAt, state?.serverNow)
 
   useEffect(() => {
@@ -22,25 +24,42 @@ export default function HostRoom() {
       setError('Откройте комнату кнопкой «Запустить» в панели ведущего.')
       return undefined
     }
+    const socket = io({ withCredentials: true })
+    socketRef.current = socket
     let stopped = false
-    async function pull() {
-      try {
-        const next = await api.hostRoom(code, token)
+    const join = () => {
+      socket.timeout(8000).emit('host:join', { code, hostToken: token }, (err, res) => {
         if (stopped) return
-        setState(next)
+        if (err) {
+          setOnline(false)
+          return
+        }
+        if (res?.error) {
+          setOnline(false)
+          setError(res.error)
+          return
+        }
         setOnline(true)
         setError('')
-      } catch (err) {
-        if (stopped) return
-        setOnline(false)
-        setError(err.message)
-      }
+      })
     }
-    pull()
-    const timer = setInterval(pull, 1000)
+    socket.on('connect', () => {
+      setOnline(true)
+      join()
+    })
+    socket.on('disconnect', () => {
+      if (!stopped) setOnline(false)
+    })
+    socket.on('sync', (next) => {
+      if (stopped) return
+      setState(next)
+      setOnline(true)
+      setError('')
+    })
     return () => {
       stopped = true
-      clearInterval(timer)
+      socket.disconnect()
+      if (socketRef.current === socket) socketRef.current = null
     }
   }, [code])
 
@@ -66,15 +85,16 @@ export default function HostRoom() {
     return undefined
   }, [joinUrl])
 
-  async function advance() {
-    const token = sessionStorage.getItem(hostKey(code))
-    if (!token || state?.status === 'podium') return
-    try {
-      setState(await api.advanceRoom(code, token))
-      setError('')
-    } catch (err) {
-      if (err.message !== 'Сейчас это действие недоступно') setError(err.message)
-    }
+  function advance() {
+    const socket = socketRef.current
+    if (!socket?.connected || state?.status === 'podium') return
+    socket.timeout(8000).emit('host:advance', (err, res) => {
+      if (err) {
+        setError('Связь пропала, подключаемся снова…')
+        return
+      }
+      if (res?.error && res.error !== 'Сейчас это действие недоступно') setError(res.error)
+    })
   }
 
   useEffect(() => {
