@@ -436,10 +436,28 @@ a.stat-card:hover, a.stat-card.active, button.stat-card:hover, button.stat-card.
 .timer, .play-meta p { font-size: clamp(2.4rem, 6vw, 4.5rem); margin: 0; min-width: 2ch; text-align: right; }
 .danger { color: var(--accent-text); }
 .answer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.answer { border: 0; width: 100%; text-align: left; padding: 18px; font-size: clamp(1rem, 2vw, 1.6rem); cursor: pointer; }
+.answer { border: 0; width: 100%; text-align: left; padding: 18px; font-size: clamp(1rem, 2vw, 1.6rem); cursor: pointer; container-type: inline-size; }
 .answer svg { width: 28px; height: 28px; fill: currentColor; position: absolute; top: 12px; left: 12px; }
-.answer span { position: relative; z-index: 1; }
+.answer span {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding-inline: 0.35rem;
+  text-align: center;
+  line-height: 1.22;
+  text-wrap: balance;
+  overflow-wrap: break-word;
+  font-size: 1.15rem;
+  font-size: clamp(0.84rem, calc(92cqi / (var(--answer-chars, 22) * 0.6)), min(1.65rem, 7.4cqi));
+}
 .host-grid .answer { min-height: 22vh; font-size: clamp(1.2rem, 3vw, 2rem); }
+.host-grid .answer span {
+  padding-inline: 1.6rem;
+  font-size: 1.35rem;
+  font-size: clamp(1.05rem, calc(92cqi / (var(--answer-chars, 22) * 0.56)), min(2rem, 8cqi));
+}
 .answer.dim { filter: grayscale(0.4) brightness(0.55); }
 [data-theme="light"] .answer.dim { filter: grayscale(0.15) brightness(0.96); opacity: 0.72; }
 .answer.correct { outline: 4px solid var(--outline); }
@@ -471,7 +489,12 @@ a.stat-card:hover, a.stat-card.active, button.stat-card:hover, button.stat-card.
 .locked.yellow { background: var(--yellow); color: #241804; }
 .locked.green { background: var(--green); }
 .play .answer { min-height: 28dvh; justify-content: flex-start; padding: 42px 16px 16px; }
+.play .answer span { padding-inline: 0.4rem; }
 .compact .answer { min-height: 72px; padding-top: 16px; }
+.compact .answer span {
+  font-size: 0.95rem;
+  font-size: clamp(0.8rem, calc(92cqi / (var(--answer-chars, 22) * 0.64)), 1.05rem);
+}
 .player-podium { align-content: start; padding-top: 12px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
@@ -491,8 +514,10 @@ a.stat-card:hover, a.stat-card.active, button.stat-card:hover, button.stat-card.
     padding: 14px 18px;
     gap: 10px;
   }
-  .answer svg { position: static; width: 22px; height: 22px; }
-  .answer span { text-align: center; }
+  .answer svg { position: static; width: 22px; height: 22px; flex: none; }
+  .answer span,
+  .host-grid .answer span,
+  .play .answer span { text-align: center; padding-inline: 0.15rem; }
   .deck-bar, .slide { min-height: 0; }
 }
 

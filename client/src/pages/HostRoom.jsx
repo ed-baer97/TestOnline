@@ -4,7 +4,7 @@ import QRCode from 'qrcode'
 import { io } from 'socket.io-client'
 import { api, formatCode, hostKey } from '../api.js'
 import { pick, useI18n } from '../i18n.jsx'
-import { COLOR_NAMES, SHAPES, Shape } from '../shapes.jsx'
+import { AnswerText, COLOR_NAMES, SHAPES, Shape } from '../shapes.jsx'
 import { useCountdown } from '../useCountdown.js'
 
 export default function HostRoom() {
@@ -175,7 +175,7 @@ export default function HostRoom() {
               return (
                 <div key={option.index} className={`answer ${COLOR_NAMES[option.index]} ${correct ? 'correct' : ''} ${state.status === 'reveal' && !correct ? 'dim' : ''}`}>
                   <Shape name={SHAPES[option.index]} />
-                  <span>{option.text}</span>
+                  <AnswerText text={option.text} />
                   {state.status === 'reveal' && <b style={{ width: `${(count / total) * 100}%` }} />}
                   {state.status === 'reveal' && <em>{count}</em>}
                 </div>

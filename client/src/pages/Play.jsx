@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { io } from 'socket.io-client'
 import { api, newId, playerKey } from '../api.js'
 import { useI18n } from '../i18n.jsx'
-import { COLOR_NAMES, SHAPES, Shape } from '../shapes.jsx'
+import { AnswerText, COLOR_NAMES, SHAPES, Shape } from '../shapes.jsx'
 import { useCountdown } from '../useCountdown.js'
 
 export default function Play() {
@@ -220,7 +220,7 @@ function PlayerStage({ state, seconds, online, onAnswer }) {
               {state.question.options.map((option) => (
                 <button key={option.index} className={`answer ${COLOR_NAMES[option.index]}`} type="button" data-testid={`answer-${option.index}`} onClick={() => send(option.index)}>
                   <Shape name={SHAPES[option.index]} />
-                  <span>{option.text}</span>
+                  <AnswerText text={option.text} dense />
                 </button>
               ))}
             </div>
@@ -237,7 +237,7 @@ function PlayerStage({ state, seconds, online, onAnswer }) {
           <div className="answer-grid compact">
             {state.question.options.map((option) => (
               <div key={option.index} className={`answer ${COLOR_NAMES[option.index]} ${option.index === state.question.correctIndex ? 'correct' : 'dim'}`}>
-                <span>{option.text}</span>
+                <AnswerText text={option.text} dense />
               </div>
             ))}
           </div>
