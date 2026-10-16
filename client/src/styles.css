@@ -81,7 +81,7 @@ body::before {
   content: "";
   position: fixed;
   inset: 0;
-  background: url("/department-logo.png") center 46% / min(560px, 72vw) no-repeat;
+  background: url("/department-logo.png?v=afm") center 46% / min(560px, 72vw) no-repeat;
   opacity: 0.16;
   mix-blend-mode: multiply;
   pointer-events: none;
