@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, hostKey, newId } from '../api.js'
+import { Brand } from '../Brand.jsx'
 import { useI18n } from '../i18n.jsx'
 
 function blankQuestion() {
@@ -193,7 +194,7 @@ export default function Editor({ onLogout, embedded = false }) {
   return (
     <main className="sheet editor">
       <header className="topbar">
-        <Link className="brand" to="/host">Saqbol</Link>
+        <Brand to="/host" />
         <div className="top-actions">
           <button className="ghost" type="button" onClick={save}>{t('Сохранить')}</button>
           <button className="primary" type="button" onClick={saveAndStart}>{t('Запустить')}</button>

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { Brand } from '../Brand.jsx'
 import { useI18n } from '../i18n.jsx'
 
 const FEATURES = [
@@ -21,7 +22,7 @@ export default function Home() {
   return (
     <div className="landing">
       <header className="landing-bar">
-        <p className="brand">Saqbol</p>
+        <Brand />
       </header>
 
       <main>

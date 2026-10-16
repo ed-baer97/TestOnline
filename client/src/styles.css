@@ -106,7 +106,8 @@ button, input, textarea, select { font: inherit; color: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 a { color: inherit; }
 
-.brand { letter-spacing: 0.04em; font-weight: 700; text-decoration: none; }
+.brand { display: inline-flex; align-items: center; margin: 0; letter-spacing: 0.04em; font-weight: 700; text-decoration: none; line-height: 0; }
+.brand-mark { width: 44px; height: 44px; object-fit: contain; display: block; }
 
 .home {
   min-height: 100dvh;
@@ -664,7 +665,7 @@ a.stat-card:hover, a.stat-card.active, button.stat-card:hover, button.stat-card.
   margin-bottom: 12px;
   padding-right: 220px;
 }
-.landing-bar .brand { font-size: 1.15rem; }
+.landing-bar .brand-mark, .auth .brand-mark { width: 56px; height: 56px; }
 .landing-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.9fr);

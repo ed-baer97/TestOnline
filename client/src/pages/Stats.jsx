@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api, formatCode } from '../api.js'
 import { BarChart, RateList } from '../charts.jsx'
+import { Brand } from '../Brand.jsx'
 import { getLang, useI18n } from '../i18n.jsx'
 
 function locale() {
@@ -80,7 +81,7 @@ export default function Stats({ onLogout }) {
   return (
     <main className="sheet editor">
       <header className="topbar">
-        <Link className="brand" to="/host">Saqbol</Link>
+        <Brand to="/host" />
         <div className="top-actions">
           <Link to={`/host/quiz/${id}`}>{t('Править')}</Link>
           <button className="ghost" type="button" onClick={onLogout}>{t('Выйти')}</button>

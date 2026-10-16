@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api.js'
 import { pick, useI18n } from '../i18n.jsx'
+import { Brand } from '../Brand.jsx'
 import { TopbarSlot, TopbarSlots } from '../topbar.jsx'
 import LessonView from './LessonView.jsx'
 
@@ -19,7 +20,7 @@ export function LearnFrame({ onLogout, children }) {
     <TopbarSlots>
       <main className="sheet admin-sheet">
         <header className="topbar">
-          <Link className="brand" to="/learn">Saqbol</Link>
+          <Brand to="/learn" />
           <div className="top-actions">
             <TopbarSlot />
             <button className="ghost" type="button" onClick={onLogout}>{t('Выйти')}</button>

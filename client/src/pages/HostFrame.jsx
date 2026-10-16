@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { Brand } from '../Brand.jsx'
 import { useI18n } from '../i18n.jsx'
 
 export function HostFrame({ onLogout, account, title, extra, children }) {
@@ -6,7 +7,7 @@ export function HostFrame({ onLogout, account, title, extra, children }) {
   return (
     <main className="sheet">
       <header className="topbar">
-        <NavLink className="brand" to="/host">Saqbol</NavLink>
+        <Brand to="/host" />
         <div className="top-actions">
           <NavLink className="primary" to="/host/quiz/new">{t('Новый квиз')}</NavLink>
           {account && <span className="muted">{account}</span>}

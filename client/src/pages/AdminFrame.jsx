@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { Brand } from '../Brand.jsx'
 import { pick, useI18n } from '../i18n.jsx'
 import { roleLabel } from '../roles.js'
 import { TopbarSlot, TopbarSlots } from '../topbar.jsx'
@@ -14,7 +15,7 @@ export function AdminFrame({ me, onLogout, tabs, children }) {
     <TopbarSlots>
     <main className="sheet admin-sheet">
       <header className="topbar">
-        <NavLink className="brand" to="/admin">Saqbol</NavLink>
+        <Brand to="/admin" />
         <div className="top-actions">
           <span className="muted">{t(roleLabel(me.role))} · {scope}</span>
           <span>{me.displayName}</span>

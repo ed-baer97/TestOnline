@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import QRCode from 'qrcode'
 import { io } from 'socket.io-client'
 import { api, formatCode, hostKey } from '../api.js'
+import { Brand } from '../Brand.jsx'
 import { pick, useI18n } from '../i18n.jsx'
 import { AnswerText, COLOR_NAMES, SHAPES, Shape } from '../shapes.jsx'
 import { useCountdown } from '../useCountdown.js'
@@ -132,7 +133,7 @@ export default function HostRoom() {
   return (
     <main className="stage">
       <header className="stage-bar">
-        <Link to="/host">Saqbol</Link>
+        <Brand to="/host" />
         <strong data-testid="pin">{formatCode(state.code)}</strong>
         <span>{state.status === 'lobby' ? t('Лобби') : state.status === 'podium' ? t('Итог') : `${state.questionIndex + 1} / ${state.questionCount}`}</span>
       </header>

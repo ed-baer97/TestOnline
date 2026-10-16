@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api.js'
 import { useI18n } from '../i18n.jsx'
+import { Brand } from '../Brand.jsx'
 import { homeFor } from '../roles.js'
 
 export default function Login() {
@@ -37,7 +38,7 @@ export default function Login() {
   return (
     <main className="auth">
       <form className="card" onSubmit={submit}>
-        <p className="brand">Saqbol</p>
+        <Brand />
         <h1>{t('Вход')}</h1>
         <p className="muted">{t('Логин и пароль выдаёт администратор.')}</p>
         <label>

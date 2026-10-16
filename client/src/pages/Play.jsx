@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { io } from 'socket.io-client'
 import { api, newId, playerKey } from '../api.js'
+import { Brand } from '../Brand.jsx'
 import { useI18n } from '../i18n.jsx'
 import { AnswerText, COLOR_NAMES, SHAPES, Shape } from '../shapes.jsx'
 import { useCountdown } from '../useCountdown.js'
@@ -118,7 +119,7 @@ export default function Play() {
     return (
       <main className="auth">
         <section className="card">
-          <p className="brand">Saqbol</p>
+          <Brand />
           <h1>{info.title}</h1>
           <p className="muted">{t('Войдите под своим логином, чтобы подключиться к квизу.')}</p>
           {error && <p className="form-error">{t(error)}</p>}
@@ -132,7 +133,7 @@ export default function Play() {
     return (
       <main className="auth">
         <form className="card" onSubmit={enter}>
-          <p className="brand">Saqbol</p>
+          <Brand />
           <h1>{info.title}</h1>
           {info.joinable ? <p className="muted">{t('Напишите имя, которое увидит ведущий.')}</p> : <p className="form-error">{t('Игра уже началась. Войти можно было до старта.')}</p>}
           <label>
