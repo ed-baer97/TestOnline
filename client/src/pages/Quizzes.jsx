@@ -73,9 +73,9 @@ export function QuizCatalog({ editBase, classLaunch = false }) {
             </div>
             <div className="top-actions">
               <button className="primary" type="button" data-testid="start-quiz" onClick={() => openLaunch(quiz.id)}>{t('Запустить')}</button>
-              <Link to={`/host/quiz/${quiz.id}/stats`}>{t('Статистика')}</Link>
-              <Link to={`${editBase}/${quiz.id}`}>{t('Править')}</Link>
-              <button className="ghost" type="button" onClick={() => remove(quiz)}>{t('Удалить')}</button>
+              <Link className="ghost" to={`/host/quiz/${quiz.id}/stats`}>{t('Статистика')}</Link>
+              <Link className="ghost" to={`${editBase}/${quiz.id}`}>{t('Править')}</Link>
+              <button className="ghost danger-btn" type="button" onClick={() => remove(quiz)}>{t('Удалить')}</button>
             </div>
             {launchId === quiz.id && (
               <form className="launch-box" onSubmit={(event) => { event.preventDefault(); start(quiz.id, mode) }}>
@@ -195,12 +195,16 @@ export function QuizLaunch() {
   )
 }
 
-export default function Quizzes({ onLogout }) {
-  const [account, setAccount] = useState('')
+export default function Quizzes({ me, onLogout }) {
+  const [account, setAccount] = useState(me?.login || '')
 
   useEffect(() => {
-    api.me().then((me) => setAccount(me.login || '')).catch(() => setAccount(''))
-  }, [])
+    if (me?.login) {
+      setAccount(me.login)
+      return
+    }
+    api.me().then((profile) => setAccount(profile.login || '')).catch(() => setAccount(''))
+  }, [me])
 
   return (
     <HostFrame onLogout={onLogout} account={account} title="Квизы">

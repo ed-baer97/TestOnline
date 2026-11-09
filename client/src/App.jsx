@@ -6,8 +6,7 @@ import Home from './pages/Home.jsx'
 import LearnerHome, { LearnLesson } from './pages/LearnerHome.jsx'
 import Login from './pages/Login.jsx'
 import Play from './pages/Play.jsx'
-import { LanguageToggle, useI18n } from './i18n.jsx'
-import { ThemeToggle } from './theme.jsx'
+import { useI18n } from './i18n.jsx'
 import { dropResource } from './useResource.js'
 
 // Кабинеты администраторов и ведущего грузятся отдельными частями:
@@ -52,32 +51,27 @@ export default function App() {
   }
 
   return (
-    <>
-    <div className="corner-controls">
-      <LanguageToggle />
-      <ThemeToggle />
-    </div>
     <Suspense fallback={<Loading />}>
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/host/login" element={<Navigate to="/login" replace />} />
-      <Route path="/host/register" element={<Navigate to="/login" replace />} />
-      <Route path="/admin/*" element={<RequireAuth roles={['super', 'regional', 'org']}><Admin onLogout={logout} /></RequireAuth>} />
-      <Route path="/learn" element={<RequireAuth roles={['learner']}><LearnerHome onLogout={logout} /></RequireAuth>} />
-      <Route path="/learn/lessons/:id" element={<RequireAuth roles={['learner']}><LearnLesson onLogout={logout} /></RequireAuth>} />
-      <Route path="/host" element={<RequireAuth roles={['host']}><Dashboard onLogout={logout} /></RequireAuth>} />
-      <Route path="/host/quizzes" element={<RequireAuth roles={['host']}><Quizzes onLogout={logout} /></RequireAuth>} />
-      <Route path="/host/history" element={<RequireAuth roles={['host']}><History onLogout={logout} /></RequireAuth>} />
-      <Route path="/host/quiz/:id/stats/:resultId/:player" element={<RequireAuth roles={['host', 'super']}>{(me) => <Stats onLogout={logout} role={me.role} />}</RequireAuth>} />
-      <Route path="/host/quiz/:id/stats/:resultId" element={<RequireAuth roles={['host', 'super']}>{(me) => <Stats onLogout={logout} role={me.role} />}</RequireAuth>} />
-      <Route path="/host/quiz/:id/stats" element={<RequireAuth roles={['host', 'super']}>{(me) => <Stats onLogout={logout} role={me.role} />}</RequireAuth>} />
-      <Route path="/host/quiz/:id" element={<RequireAuth roles={['host']}><Editor onLogout={logout} /></RequireAuth>} />
-      <Route path="/host/room/:code" element={<HostRoom />} />
-      <Route path="/play/:code" element={<Play />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/host/login" element={<Navigate to="/login" replace />} />
+        <Route path="/host/register" element={<Navigate to="/login" replace />} />
+        <Route path="/admin/*" element={<RequireAuth roles={['super', 'regional', 'org']}>{(me) => <Admin me={me} onLogout={logout} />}</RequireAuth>} />
+        <Route path="/learn" element={<RequireAuth roles={['learner']}>{(me) => <LearnerHome me={me} onLogout={logout} />}</RequireAuth>} />
+        <Route path="/learn/lessons/:id" element={<RequireAuth roles={['learner']}>{(me) => <LearnLesson me={me} onLogout={logout} />}</RequireAuth>} />
+        <Route path="/host" element={<RequireAuth roles={['host']}>{(me) => <Dashboard me={me} onLogout={logout} />}</RequireAuth>} />
+        <Route path="/host/quizzes" element={<RequireAuth roles={['host']}>{(me) => <Quizzes me={me} onLogout={logout} />}</RequireAuth>} />
+        <Route path="/host/history" element={<RequireAuth roles={['host']}>{(me) => <History me={me} onLogout={logout} />}</RequireAuth>} />
+        <Route path="/host/quiz/:id/stats/:resultId/:player" element={<RequireAuth roles={['host', 'super']}>{(me) => <Stats me={me} onLogout={logout} role={me.role} />}</RequireAuth>} />
+        <Route path="/host/quiz/:id/stats/:resultId" element={<RequireAuth roles={['host', 'super']}>{(me) => <Stats me={me} onLogout={logout} role={me.role} />}</RequireAuth>} />
+        <Route path="/host/quiz/:id/stats" element={<RequireAuth roles={['host', 'super']}>{(me) => <Stats me={me} onLogout={logout} role={me.role} />}</RequireAuth>} />
+        <Route path="/host/quiz/:id" element={<RequireAuth roles={['host']}>{(me) => <Editor me={me} onLogout={logout} />}</RequireAuth>} />
+        <Route path="/host/room/:code" element={<HostRoom />} />
+        <Route path="/play/:code" element={<Play />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </Suspense>
-    </>
   )
 }
+

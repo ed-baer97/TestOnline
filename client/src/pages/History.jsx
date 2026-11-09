@@ -12,22 +12,22 @@ function when(result) {
   return Date.parse(result.startedAt || result.finishedAt) || 0
 }
 
-export default function History({ onLogout }) {
+export default function History({ me, onLogout }) {
   const { t } = useI18n()
   const [stats, setStats] = useState(null)
-  const [account, setAccount] = useState('')
+  const [account, setAccount] = useState(me?.login || '')
   const [error, setError] = useState('')
   const [sort, setSort] = useState('date')
   const [ascending, setAscending] = useState(false)
 
   useEffect(() => {
-    Promise.all([api.stats(), api.me()])
-      .then(([statsData, me]) => {
+    Promise.all([api.stats(), me ? Promise.resolve(me) : api.me()])
+      .then(([statsData, profile]) => {
         setStats(statsData)
-        setAccount(me.login || '')
+        setAccount(profile?.login || '')
       })
       .catch((err) => setError(err.message))
-  }, [])
+  }, [me])
 
   const games = useMemo(() => {
     const list = [...(stats?.history || [])]

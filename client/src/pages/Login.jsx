@@ -4,6 +4,7 @@ import { api } from '../api.js'
 import { useI18n } from '../i18n.jsx'
 import { Brand } from '../Brand.jsx'
 import { homeFor } from '../roles.js'
+import { EnvControls } from '../topbar.jsx'
 
 export default function Login() {
   const { t } = useI18n()
@@ -36,33 +37,39 @@ export default function Login() {
   }
 
   return (
-    <main className="auth">
-      <form className="card" onSubmit={submit}>
-        <Brand />
-        <h1>{t('Вход')}</h1>
-        <p className="muted">{t('Логин и пароль выдаёт администратор.')}</p>
-        <label>
-          {t('Логин')}
-          <input
-            autoFocus
-            autoComplete="username"
-            value={login}
-            onChange={(event) => setLogin(event.target.value)}
-          />
-        </label>
-        <label>
-          {t('Пароль')}
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-        </label>
-        {error && <p className="form-error">{t(error)}</p>}
-        <button className="primary" type="submit" disabled={pending}>{t('Войти')}</button>
-        <Link className="text-link" to="/">{t('На главную')}</Link>
-      </form>
-    </main>
+    <div className="auth-page">
+      <header className="auth-bar">
+        <Link className="auth-back" to="/">← {t('На главную')}</Link>
+        <EnvControls />
+      </header>
+      <main className="auth">
+        <form className="card" onSubmit={submit}>
+          <Brand to="/" />
+          <h1>{t('Вход')}</h1>
+          <p className="muted">{t('Логин и пароль выдаёт администратор.')}</p>
+          <label>
+            {t('Логин')}
+            <input
+              autoFocus
+              autoComplete="username"
+              value={login}
+              onChange={(event) => setLogin(event.target.value)}
+            />
+          </label>
+          <label>
+            {t('Пароль')}
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+          {error && <p className="form-error">{t(error)}</p>}
+          <button className="primary" type="submit" disabled={pending}>{t('Войти')}</button>
+        </form>
+      </main>
+    </div>
   )
 }
+

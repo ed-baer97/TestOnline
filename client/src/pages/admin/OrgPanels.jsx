@@ -129,9 +129,9 @@ function ClassLine({ item, onRun }) {
         <input aria-label={t('Класс {name}', { name: item.name })} value={name} onChange={(event) => setName(event.target.value)} />
         <button className="ghost" type="submit">{t('Сохранить')}</button>
       </form>
-      <span className="muted">{item.learners}</span>
+      <span className="muted">{t('{count} тест.', { count: item.learners })}</span>
       <button
-        className="ghost"
+        className="ghost danger-btn"
         type="button"
         onClick={() => {
           if (window.confirm(t('Удалить «{name}»?', { name: item.name }))) onRun(() => api.deleteClass(item.id))
@@ -158,7 +158,7 @@ function TrackName({ track, onRun }) {
       <input aria-label={t('Название курса')} value={name} onChange={(event) => setName(event.target.value)} />
       <button className="ghost" type="submit">{t('Переименовать')}</button>
       <button
-        className="ghost"
+        className="ghost danger-btn"
         type="button"
         onClick={() => {
           if (window.confirm(t('Удалить курс «{name}»?', { name: track.name }))) onRun(() => api.deleteTrack(track.id))
@@ -454,6 +454,7 @@ function LearnerRow({ person, groups, onChanged, onDelete, onError }) {
   const [displayName, setDisplayName] = useState(person.displayName)
   const [classId, setClassId] = useState(person.classId)
   const [password, setPassword] = useState('')
+  const [saved, setSaved] = useState(false)
 
   async function save(event) {
     event.preventDefault()
@@ -461,6 +462,8 @@ function LearnerRow({ person, groups, onChanged, onDelete, onError }) {
     try {
       await api.updateLearner(person.id, { displayName, classId, password })
       setPassword('')
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
       await onChanged()
     } catch (err) {
       onError(err.message)
@@ -486,10 +489,12 @@ function LearnerRow({ person, groups, onChanged, onDelete, onError }) {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
-        <button className="ghost" type="submit">{t('Сохранить')}</button>
+        <button className="ghost" type="submit">{saved ? `✓ ${t('Сохранено')}` : t('Сохранить')}</button>
       </form>
-      <span className="muted">{person.login} · {t(person.classLabel)}</span>
-      <button className="ghost" type="button" onClick={onDelete}>{t('Удалить')}</button>
+      <div className="person-meta">
+        <span className="muted"><code className="cell-code">{person.login}</code> · {t(person.classLabel)}</span>
+        <button className="ghost danger-btn" type="button" onClick={onDelete}>{t('Удалить')}</button>
+      </div>
     </article>
   )
 }

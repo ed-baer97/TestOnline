@@ -1,23 +1,25 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../api.js'
 import { BarChart } from '../charts.jsx'
 import { useI18n } from '../i18n.jsx'
 import { HostFrame } from './HostFrame.jsx'
 
-export default function Dashboard({ onLogout }) {
+export default function Dashboard({ me, onLogout }) {
   const { t } = useI18n()
   const [stats, setStats] = useState(null)
-  const [account, setAccount] = useState('')
+  const [account, setAccount] = useState(me?.login || '')
   const [error, setError] = useState('')
 
   useEffect(() => {
-    Promise.all([api.stats(), api.me()])
-      .then(([statsData, me]) => {
+    const tasks = [api.stats(), me ? Promise.resolve(me) : api.me()]
+    Promise.all(tasks)
+      .then(([statsData, profile]) => {
         setStats(statsData)
-        setAccount(me.login || '')
+        setAccount(profile?.login || '')
       })
       .catch((err) => setError(err.message))
-  }, [])
+  }, [me])
 
   return (
     <HostFrame onLogout={onLogout} account={account} title="Обзор">
@@ -26,8 +28,16 @@ export default function Dashboard({ onLogout }) {
       {stats && (
         <section className="dashboard">
           <div className="stat-grid">
-            <article className="stat-card"><span>{t('Квизов')}</span><strong>{stats.quizzes}</strong></article>
-            <article className="stat-card"><span>{t('Запусков')}</span><strong>{stats.runs}</strong></article>
+            <Link className="stat-card" to="/host/quizzes">
+              <span>{t('Квизов')}</span>
+              <strong>{stats.quizzes}</strong>
+              <small className="muted">{t('К списку квизов')} →</small>
+            </Link>
+            <Link className="stat-card" to="/host/history">
+              <span>{t('Запусков')}</span>
+              <strong>{stats.runs}</strong>
+              <small className="muted">{t('История')} →</small>
+            </Link>
             <article className="stat-card"><span>{t('Участников')}</span><strong>{stats.participants}</strong></article>
             <article className="stat-card"><span>{t('Средний балл')}</span><strong>{stats.averageScore ?? '—'}</strong></article>
           </div>
@@ -49,3 +59,4 @@ export default function Dashboard({ onLogout }) {
     </HostFrame>
   )
 }
+

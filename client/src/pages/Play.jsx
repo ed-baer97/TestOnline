@@ -5,6 +5,7 @@ import { api, newId, playerKey } from '../api.js'
 import { Brand } from '../Brand.jsx'
 import { useI18n } from '../i18n.jsx'
 import { AnswerText, COLOR_NAMES, SHAPES, Shape } from '../shapes.jsx'
+import { EnvControls } from '../topbar.jsx'
 import { useCountdown } from '../useCountdown.js'
 
 export default function Play() {
@@ -117,33 +118,45 @@ export default function Play() {
 
   if (info.access === 'private' && !identity) {
     return (
-      <main className="auth">
-        <section className="card">
-          <Brand />
-          <h1>{info.title}</h1>
-          <p className="muted">{t('Войдите под своим логином, чтобы подключиться к квизу.')}</p>
-          {error && <p className="form-error">{t(error)}</p>}
-          {!me?.ok && <Link className="primary" to="/login">{t('Войти')}</Link>}
-        </section>
-      </main>
+      <div className="auth-page">
+        <header className="auth-bar">
+          <Link className="auth-back" to="/">← {t('На главную')}</Link>
+          <EnvControls />
+        </header>
+        <main className="auth">
+          <section className="card">
+            <Brand to="/" />
+            <h1>{info.title}</h1>
+            <p className="muted">{t('Войдите под своим логином, чтобы подключиться к квизу.')}</p>
+            {error && <p className="form-error">{t(error)}</p>}
+            {!me?.ok && <Link className="primary" to="/login">{t('Войти')}</Link>}
+          </section>
+        </main>
+      </div>
     )
   }
 
   if (!identity) {
     return (
-      <main className="auth">
-        <form className="card" onSubmit={enter}>
-          <Brand />
-          <h1>{info.title}</h1>
-          {info.joinable ? <p className="muted">{t('Напишите имя, которое увидит ведущий.')}</p> : <p className="form-error">{t('Игра уже началась. Войти можно было до старта.')}</p>}
-          <label>
-            {t('Ваше имя')}
-            <input data-testid="nickname" maxLength={20} autoFocus value={name} onChange={(event) => setName(event.target.value)} />
-          </label>
-          {error && <p className="form-error">{t(error)}</p>}
-          <button className="primary" type="submit" disabled={!info.joinable}>{t('Войти в игру')}</button>
-        </form>
-      </main>
+      <div className="auth-page">
+        <header className="auth-bar">
+          <Link className="auth-back" to="/">← {t('На главную')}</Link>
+          <EnvControls />
+        </header>
+        <main className="auth">
+          <form className="card" onSubmit={enter}>
+            <Brand to="/" />
+            <h1>{info.title}</h1>
+            {info.joinable ? <p className="muted">{t('Напишите имя, которое увидит ведущий.')}</p> : <p className="form-error">{t('Игра уже началась. Войти можно было до старта.')}</p>}
+            <label>
+              {t('Ваше имя')}
+              <input data-testid="nickname" maxLength={20} autoFocus value={name} onChange={(event) => setName(event.target.value)} />
+            </label>
+            {error && <p className="form-error">{t(error)}</p>}
+            <button className="primary" type="submit" disabled={!info.joinable}>{t('Войти в игру')}</button>
+          </form>
+        </main>
+      </div>
     )
   }
 
@@ -195,8 +208,11 @@ function PlayerStage({ state, seconds, online, onAnswer }) {
   return (
     <main className="play">
       <header>
-        <span>{state.me?.name}</span>
-        <strong>{state.me?.score ?? 0}</strong>
+        <div className="play-player">
+          <span>{state.me?.name}</span>
+          <strong>{state.me?.score ?? 0}</strong>
+        </div>
+        <EnvControls />
       </header>
       {!online && <p className="banner">{t('Связь пропала, подключаемся снова…')}</p>}
       {state.status === 'lobby' && (

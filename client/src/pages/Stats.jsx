@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api, formatCode } from '../api.js'
 import { BarChart, RateList } from '../charts.jsx'
-import { Brand } from '../Brand.jsx'
 import { getLang, useI18n } from '../i18n.jsx'
+import { Crumbs } from '../kit.jsx'
+import { AdminFrame } from './AdminFrame.jsx'
+import { HostFrame } from './HostFrame.jsx'
 
 function locale() {
   return getLang() === 'kk' ? 'kk' : 'ru'
@@ -54,14 +56,53 @@ function scoreText(value) {
   return value == null ? '—' : String(value)
 }
 
-export default function Stats({ onLogout, role }) {
+function StatsShell({ isSuper, me, onLogout, crumbs, title, subtitle, extra, children }) {
+  const { t } = useI18n()
+  if (isSuper && me) {
+    return (
+      <AdminFrame me={me} onLogout={onLogout}>
+        <section className="stack stats-page">
+          <div className="stats-head">
+            <Crumbs items={crumbs} />
+            {(title || extra) && (
+              <div className="section-head">
+                <div>
+                  {title && <h1>{title}</h1>}
+                  {subtitle && <p className="muted">{subtitle}</p>}
+                </div>
+                {extra}
+              </div>
+            )}
+          </div>
+          {children}
+        </section>
+      </AdminFrame>
+    )
+  }
+  return (
+    <HostFrame
+      onLogout={onLogout}
+      account={me?.login || ''}
+      crumbs={crumbs}
+      title={title || t('Статистика')}
+      subtitle={subtitle}
+      extra={extra}
+    >
+      <section className="stack stats-page">
+        {children}
+      </section>
+    </HostFrame>
+  )
+}
+
+export default function Stats({ me, onLogout, role }) {
   const { t } = useI18n()
   const { id, resultId, player } = useParams()
   const [stats, setStats] = useState(null)
   const [error, setError] = useState('')
-  const isSuper = role === 'super'
-  const homeTo = isSuper ? '/admin/stats' : '/host'
-  const quizzesTo = isSuper ? '/admin/materials/quizzes' : '/host'
+  const effectiveRole = role || me?.role
+  const isSuper = effectiveRole === 'super'
+  const quizzesTo = isSuper ? '/admin/materials/quizzes' : '/host/quizzes'
   const editTo = isSuper ? `/admin/materials/quizzes/${id}` : `/host/quiz/${id}`
 
   useEffect(() => {
@@ -70,30 +111,66 @@ export default function Stats({ onLogout, role }) {
 
   if (error) {
     return (
-      <main className="sheet">
+      <StatsShell isSuper={isSuper} me={me} onLogout={onLogout} crumbs={[{ to: quizzesTo, label: t('Квизы') }, { label: t('Статистика') }]} title={t('Статистика')}>
         <p className="form-error">{t(error)}</p>
-        <Link to={quizzesTo}>{t('К списку квизов')}</Link>
-      </main>
+        <Link className="ghost add" to={quizzesTo}>{t('К списку квизов')}</Link>
+      </StatsShell>
     )
   }
-  if (!stats) return <p className="center muted">{t('Загрузка…')}</p>
+  if (!stats) {
+    return (
+      <StatsShell isSuper={isSuper} me={me} onLogout={onLogout} title={t('Загрузка…')}>
+        <p className="muted">{t('Загрузка…')}</p>
+      </StatsShell>
+    )
+  }
 
   const session = resultId ? stats.sessions.find((item) => item.id === resultId) : null
   const playerIndex = player == null ? -1 : Number(player)
   const person = session && Number.isInteger(playerIndex) ? session.players[playerIndex] : null
 
-  return (
-    <main className="sheet editor">
-      <header className="topbar">
-        <Brand to={homeTo} />
-        <div className="top-actions">
-          <Link to={editTo}>{t('Править')}</Link>
-          <button className="ghost" type="button" onClick={onLogout}>{t('Выйти')}</button>
-        </div>
-      </header>
-      <p className="muted"><Link to={quizzesTo}>{t('Квизы')}</Link> / {stats.title}</p>
-      <h1>{person ? `${person.rank}. ${person.name}` : session ? t(launchLabel(session)) : stats.title}</h1>
+  const crumbs = [
+    ...(isSuper ? [{ to: '/admin/materials', label: t('Материалы') }] : []),
+    { to: quizzesTo, label: t('Квизы') },
+    session
+      ? { to: `/host/quiz/${id}/stats`, label: stats.title }
+      : { label: stats.title },
+    session && (person
+      ? { to: `/host/quiz/${id}/stats/${session.id}`, label: t(launchLabel(session)) }
+      : { label: t(launchLabel(session)) }),
+    person && { label: `${person.rank}. ${person.name}` },
+  ].filter(Boolean)
 
+  const heading = person
+    ? `${person.rank}. ${person.name}`
+    : session
+      ? t(launchLabel(session))
+      : stats.title
+
+  const subtitle = session
+    ? `${stats.title} · ${t('код {code}', { code: formatCode(session.code) })}`
+    : undefined
+
+  return (
+    <StatsShell
+      isSuper={isSuper}
+      me={me}
+      onLogout={onLogout}
+      crumbs={crumbs}
+      title={heading}
+      subtitle={subtitle}
+      extra={(
+        <div className="row-actions">
+          {person && session && (
+            <Link className="ghost" to={`/host/quiz/${id}/stats/${session.id}`}>{t('К участникам запуска')}</Link>
+          )}
+          {!person && session && (
+            <Link className="ghost" to={`/host/quiz/${id}/stats`}>{t('Все запуски')}</Link>
+          )}
+          <Link className="ghost" to={editTo}>{t('Править')}</Link>
+        </div>
+      )}
+    >
       {person && session ? (
         <PlayerReport quizId={id} session={session} person={person} />
       ) : session ? (
@@ -103,9 +180,10 @@ export default function Stats({ onLogout, role }) {
       ) : (
         <QuizReport stats={stats} />
       )}
-    </main>
+    </StatsShell>
   )
 }
+
 
 function Tiles({ items }) {
   const { t } = useI18n()

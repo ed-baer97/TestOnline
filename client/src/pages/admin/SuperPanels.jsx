@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { NavLink } from 'react-router-dom'
 import { api } from '../../api.js'
 import { formatNumber } from '../../format.js'
 import { pick, useI18n } from '../../i18n.jsx'
@@ -111,10 +112,13 @@ export function Regions() {
               />
               <button className="ghost" type="submit">{t('Сохранить')}</button>
             </form>
-            <p className="muted">
-              {t('{organizations} орг. · {admins} адм. · {learners} тест.', { organizations: region.organizations, admins: region.admins, learners: region.learners })}
-            </p>
-            <button className="ghost" type="button" onClick={() => remove(region)}>{t('Удалить')}</button>
+            <div className="person-meta">
+              <span className="muted">
+                {t('{organizations} орг. · {admins} адм. · {learners} тест.', { organizations: region.organizations, admins: region.admins, learners: region.learners })}
+              </span>
+              <NavLink className="ghost" to={`/admin/stats/region/${region.id}`}>{t('Статистика')}</NavLink>
+              <button className="ghost danger-btn" type="button" onClick={() => remove(region)}>{t('Удалить')}</button>
+            </div>
           </article>
         ))}
       </div>
@@ -242,6 +246,7 @@ function RegionAdminRow({ person, regions, onChanged, onDelete, onError }) {
   const [displayName, setDisplayName] = useState(person.displayName)
   const [regionId, setRegionId] = useState(person.regionId)
   const [password, setPassword] = useState('')
+  const [saved, setSaved] = useState(false)
 
   async function save(event) {
     event.preventDefault()
@@ -249,6 +254,8 @@ function RegionAdminRow({ person, regions, onChanged, onDelete, onError }) {
     try {
       await api.updateRegionalAdmin(person.id, { displayName, regionId, password })
       setPassword('')
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
       await onChanged()
     } catch (err) {
       onError(err.message)
@@ -259,7 +266,7 @@ function RegionAdminRow({ person, regions, onChanged, onDelete, onError }) {
     <article className="person">
       <form onSubmit={save}>
         <input aria-label={t('Имя')} value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-        <span className="muted">{t('Логин')}: {person.login}</span>
+        <span className="muted">{t('Логин')}: <code className="cell-code">{person.login}</code></span>
         <select aria-label={t('Область')} value={regionId} onChange={(event) => setRegionId(event.target.value)}>
           {regions.map((region) => <option key={region.id} value={region.id}>{pick(lang, region.name, region.nameKk)}</option>)}
         </select>
@@ -271,9 +278,9 @@ function RegionAdminRow({ person, regions, onChanged, onDelete, onError }) {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
-        <button className="ghost" type="submit">{t('Сохранить')}</button>
+        <button className="ghost" type="submit">{saved ? `✓ ${t('Сохранено')}` : t('Сохранить')}</button>
       </form>
-      <button className="ghost" type="button" onClick={onDelete}>{t('Удалить')}</button>
+      <button className="ghost danger-btn" type="button" onClick={onDelete}>{t('Удалить')}</button>
     </article>
   )
 }

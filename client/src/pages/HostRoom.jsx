@@ -6,6 +6,7 @@ import { api, formatCode, hostKey } from '../api.js'
 import { Brand } from '../Brand.jsx'
 import { pick, useI18n } from '../i18n.jsx'
 import { AnswerText, COLOR_NAMES, SHAPES, Shape } from '../shapes.jsx'
+import { EnvControls } from '../topbar.jsx'
 import { useCountdown } from '../useCountdown.js'
 
 export default function HostRoom() {
@@ -16,12 +17,13 @@ export default function HostRoom() {
   const [online, setOnline] = useState(true)
   const [qr, setQr] = useState('')
   const [joinUrl, setJoinUrl] = useState('')
+  const [copied, setCopied] = useState(false)
   const [role, setRole] = useState('host')
   const socketRef = useRef(null)
   const seconds = useCountdown(state?.endsAt, state?.serverNow)
   const isAdmin = role === 'super' || role === 'regional' || role === 'org'
   const homeTo = isAdmin ? '/admin/stats' : '/host'
-  const quizzesTo = role === 'super' ? '/admin/materials/quizzes' : isAdmin ? '/admin/quizzes' : '/host'
+  const quizzesTo = role === 'super' ? '/admin/materials/quizzes' : isAdmin ? '/admin/quizzes' : '/host/quizzes'
 
   useEffect(() => {
     api.me().then((me) => {
@@ -140,12 +142,26 @@ export default function HostRoom() {
         ? 'К результатам'
         : 'Дальше'
 
+  function copyLink() {
+    if (!joinUrl || !navigator.clipboard) return
+    navigator.clipboard.writeText(joinUrl).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }).catch(() => {})
+  }
+
   return (
     <main className="stage">
       <header className="stage-bar">
-        <Brand to={homeTo} />
-        <strong data-testid="pin">{formatCode(state.code)}</strong>
-        <span>{state.status === 'lobby' ? t('Лобби') : state.status === 'podium' ? t('Итог') : `${state.questionIndex + 1} / ${state.questionCount}`}</span>
+        <div className="topbar-brand">
+          <Brand to={homeTo} />
+          <strong className="pin-badge" data-testid="pin">{formatCode(state.code)}</strong>
+        </div>
+        <div className="top-actions">
+          <span className="stage-step">{state.status === 'lobby' ? t('Лобби') : state.status === 'podium' ? t('Итог') : `${state.questionIndex + 1} / ${state.questionCount}`}</span>
+          <Link className="ghost small" to={quizzesTo}>{t('К квизам')}</Link>
+          <EnvControls />
+        </div>
       </header>
       {!online && <p className="banner">{t('Связь пропала, подключаемся снова…')}</p>}
       {state.status === 'lobby' && (
@@ -157,7 +173,14 @@ export default function HostRoom() {
             ) : (
               <>
                 <p className="lead">{t('Покажите QR-код. Телефоны откроют игру сами, вводить код не нужно.')}</p>
-                {joinUrl && <p className="join-url">{joinUrl}</p>}
+                {joinUrl && (
+                  <div className="join-url-row">
+                    <p className="join-url">{joinUrl}</p>
+                    <button className="ghost small" type="button" onClick={copyLink}>
+                      {copied ? t('Скопировано') : t('Скопировать ссылку')}
+                    </button>
+                  </div>
+                )}
                 {joinUrl.includes('localhost') && <p className="form-error">{t('Телефоны не откроют localhost. Зайдите на этот компьютер по адресу в локальной сети.')}</p>}
               </>
             )}

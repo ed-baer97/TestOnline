@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, NavLink, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, newId } from '../../api.js'
 import { BANDS, EMPTY_GROUPS } from '../../bands.js'
 import { pick, useI18n } from '../../i18n.jsx'
+import { Crumbs, SegmentButtons, Segments } from '../../kit.jsx'
 import { QuizCatalog } from '../Quizzes.jsx'
 import { GroupChecks, Notice } from './ui.jsx'
 
@@ -73,12 +74,14 @@ function packReady(pack, format) {
 }
 
 function MaterialTabs() {
-  const { t } = useI18n()
   return (
-    <nav className="host-tabs material-tabs" aria-label={t('Материалы')}>
-      <NavLink to="/admin/materials" end>{t('Уроки')}</NavLink>
-      <NavLink to="/admin/materials/quizzes">{t('Квизы')}</NavLink>
-    </nav>
+    <Segments
+      label="Материалы"
+      items={[
+        { to: '/admin/materials', label: 'Уроки', end: true },
+        { to: '/admin/materials/quizzes', label: 'Квизы' },
+      ]}
+    />
   )
 }
 
@@ -96,9 +99,11 @@ export function MaterialList() {
       <div className="section-head">
         <div>
           <h1>{t('Материалы')}</h1>
-          <MaterialTabs />
+          <div className="material-tabs">
+            <MaterialTabs />
+          </div>
         </div>
-        <Link className="primary" to="/admin/materials/new">{t('Новый урок')}</Link>
+        <Link className="primary" to="/admin/materials/new">+ {t('Новый урок')}</Link>
       </div>
       {error && <p className="form-error">{t(error)}</p>}
       {lessons === null && !error && <p className="muted">{t('Загрузка…')}</p>}
@@ -143,9 +148,11 @@ export function MaterialQuizzes() {
       <div className="section-head">
         <div>
           <h1>{t('Материалы')}</h1>
-          <MaterialTabs />
+          <div className="material-tabs">
+            <MaterialTabs />
+          </div>
         </div>
-        <Link className="primary" to="/admin/materials/quizzes/new">{t('Новый квиз')}</Link>
+        <Link className="primary" to="/admin/materials/quizzes/new">+ {t('Новый квиз')}</Link>
       </div>
       <QuizCatalog editBase="/admin/materials/quizzes" classLaunch />
     </section>
@@ -335,32 +342,59 @@ export function LessonEditor() {
 
   if (!ready && !error) return <p className="muted">{t('Загрузка…')}</p>
 
+  const ruDone = packReady(packs.ru, format) && title.trim().length >= 2
+  const kkDone = packReady(packs.kk, format) && titleKk.trim().length >= 2
+
   return (
     <form className="stack" onSubmit={save}>
-      <div className="section-head">
-        <h1>{isNew ? t('Новый урок') : t('Урок')}</h1>
-        <div className="row-actions">
-          {!isNew && <Link className="ghost" to={`/admin/materials/${id}/play`}>{t('Открыть')}</Link>}
-          {!isNew && <button className="ghost" type="button" onClick={remove}>{t('Удалить')}</button>}
+      <div className="stats-head">
+        <Crumbs items={[
+          { to: '/admin/materials', label: t('Материалы') },
+          { label: isNew ? t('Новый урок') : (title.trim() || t('Урок')) },
+        ]} />
+        <div className="section-head">
+          <h1>{isNew ? t('Новый урок') : (title.trim() || t('Урок'))}</h1>
+          <div className="row-actions">
+            <Link className="ghost" to="/admin/materials">{t('К списку')}</Link>
+            {!isNew && <Link className="ghost" to={`/admin/materials/${id}/play`}>{t('Открыть')}</Link>}
+            {!isNew && <button className="ghost danger-btn" type="button" onClick={remove}>{t('Удалить')}</button>}
+            <button className="primary" type="submit" disabled={saving}>
+              {saving ? t('Сохранение…') : t('Сохранить урок')}
+            </button>
+          </div>
         </div>
       </div>
       <Notice error={error} notice={notice} />
-      <label>
-        {t('Название, русский')}
-        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t('Солнечная система')} />
-      </label>
-      <label>
-        {t('Название, қазақша')}
-        <input value={titleKk} onChange={(event) => setTitleKk(event.target.value)} placeholder="Күн жүйесі" />
-      </label>
-      <GroupChecks groups={groups} onChange={setGroups} />
-      <div className="tone-row">
-        <button className={`ghost ${format === 'slides' ? 'on' : ''}`} type="button" onClick={() => setFormat('slides')}>{t('Презентация')}</button>
-        <button className={`ghost ${format === 'video' ? 'on' : ''}`} type="button" onClick={() => setFormat('video')}>{t('Видео')}</button>
+      <div className="admin-form">
+        <label>
+          {t('Название, русский')}
+          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t('Солнечная система')} />
+        </label>
+        <label>
+          {t('Название, қазақша')}
+          <input value={titleKk} onChange={(event) => setTitleKk(event.target.value)} placeholder="Күн жүйесі" />
+        </label>
+        <GroupChecks groups={groups} onChange={setGroups} />
       </div>
-      <div className="tone-row">
-        <button className={`ghost ${contentLang === 'ru' ? 'on' : ''}`} type="button" onClick={() => setContentLang('ru')}>{t('Русская версия')}</button>
-        <button className={`ghost ${contentLang === 'kk' ? 'on' : ''}`} type="button" onClick={() => setContentLang('kk')}>{t('Казахская версия')}</button>
+      <div className="list-tools">
+        <SegmentButtons
+          label="Формат"
+          value={format}
+          onChange={setFormat}
+          items={[
+            { id: 'slides', label: 'Презентация' },
+            { id: 'video', label: 'Видео' },
+          ]}
+        />
+        <SegmentButtons
+          label="Язык"
+          value={contentLang}
+          onChange={setContentLang}
+          items={[
+            { id: 'ru', label: ruDone ? `${t('Русская версия')} ✓` : t('Русская версия') },
+            { id: 'kk', label: kkDone ? `${t('Казахская версия')} ✓` : t('Казахская версия') },
+          ]}
+        />
       </div>
       {format === 'video' ? (
         <section className="stack">
@@ -391,9 +425,9 @@ export function LessonEditor() {
             <header>
               <strong>{t('Слайд {n}', { n: index + 1 })}</strong>
               <div className="row-actions">
-                <button className="ghost" type="button" onClick={() => moveSlide(slide.id, -1)}>{t('Выше')}</button>
-                <button className="ghost" type="button" onClick={() => moveSlide(slide.id, 1)}>{t('Ниже')}</button>
-                <button className="ghost" type="button" onClick={() => setSlides((current) => current.filter((item) => item.id !== slide.id))}>{t('Удалить')}</button>
+                <button className="ghost" type="button" onClick={() => moveSlide(slide.id, -1)} disabled={index === 0}>{t('Выше')}</button>
+                <button className="ghost" type="button" onClick={() => moveSlide(slide.id, 1)} disabled={index === slides.length - 1}>{t('Ниже')}</button>
+                <button className="ghost danger-btn" type="button" onClick={() => setSlides((current) => current.filter((item) => item.id !== slide.id))} disabled={slides.length === 1}>{t('Удалить')}</button>
               </div>
             </header>
             {slide.kind === 'image' ? (
@@ -449,7 +483,7 @@ export function LessonEditor() {
           <article className="question-card" key={question.id}>
             <header>
               <strong>{t('Вопрос {n}', { n: questionIndex + 1 })}</strong>
-              <button className="ghost" type="button" onClick={() => setQuestions((current) => current.filter((item) => item.id !== question.id))}>{t('Удалить')}</button>
+              <button className="ghost danger-btn" type="button" onClick={() => setQuestions((current) => current.filter((item) => item.id !== question.id))} disabled={questions.length === 1}>{t('Удалить')}</button>
             </header>
             <label>
               {t('Текст')}

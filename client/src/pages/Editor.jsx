@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, hostKey, newId } from '../api.js'
-import { Brand } from '../Brand.jsx'
 import { useI18n } from '../i18n.jsx'
+import { Crumbs } from '../kit.jsx'
+import { HostFrame } from './HostFrame.jsx'
 
 function blankQuestion() {
   return {
@@ -14,12 +15,13 @@ function blankQuestion() {
   }
 }
 
-export default function Editor({ onLogout, embedded = false }) {
+export default function Editor({ me, onLogout, embedded = false }) {
   const { t } = useI18n()
   const { id } = useParams()
   const navigate = useNavigate()
   const isNew = !id || id === 'new'
   const quizPath = (quizId) => (embedded ? `/admin/materials/quizzes/${quizId}` : `/host/quiz/${quizId}`)
+  const quizzesBack = embedded ? '/admin/materials/quizzes' : '/host/quizzes'
   const [title, setTitle] = useState('')
   const [questions, setQuestions] = useState([blankQuestion()])
   const [error, setError] = useState('')
@@ -114,6 +116,26 @@ export default function Editor({ onLogout, embedded = false }) {
 
   if (!ready && !error) return <p className="center muted">{t('Загрузка…')}</p>
 
+  const crumbs = embedded
+    ? [
+      { to: '/admin/materials', label: t('Материалы') },
+      { to: '/admin/materials/quizzes', label: t('Квизы') },
+      { label: isNew ? t('Новый квиз') : (title.trim() || t('Квиз')) },
+    ]
+    : [
+      { to: '/host/quizzes', label: t('Квизы') },
+      { label: isNew ? t('Новый квиз') : (title.trim() || t('Квиз')) },
+    ]
+
+  const actions = (
+    <div className="row-actions">
+      <Link className="ghost" to={quizzesBack}>{t('К квизам')}</Link>
+      {!isNew && <Link className="ghost" to={`/host/quiz/${id}/stats`}>{t('Статистика')}</Link>}
+      <button className="ghost" type="button" onClick={save}>{t('Сохранить')}</button>
+      <button className="primary" type="button" onClick={saveAndStart}>{t('Запустить')}</button>
+    </div>
+  )
+
   const fields = (
     <>
       <label className="title-field">
@@ -121,11 +143,11 @@ export default function Editor({ onLogout, embedded = false }) {
         <input value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} placeholder={t('География, 7 класс')} />
       </label>
       <div className="import-row">
-          <label className="excel file-button">
-            {importing ? t('Читаем файл…') : t('Загрузить Excel')}
-            <input className="sr-only" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={loadExcel} />
-          </label>
-          <a className="excel" href="/api/template">{t('Скачать шаблон')}</a>
+        <label className="excel file-button">
+          {importing ? t('Читаем файл…') : t('Загрузить Excel')}
+          <input className="sr-only" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={loadExcel} />
+        </label>
+        <a className="excel" href="/api/template">{t('Скачать шаблон')}</a>
         <p className="muted">{t('Каждая строка — вопрос. Первый столбец — текст, дальше варианты. Залейте правильный ответ любым цветом, кроме белого.')}</p>
       </div>
       {error && <p className="form-error">{t(error)}</p>}
@@ -137,7 +159,7 @@ export default function Editor({ onLogout, embedded = false }) {
             <div className="top-actions">
               <button className="ghost" type="button" onClick={() => move(index, -1)} disabled={index === 0}>{t('Выше')}</button>
               <button className="ghost" type="button" onClick={() => move(index, 1)} disabled={index === questions.length - 1}>{t('Ниже')}</button>
-              <button className="ghost" type="button" onClick={() => setQuestions((current) => current.filter((item) => item.id !== question.id))} disabled={questions.length === 1}>{t('Удалить')}</button>
+              <button className="ghost danger-btn" type="button" onClick={() => setQuestions((current) => current.filter((item) => item.id !== question.id))} disabled={questions.length === 1}>{t('Удалить')}</button>
             </div>
           </header>
           <label>
@@ -171,19 +193,21 @@ export default function Editor({ onLogout, embedded = false }) {
           <p className="muted">{t('Отметьте кружком правильный ответ. Пустые поля не попадут в игру.')}</p>
         </section>
       ))}
-      <button className="ghost add" type="button" onClick={() => setQuestions((current) => [...current, blankQuestion()])}>{t('Добавить вопрос')}</button>
+      <div className="editor-foot">
+        <button className="ghost" type="button" onClick={() => setQuestions((current) => [...current, blankQuestion()])}>+ {t('Добавить вопрос')}</button>
+        {actions}
+      </div>
     </>
   )
 
   if (embedded) {
     return (
       <section className="stack editor">
-        <div className="section-head">
-          <h1>{isNew ? t('Новый квиз') : t('Квиз')}</h1>
-          <div className="row-actions">
-            <Link className="ghost" to="/admin/materials/quizzes">{t('К квизам')}</Link>
-            <button className="ghost" type="button" onClick={save}>{t('Сохранить')}</button>
-            <button className="primary" type="button" onClick={saveAndStart}>{t('Запустить')}</button>
+        <div className="stats-head">
+          <Crumbs items={crumbs} />
+          <div className="section-head">
+            <h1>{isNew ? t('Новый квиз') : (title.trim() || t('Квиз'))}</h1>
+            {actions}
           </div>
         </div>
         {fields}
@@ -192,20 +216,21 @@ export default function Editor({ onLogout, embedded = false }) {
   }
 
   return (
-    <main className="sheet editor">
-      <header className="topbar">
-        <Brand to="/host" />
-        <div className="top-actions">
-          <button className="ghost" type="button" onClick={save}>{t('Сохранить')}</button>
-          <button className="primary" type="button" onClick={saveAndStart}>{t('Запустить')}</button>
-          <button className="ghost" type="button" onClick={onLogout}>{t('Выйти')}</button>
-        </div>
-      </header>
-      {fields}
-    </main>
+    <HostFrame
+      onLogout={onLogout}
+      account={me?.login || ''}
+      crumbs={crumbs}
+      title={isNew ? 'Новый квиз' : (title.trim() || 'Квиз')}
+      extra={actions}
+    >
+      <section className="stack editor">
+        {fields}
+      </section>
+    </HostFrame>
   )
 }
 
 function COLOR_CLASS(index) {
   return ['red', 'blue', 'yellow', 'green'][index]
 }
+

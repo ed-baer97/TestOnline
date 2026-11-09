@@ -1,5 +1,7 @@
 import { createContext, useContext, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { LanguageToggle } from './i18n.jsx'
+import { ThemeToggle } from './theme.jsx'
 
 const TopbarSlotContext = createContext(null)
 
@@ -22,3 +24,13 @@ export function TopbarExtra({ children }) {
   if (!slot?.node) return null
   return createPortal(children, slot.node)
 }
+
+export function EnvControls() {
+  return (
+    <div className="env-controls">
+      <LanguageToggle />
+      <ThemeToggle />
+    </div>
+  )
+}
+

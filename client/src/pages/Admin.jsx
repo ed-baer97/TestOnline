@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import { api } from '../api.js'
 import { useI18n } from '../i18n.jsx'
-import { AdminFrame } from './AdminFrame.jsx'
+import { AdminFrame, tabsFor } from './AdminFrame.jsx'
 import { Classes, Learners } from './admin/OrgPanels.jsx'
 import { Organizations, OrgStaff } from './admin/RegionalPanels.jsx'
 import { LessonEditor, MaterialList, MaterialQuizzes } from './admin/Materials.jsx'
@@ -12,34 +12,6 @@ import { Regions, RegionalStaff } from './admin/SuperPanels.jsx'
 import { PlatformStats } from './admin/StatsPanel.jsx'
 import { DashboardView } from './admin/ui.jsx'
 import LessonView from './LessonView.jsx'
-
-function tabsFor(role) {
-  if (role === 'super') {
-    return [
-      { to: '/admin', label: 'Обзор', end: true },
-      { to: '/admin/stats', label: 'Статистика' },
-      { to: '/admin/materials', label: 'Материалы' },
-      { to: '/admin/regions', label: 'Регионы' },
-      { to: '/admin/staff', label: 'Админы' },
-    ]
-  }
-  if (role === 'regional') {
-    return [
-      { to: '/admin', label: 'Обзор', end: true },
-      { to: '/admin/stats', label: 'Статистика' },
-      { to: '/admin/organizations', label: 'Организации' },
-      { to: '/admin/staff', label: 'Админы' },
-      { to: '/admin/quizzes', label: 'Квизы' },
-    ]
-  }
-  return [
-    { to: '/admin', label: 'Обзор', end: true },
-    { to: '/admin/stats', label: 'Статистика' },
-    { to: '/admin/classes', label: 'Классы' },
-    { to: '/admin/learners', label: 'Тестируемые' },
-    { to: '/admin/quizzes', label: 'Квизы' },
-  ]
-}
 
 function Overview({ me }) {
   const { t } = useI18n()
@@ -65,17 +37,21 @@ function Overview({ me }) {
   )
 }
 
-export default function Admin({ onLogout }) {
+export default function Admin({ me: initialMe, onLogout }) {
   const { t } = useI18n()
-  const [me, setMe] = useState(null)
+  const [me, setMe] = useState(initialMe || null)
   const [error, setError] = useState('')
 
   useEffect(() => {
+    if (initialMe) {
+      setMe(initialMe)
+      return
+    }
     api.me().then((data) => {
       if (!data.ok) setError('Нужен вход')
       else setMe(data)
     }).catch((err) => setError(err.message))
-  }, [])
+  }, [initialMe])
 
   if (error) return <p className="center form-error">{t(error)}</p>
   if (!me) return <p className="center muted">{t('Загрузка…')}</p>
@@ -117,3 +93,4 @@ export default function Admin({ onLogout }) {
     </AdminFrame>
   )
 }
+

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api.js'
 import { pick, useI18n } from '../i18n.jsx'
+import { Crumbs } from '../kit.jsx'
 import { TopbarExtra } from '../topbar.jsx'
 
 function shownLesson(lesson, lang) {
@@ -122,8 +123,19 @@ export default function LessonView({ backTo }) {
       <TopbarExtra>
         <Link className="ghost" to={backTo}>{t('К списку')}</Link>
       </TopbarExtra>
-      <div className="section-head">
-        <h1>{lesson?.title || t('Урок')}</h1>
+      <div className="stats-head">
+        <Crumbs items={[
+          { to: backTo, label: backTo === '/admin/materials' ? t('Материалы') : t('Уроки') },
+          { label: lesson?.title || t('Урок') },
+        ]} />
+        <div className="section-head">
+          <h1>{lesson?.title || t('Урок')}</h1>
+          {slide && (
+            <span className="muted">
+              {t('Слайд {n} из {total}', { n: index + 1, total: lesson.slides.length })}
+            </span>
+          )}
+        </div>
       </div>
       {error && <p className="form-error">{t(error)}</p>}
       {!lesson && !error && <p className="muted">{t('Загрузка…')}</p>}
@@ -132,14 +144,14 @@ export default function LessonView({ backTo }) {
           <Slide slide={slide} />
           <div className="deck-bar">
             <button className="ghost" type="button" onClick={() => showSlide(Math.max(0, index - 1))} disabled={index === 0}>
-              {t('Назад')}
+              ← {t('Назад')}
             </button>
             <div className="deck-dots">
               {lesson.slides.map((item, dot) => (
                 <button
                   key={item.id}
                   type="button"
-                  className={dot === index ? 'on' : ''}
+                  className={`${dot === index ? 'on' : ''} ${seen.has(dot) ? 'seen' : ''}`.trim()}
                   aria-label={t('Слайд {n}', { n: dot + 1 })}
                   onClick={() => showSlide(dot)}
                 />
@@ -147,7 +159,7 @@ export default function LessonView({ backTo }) {
             </div>
             {index < last ? (
               <button className="ghost" type="button" onClick={() => showSlide(index + 1)}>
-                {t('Дальше')}
+                {t('Дальше')} →
               </button>
             ) : (
               <button
@@ -156,7 +168,7 @@ export default function LessonView({ backTo }) {
                 disabled={!watched}
                 onClick={() => testRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
               >
-                {t('К тесту')}
+                {t('К тесту')} ↓
               </button>
             )}
           </div>

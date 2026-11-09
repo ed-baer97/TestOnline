@@ -234,7 +234,7 @@ function OrgCard({ org, districts, editing, onToggle, onRemove, onSaved, onError
           <button className="ghost" type="button" onClick={onToggle}>
             {editing ? t('Закрыть') : t('Изменить')}
           </button>
-          <button className="ghost" type="button" onClick={onRemove}>{t('Удалить')}</button>
+          <button className="ghost danger-btn" type="button" onClick={onRemove}>{t('Удалить')}</button>
         </div>
       </header>
       {editing && (
@@ -473,6 +473,7 @@ function OrgAdminRow({ person, organizations, districts = [], onChanged, onDelet
   const [displayName, setDisplayName] = useState(person.displayName)
   const [organizationId, setOrganizationId] = useState(person.organizationId)
   const [password, setPassword] = useState('')
+  const [saved, setSaved] = useState(false)
 
   async function save(event) {
     event.preventDefault()
@@ -480,6 +481,8 @@ function OrgAdminRow({ person, organizations, districts = [], onChanged, onDelet
     try {
       await api.updateOrgAdmin(person.id, { displayName, organizationId, password })
       setPassword('')
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
       await onChanged()
     } catch (err) {
       onError(err.message)
@@ -490,7 +493,7 @@ function OrgAdminRow({ person, organizations, districts = [], onChanged, onDelet
     <article className="person">
       <form onSubmit={save}>
         <input aria-label={t('Имя')} value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-        <span className="muted">{t('Логин')}: {person.login}</span>
+        <span className="muted">{t('Логин')}: <code className="cell-code">{person.login}</code></span>
         <select aria-label={t('Организация')} value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}>
           {groupedSelect(organizations, districts, lang, t)}
         </select>
@@ -502,9 +505,9 @@ function OrgAdminRow({ person, organizations, districts = [], onChanged, onDelet
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
-        <button className="ghost" type="submit">{t('Сохранить')}</button>
+        <button className="ghost" type="submit">{saved ? `✓ ${t('Сохранено')}` : t('Сохранить')}</button>
       </form>
-      <button className="ghost" type="button" onClick={onDelete}>{t('Удалить')}</button>
+      <button className="ghost danger-btn" type="button" onClick={onDelete}>{t('Удалить')}</button>
     </article>
   )
 }
