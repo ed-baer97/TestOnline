@@ -1,3 +1,5 @@
+import { dropResource } from './useResource.js'
+
 async function request(url, options = {}) {
   const response = await fetch(url, {
     credentials: 'include',
@@ -7,6 +9,7 @@ async function request(url, options = {}) {
   const data = await response.json().catch(() => ({}))
   const message = typeof data.error === 'string' ? data.error : ''
   if (!response.ok) throw new Error(message || `Ошибка запроса (${response.status})`)
+  if (options.method && options.method !== 'GET') dropResource()
   return data
 }
 
@@ -73,13 +76,16 @@ export const api = {
       'X-Lang': lang,
     },
   }),
-  importPptx: (file) => {
+  importPptx: (file, lang = 'ru') => {
     if (!/\.pptx$/i.test(file?.name || '')) return Promise.reject(new Error('Нужна презентация PowerPoint .pptx'))
     if (file.size > 30 * 1024 * 1024) return Promise.reject(new Error('Презентация больше 30 МБ'))
-    return request('/api/admin/lessons/pptx', {
+    return request(`/api/admin/lessons/pptx?lang=${encodeURIComponent(lang)}`, {
       method: 'POST',
       body: file,
-      headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'X-Lang': lang,
+      },
     })
   },
   deleteLesson: (id) => request(`/api/admin/lessons/${id}`, { method: 'DELETE' }),

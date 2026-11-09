@@ -137,9 +137,19 @@ test('урок: презентация, тест и видимость по гр
   const withVideo = await lessons.saveLessonVideo(root, clip.id, bytes, 'video/mp4', 'planets.mp4')
   assert.equal(withVideo.video.name, 'planets.mp4')
   assert.equal(withVideo.video.mime, 'video/mp4')
+  assert.equal(withVideo.video.lang, 'ru')
+  assert.ok(withVideo.video.updatedAt)
   const media = await lessons.openLessonMedia(pupil, clip.id)
   assert.equal(media.size, bytes.length)
   assert.equal(media.mime, 'video/mp4')
+  assert.ok(media.etag)
+  const { Readable } = await import('node:stream')
+  const streamBytes = Buffer.from('streamed-video-bytes-kk')
+  const withStreamVideo = await lessons.saveLessonVideo(root, clip.id, Readable.from([streamBytes]), 'video/mp4', 'planets-kk.mp4', 'kk')
+  assert.equal(withStreamVideo.videoKk.name, 'planets-kk.mp4')
+  assert.equal(withStreamVideo.videoKk.lang, 'kk')
+  const mediaKk = await lessons.openLessonMedia(pupil, clip.id, 'kk')
+  assert.equal(mediaKk.size, streamBytes.length)
   await assert.rejects(() => lessons.openLessonMedia(student, clip.id), (error) => error.status === 404)
   const listed = await lessons.listLessons(pupil)
   assert.equal(listed.find((item) => item.id === clip.id).format, 'video')
@@ -178,19 +188,23 @@ test('урок: презентация, тест и видимость по гр
   const pptx = await zip.generateAsync({ type: 'nodebuffer' })
   await assert.rejects(() => lessons.importPptx(orgAdmin, pptx), (error) => error.status === 403)
   await assert.rejects(() => lessons.importPptx(root, Buffer.from('not-a-pptx')), (error) => error.status === 400)
-  const imported = await lessons.importPptx(root, pptx)
+  const imported = await lessons.importPptx(root, pptx, 'ru')
+  const importedKk = await lessons.importPptx(root, pptx, 'kk')
   assert.equal(imported.slides.length, 2)
   assert.equal(imported.slides[0].kind, 'frame')
   assert.equal(imported.slides[0].title, 'Солнце')
   assert.deepEqual(imported.slides[0].lines, ['Звезда в центре'])
   assert.equal(imported.slides[1].kind, 'image')
   assert.ok(imported.slides[1].fileId)
+  assert.ok(importedKk.slides[1].fileId)
   assert.equal(imported.slides[1].dataUrl, undefined)
   assert.equal(imported.slides[1].imageUrl, `/api/lessons/files/${imported.slides[1].fileId}`)
   await assert.rejects(() => lessons.openLessonFile(pupil, imported.slides[1].fileId), (error) => error.status === 404)
   assert.equal((await lessons.openLessonFile(root, imported.slides[1].fileId)).mime, 'image/png')
+  assert.equal((await lessons.openLessonFile(root, importedKk.slides[1].fileId)).mime, 'image/png')
   const fromDeck = await lessons.createLesson(root, {
     title: 'Из PowerPoint',
+    titleKk: 'PowerPoint-тан',
     groups: { grades_5_9: true },
     slides: [
       {
@@ -208,6 +222,14 @@ test('урок: презентация, тест и видимость по гр
         fileId: imported.slides[1].fileId,
       },
     ],
+    slidesKk: [
+      {
+        id: importedKk.slides[1].id,
+        kind: 'image',
+        caption: importedKk.slides[1].caption,
+        fileId: importedKk.slides[1].fileId,
+      },
+    ],
     questions: [{
       text: 'Откуда слайды?',
       correctIndex: 0,
@@ -216,10 +238,12 @@ test('урок: презентация, тест и видимость по гр
   })
   assert.equal(fromDeck.slides[0].title, 'Солнце')
   assert.equal(fromDeck.slides[1].imageUrl, `/api/lessons/files/${imported.slides[1].fileId}`)
+  assert.equal(fromDeck.slidesKk[0].imageUrl, `/api/lessons/files/${importedKk.slides[1].fileId}`)
   const seen = await lessons.getLesson(pupil, fromDeck.id)
   assert.equal(seen.slides.length, 2)
   assert.equal(seen.slides[1].imageUrl, fromDeck.slides[1].imageUrl)
   assert.equal((await lessons.openLessonFile(pupil, imported.slides[1].fileId)).mime, 'image/png')
+  assert.equal((await lessons.openLessonFile(pupil, importedKk.slides[1].fileId)).mime, 'image/png')
 
   const legacyId = '11111111-2222-4333-8444-555555555555'
   const { db } = await import('./db.js')

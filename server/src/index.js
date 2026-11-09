@@ -225,12 +225,31 @@ export function createApp() {
     res.json({ addresses: lanAddresses() })
   })
 
+  const loginFailures = new Map()
+  const LOGIN_WINDOW_MS = 60 * 1000
+  const LOGIN_MAX_FAILS = 10
+
   app.post('/api/login', route(async (req, res) => {
+    const key = `${req.ip || 'local'}:${String(req.body?.login || '').trim().toLowerCase()}`
+    const now = Date.now()
+    const entry = loginFailures.get(key)
+    if (entry && entry.resetAt > now && entry.count >= LOGIN_MAX_FAILS) {
+      res.status(429).json({ error: 'Слишком много попыток входа, попробуйте позже' })
+      return
+    }
     const user = await authenticate(req.body?.login, req.body?.password)
     if (!user) {
+      const next = entry && entry.resetAt > now
+        ? { count: entry.count + 1, resetAt: entry.resetAt }
+        : { count: 1, resetAt: now + LOGIN_WINDOW_MS }
+      loginFailures.set(key, next)
+      if (loginFailures.size > 5000) {
+        for (const [k, v] of loginFailures) if (v.resetAt <= now) loginFailures.delete(k)
+      }
       res.status(401).json({ error: 'Неверный логин или пароль' })
       return
     }
+    loginFailures.delete(key)
     sendSession(res, await profile(user.id))
   }))
 
@@ -375,31 +394,43 @@ export function createApp() {
   const accel = process.env.MEDIA_ACCEL === '1'
   app.get('/api/lessons/:id/media', guard, route(async (req, res) => {
     const media = await openLessonMedia(req.user, req.params.id, req.query.lang)
+    res.setHeader('Cache-Control', 'private, max-age=3600')
+    if (media.etag) res.setHeader('ETag', media.etag)
+    if (media.mtimeMs) res.setHeader('Last-Modified', new Date(media.mtimeMs).toUTCString())
     if (accel) {
       res.setHeader('Content-Type', media.mime)
       res.setHeader('X-Accel-Redirect', `/media-internal/${media.fileName}`)
       res.end()
       return
     }
+    if (media.etag && req.headers['if-none-match'] === media.etag && !req.headers.range) {
+      res.status(304).end()
+      return
+    }
     const total = media.size
     res.setHeader('Accept-Ranges', 'bytes')
     res.setHeader('Content-Type', media.mime)
-    const match = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ''))
+    const rangeHeader = String(req.headers.range || '')
     let start = 0
     let end = total - 1
-    if (match) {
-      start = match[1] ? Number(match[1]) : 0
-      end = match[2] ? Number(match[2]) : total - 1
-      if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= total) {
+    if (rangeHeader) {
+      const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader)
+      if (!match || (!match[1] && !match[2])) {
         res.status(416).setHeader('Content-Range', `bytes */${total}`).end()
         return
       }
-      end = Math.min(end, total - 1)
+      start = match[1] ? Number(match[1]) : Math.max(0, total - Number(match[2]))
+      end = match[1] ? (match[2] ? Math.min(Number(match[2]), total - 1) : total - 1) : total - 1
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start < 0 || start >= total) {
+        res.status(416).setHeader('Content-Range', `bytes */${total}`).end()
+        return
+      }
       res.status(206)
       res.setHeader('Content-Range', `bytes ${start}-${end}/${total}`)
     }
     res.setHeader('Content-Length', end - start + 1)
     const stream = fs.createReadStream(media.path, { start, end })
+    res.on('close', () => stream.destroy())
     stream.on('error', () => {
       if (!res.headersSent) res.status(500).end()
       else res.destroy()
@@ -428,17 +459,18 @@ export function createApp() {
   app.post('/api/lessons/:id/check', guard, route(async (req, res) => {
     res.json(await checkLesson(req.user, req.params.id, req.body?.answers, req.body?.lang))
   }))
-  app.put('/api/admin/lessons/:id/video', guard, express.raw({ type: () => true, limit: '80mb' }), route(async (req, res) => {
+  app.put('/api/admin/lessons/:id/video', guard, route(async (req, res) => {
     let name = ''
     try {
       name = decodeURIComponent(String(req.get('x-file-name') || ''))
     } catch {
       name = ''
     }
-    res.json(await saveLessonVideo(req.user, req.params.id, req.body, req.get('content-type'), name, req.query.lang || req.get('x-lang')))
+    const source = Buffer.isBuffer(req.body) ? req.body : req
+    res.json(await saveLessonVideo(req.user, req.params.id, source, req.get('content-type'), name, req.query.lang || req.get('x-lang')))
   }))
   app.post('/api/admin/lessons/pptx', guard, express.raw({ type: () => true, limit: '30mb' }), route(async (req, res) => {
-    res.json(await importPptx(req.user, req.body))
+    res.json(await importPptx(req.user, req.body, req.query.lang || req.get('x-lang')))
   }))
   app.post('/api/admin/lessons', guard, route(async (req, res) => {
     res.status(201).json(await createLesson(req.user, req.body || {}))
@@ -721,11 +753,10 @@ export function createApp() {
   return { app, httpServer, io }
 }
 
-const runtime = createApp()
-
 const entry = process.argv[1] ? path.resolve(process.argv[1]) : ''
 const isMain = entry === fileURLToPath(import.meta.url) || path.basename(entry) === 'start.js'
 if (isMain) {
+  const runtime = createApp()
   runtime.httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(process.env.NODE_ENV === 'production'
       ? `TestOnline слушает порт ${PORT}`

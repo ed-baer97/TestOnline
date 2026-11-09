@@ -48,9 +48,10 @@ function emptyPack() {
 function packFrom(slides, questions, video, lessonId, lang) {
   const frames = slides?.length ? slides : [blankFrame()]
   const items = questions?.length ? questions : [blankQuestion()]
+  const ver = video?.updatedAt ? `&v=${encodeURIComponent(video.updatedAt)}` : ''
   return {
     slides: frames.map((slide) => (
-      slide.kind === 'frame' ? { ...slide, lines: slide.lines?.length ? slide.lines : [''] } : { ...slide, dirty: false }
+      slide.kind === 'frame' ? { ...slide, lines: slide.lines?.length ? slide.lines : [''], dirty: false } : { ...slide, dirty: false }
     )),
     questions: items.map((question) => ({
       ...question,
@@ -58,7 +59,7 @@ function packFrom(slides, questions, video, lessonId, lang) {
     })),
     videoFile: null,
     videoName: video?.name || '',
-    videoUrl: video ? `/api/lessons/${lessonId}/media?lang=${lang}` : '',
+    videoUrl: video ? `/api/lessons/${lessonId}/media?lang=${lang}${ver}` : '',
   }
 }
 
@@ -165,6 +166,7 @@ export function LessonEditor() {
   const savedId = useRef(id || null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [saving, setSaving] = useState(false)
   const [ready, setReady] = useState(isNew)
   const pack = packs[contentLang]
   const slides = pack.slides
@@ -226,7 +228,7 @@ export function LessonEditor() {
     setError('')
     setNotice('')
     try {
-      const data = await api.importPptx(file)
+      const data = await api.importPptx(file, contentLang)
       const next = (data.slides || []).map((slide) => (
         slide.kind === 'frame'
           ? { ...slide, lines: slide.lines?.length ? slide.lines : [''], dirty: false }
@@ -265,6 +267,7 @@ export function LessonEditor() {
 
   async function save(event) {
     event.preventDefault()
+    if (saving) return
     setError('')
     setNotice('')
     if (title.trim().length < 2 || titleKk.trim().length < 2) {
@@ -287,21 +290,36 @@ export function LessonEditor() {
       body.slides = serializeSlides(packs.ru.slides)
       body.slidesKk = serializeSlides(packs.kk.slides)
     }
+    setSaving(true)
     try {
-      const lesson = savedId.current
+      let lesson = savedId.current
         ? await api.updateLesson(savedId.current, body)
         : await api.createLesson(body)
       savedId.current = lesson.id
-      if (format === 'video' && packs.ru.videoFile) await api.uploadLessonVideo(lesson.id, packs.ru.videoFile, 'ru')
-      if (format === 'video' && packs.kk.videoFile) await api.uploadLessonVideo(lesson.id, packs.kk.videoFile, 'kk')
-      setPacks((current) => ({
-        ru: { ...current.ru, videoFile: null, videoUrl: format === 'video' ? `/api/lessons/${lesson.id}/media?lang=ru` : current.ru.videoUrl },
-        kk: { ...current.kk, videoFile: null, videoUrl: format === 'video' ? `/api/lessons/${lesson.id}/media?lang=kk` : current.kk.videoUrl },
-      }))
+      if (format === 'video' && packs.ru.videoFile) lesson = await api.uploadLessonVideo(lesson.id, packs.ru.videoFile, 'ru')
+      if (format === 'video' && packs.kk.videoFile) lesson = await api.uploadLessonVideo(lesson.id, packs.kk.videoFile, 'kk')
+      if (packs.ru.videoUrl.startsWith('blob:')) URL.revokeObjectURL(packs.ru.videoUrl)
+      if (packs.kk.videoUrl.startsWith('blob:')) URL.revokeObjectURL(packs.kk.videoUrl)
+      setPacks((current) => {
+        const nextRu = packFrom(lesson.slides, lesson.questions, lesson.video, lesson.id, 'ru')
+        const nextKk = packFrom(lesson.slidesKk, lesson.questionsKk, lesson.videoKk, lesson.id, 'kk')
+        return {
+          ru: {
+            ...nextRu,
+            videoName: nextRu.videoName || current.ru.videoName,
+          },
+          kk: {
+            ...nextKk,
+            videoName: nextKk.videoName || current.kk.videoName,
+          },
+        }
+      })
       setNotice(t('Урок сохранён'))
       if (isNew) navigate(`/admin/materials/${lesson.id}`, { replace: true })
     } catch (err) {
       setError(err.message)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -354,7 +372,7 @@ export function LessonEditor() {
             </label>
           </div>
           {videoName && <p className="muted">{videoName}</p>}
-          {videoUrl && <video className="lesson-video" src={videoUrl} controls playsInline />}
+          {videoUrl && <video className="lesson-video" src={videoUrl} controls playsInline preload="metadata" />}
         </section>
       ) : (
       <section className="stack">
@@ -448,7 +466,7 @@ export function LessonEditor() {
                 <label className="option-line" key={`${question.id}-${optionIndex}`}>
                   <input
                     type="radio"
-                    name={`correct-${question.id}`}
+                    name={`correct-${contentLang}-${question.id}`}
                     checked={question.correctIndex === optionIndex}
                     onChange={() => setQuestions((current) => current.map((item) => (
                       item.id === question.id ? { ...item, correctIndex: optionIndex } : item
@@ -459,9 +477,7 @@ export function LessonEditor() {
                     placeholder={t('Вариант {n}', { n: optionIndex + 1 })}
                     onChange={(event) => setQuestions((current) => current.map((item) => {
                       if (item.id !== question.id) return item
-                      const options = item.options.map((choice, index) => (
-                        index === optionIndex ? { text: event.target.value } : choice
-                      ))
+                      const options = item.options.map((opt, idx) => (idx === optionIndex ? { text: event.target.value } : opt))
                       return { ...item, options }
                     }))}
                   />
@@ -471,7 +487,9 @@ export function LessonEditor() {
           </article>
         ))}
       </section>
-      <button className="primary add" type="submit">{t('Сохранить урок')}</button>
+      <button className="primary add" type="submit" disabled={saving}>
+        {saving ? t('Сохранение…') : t('Сохранить урок')}
+      </button>
     </form>
   )
 }

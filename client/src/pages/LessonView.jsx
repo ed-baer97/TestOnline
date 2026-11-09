@@ -25,31 +25,46 @@ export default function LessonView({ backTo }) {
   const [index, setIndex] = useState(0)
   const [seen, setSeen] = useState(() => new Set([0]))
   const [videoWatched, setVideoWatched] = useState(false)
+  const [videoError, setVideoError] = useState(false)
   const [answers, setAnswers] = useState({})
   const [result, setResult] = useState(null)
   const [pending, setPending] = useState(false)
   const testRef = useRef(null)
+  const loadedIdRef = useRef(null)
 
   useEffect(() => {
-    setLesson(null)
-    setIndex(0)
-    setSeen(new Set([0]))
-    setVideoWatched(false)
-    setAnswers({})
-    setResult(null)
-      api.lesson(id, lang).then((data) => {
+    const sameLesson = loadedIdRef.current === id
+    loadedIdRef.current = id
+    if (!sameLesson) {
+      setLesson(null)
+      setIndex(0)
+      setSeen(new Set([0]))
+      setVideoWatched(false)
+      setVideoError(false)
+      setAnswers({})
+      setResult(null)
+    }
+    let alive = true
+    api.lesson(id, lang).then((data) => {
+      if (!alive) return
       const view = shownLesson(data, lang)
       setLesson(view)
+      if (sameLesson && view?.slides?.length) {
+        setIndex((current) => Math.min(current, view.slides.length - 1))
+      }
       const last = data.attempts?.last
       if (data.attempts?.locked && last) {
         setResult({ ...last, attempts: data.attempts })
-        if (last.results && (!last.lang || last.lang === lang || !data.questionsKk)) {
+        if (!sameLesson && last.results && (!last.lang || last.lang === lang || !data.questionsKk)) {
           const picked = {}
           for (const item of last.results) if (item.chosen >= 0) picked[item.questionId] = item.chosen
           setAnswers(picked)
         }
       }
-    }).catch((err) => setError(err.message))
+    }).catch((err) => {
+      if (alive) setError(err.message)
+    })
+    return () => { alive = false }
   }, [id, lang])
 
   function showSlide(nextIndex) {
@@ -153,17 +168,24 @@ export default function LessonView({ backTo }) {
           {lesson.video ? (
             <video
               className="lesson-video"
-              src={`/api/lessons/${lesson.id}/media?lang=${lang}`}
+              src={`/api/lessons/${lesson.id}/media?lang=${lesson.video.lang || lang}${lesson.video.updatedAt ? `&v=${encodeURIComponent(lesson.video.updatedAt)}` : ''}`}
               controls
               playsInline
+              preload="metadata"
+              onLoadedData={() => setVideoError(false)}
+              onError={() => setVideoError(true)}
               onEnded={() => setVideoWatched(true)}
               onTimeUpdate={(event) => {
+                if (videoWatched) return
                 const player = event.currentTarget
                 if (player.currentTime > 0 && player.duration > 0 && player.currentTime >= player.duration - 0.25) setVideoWatched(true)
               }}
             />
           ) : (
             <p className="muted">{t('Ролик ещё не загружен.')}</p>
+          )}
+          {videoError && (
+            <p className="form-error">{t('Не удалось воспроизвести ролик. Попробуйте обновить страницу или использовать MP4 (H.264).')}</p>
           )}
           {watched ? (
             <button className="primary add" type="button" onClick={() => testRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>

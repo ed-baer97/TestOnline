@@ -54,11 +54,15 @@ function scoreText(value) {
   return value == null ? '—' : String(value)
 }
 
-export default function Stats({ onLogout }) {
+export default function Stats({ onLogout, role }) {
   const { t } = useI18n()
   const { id, resultId, player } = useParams()
   const [stats, setStats] = useState(null)
   const [error, setError] = useState('')
+  const isSuper = role === 'super'
+  const homeTo = isSuper ? '/admin/stats' : '/host'
+  const quizzesTo = isSuper ? '/admin/materials/quizzes' : '/host'
+  const editTo = isSuper ? `/admin/materials/quizzes/${id}` : `/host/quiz/${id}`
 
   useEffect(() => {
     api.quizStats(id).then(setStats).catch((err) => setError(err.message))
@@ -68,7 +72,7 @@ export default function Stats({ onLogout }) {
     return (
       <main className="sheet">
         <p className="form-error">{t(error)}</p>
-        <Link to="/host">{t('К списку квизов')}</Link>
+        <Link to={quizzesTo}>{t('К списку квизов')}</Link>
       </main>
     )
   }
@@ -81,13 +85,13 @@ export default function Stats({ onLogout }) {
   return (
     <main className="sheet editor">
       <header className="topbar">
-        <Brand to="/host" />
+        <Brand to={homeTo} />
         <div className="top-actions">
-          <Link to={`/host/quiz/${id}`}>{t('Править')}</Link>
+          <Link to={editTo}>{t('Править')}</Link>
           <button className="ghost" type="button" onClick={onLogout}>{t('Выйти')}</button>
         </div>
       </header>
-      <p className="muted"><Link to="/host">{t('Квизы')}</Link> / {stats.title}</p>
+      <p className="muted"><Link to={quizzesTo}>{t('Квизы')}</Link> / {stats.title}</p>
       <h1>{person ? `${person.rank}. ${person.name}` : session ? t(launchLabel(session)) : stats.title}</h1>
 
       {person && session ? (

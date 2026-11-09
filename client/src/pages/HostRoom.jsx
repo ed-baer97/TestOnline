@@ -16,8 +16,18 @@ export default function HostRoom() {
   const [online, setOnline] = useState(true)
   const [qr, setQr] = useState('')
   const [joinUrl, setJoinUrl] = useState('')
+  const [role, setRole] = useState('host')
   const socketRef = useRef(null)
   const seconds = useCountdown(state?.endsAt, state?.serverNow)
+  const isAdmin = role === 'super' || role === 'regional' || role === 'org'
+  const homeTo = isAdmin ? '/admin/stats' : '/host'
+  const quizzesTo = role === 'super' ? '/admin/materials/quizzes' : isAdmin ? '/admin/quizzes' : '/host'
+
+  useEffect(() => {
+    api.me().then((me) => {
+      if (me?.ok && me.role) setRole(me.role)
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     const token = sessionStorage.getItem(hostKey(code))
@@ -114,7 +124,7 @@ export default function HostRoom() {
     return (
       <main className="center">
         <p>{t(error)}</p>
-        <Link to="/host">{t('К квизам')}</Link>
+        <Link to={quizzesTo}>{t('К квизам')}</Link>
       </main>
     )
   }
@@ -133,7 +143,7 @@ export default function HostRoom() {
   return (
     <main className="stage">
       <header className="stage-bar">
-        <Brand to="/host" />
+        <Brand to={homeTo} />
         <strong data-testid="pin">{formatCode(state.code)}</strong>
         <span>{state.status === 'lobby' ? t('Лобби') : state.status === 'podium' ? t('Итог') : `${state.questionIndex + 1} / ${state.questionCount}`}</span>
       </header>
@@ -203,7 +213,7 @@ export default function HostRoom() {
       {state.status !== 'podium' && (
         <button className="primary advance" type="button" onClick={advance}>{t(actionLabel)}</button>
       )}
-      {state.status === 'podium' && <Link className="primary advance" to="/host">{t('К квизам')}</Link>}
+      {state.status === 'podium' && <Link className="primary advance" to={quizzesTo}>{t('К квизам')}</Link>}
       {error && <p className="form-error center-error">{t(error)}</p>}
     </main>
   )

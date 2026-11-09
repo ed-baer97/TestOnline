@@ -3,6 +3,18 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { db } from './db.js'
+import {
+  GROUP_KEYS,
+  assertRole,
+  clean,
+  cleanLabel,
+  fail,
+  groupNumbers,
+  mapGroups,
+  optionalLabel,
+  readGroups,
+  readLang,
+} from './domain.js'
 import { slidesFromPptx } from './pptx.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -11,65 +23,12 @@ const MAX_VIDEO = 80 * 1024 * 1024
 const MAX_IMAGE = 1_500_000
 const UUID = /^[0-9a-f-]{36}$/i
 
-const GROUP_KEYS = ['grades_1_4', 'grades_5_9', 'grades_10_11', 'students']
 const TONES = ['sun', 'orbit', 'planets', 'earth']
 const DEMO_KEY = 'solar-system'
-
-function fail(message, status = 400) {
-  const error = new Error(message)
-  error.status = status
-  throw error
-}
-
-function clean(value) {
-  return String(value || '').replace(/[\u0000-\u001F]/g, '').trim().replace(/\s+/g, ' ')
-}
-
-function cleanLabel(value, min, max, label) {
-  const text = clean(value)
-  if (text.length < min || text.length > max) fail(`${label}: от ${min} до ${max} символов`)
-  return text
-}
-
-function optionalLabel(value, max, label) {
-  const text = clean(value)
-  if (!text) return ''
-  if (text.length < 2 || text.length > max) fail(`${label}: от 2 до ${max} символов`)
-  return text
-}
-
-function readLang(value) {
-  return value === 'kk' ? 'kk' : 'ru'
-}
-
-function assertRole(actor, ...roles) {
-  if (!actor || !roles.includes(actor.role)) fail('Недостаточно прав', 403)
-}
 
 function attemptLimit() {
   const value = Number(process.env.LESSON_MAX_ATTEMPTS)
   return Number.isInteger(value) && value > 0 ? value : 1
-}
-
-function readGroups(input) {
-  const source = input?.groups || {}
-  const groups = {}
-  for (const key of GROUP_KEYS) groups[key] = Boolean(source[key])
-  if (!GROUP_KEYS.some((key) => groups[key])) fail('Отметьте хотя бы одну группу')
-  return groups
-}
-
-function groupNumbers(groups) {
-  return GROUP_KEYS.map((key) => (groups[key] ? 1 : 0))
-}
-
-function mapGroups(row) {
-  return {
-    grades_1_4: Boolean(row.grades_1_4),
-    grades_5_9: Boolean(row.grades_5_9),
-    grades_10_11: Boolean(row.grades_10_11),
-    students: Boolean(row.students),
-  }
 }
 
 const DEMO_SLIDES = [
@@ -215,7 +174,7 @@ const DEMO_QUESTIONS = [
   {
     id: 'closest',
     text: 'Какая планета ближе всех к Солнцу?',
-    options: [{ text: 'Меркурий' }, { text: 'Венера' }, { text: 'Земля' }, { text: 'Марс' }],
+    options: [{ text: 'Меркурий' }, { text: 'Венера' }, { text: 'Жемля'.replace('Ж', 'З') }, { text: 'Марс' }],
     correctIndex: 0,
   },
 ]
@@ -361,9 +320,10 @@ function summary(row, best) {
 }
 
 function videoOf(row, lang) {
-  if (lang === 'kk' && row.video_mime_kk) return { name: row.video_name_kk || 'video', mime: row.video_mime_kk, lang: 'kk' }
-  if (row.video_mime) return { name: row.video_name || 'video', mime: row.video_mime, lang: 'ru' }
-  if (row.video_mime_kk) return { name: row.video_name_kk || 'video', mime: row.video_mime_kk, lang: 'kk' }
+  const updatedAt = row.updated_at || ''
+  if (lang === 'kk' && row.video_mime_kk) return { name: row.video_name_kk || 'video', mime: row.video_mime_kk, lang: 'kk', updatedAt }
+  if (row.video_mime) return { name: row.video_name || 'video', mime: row.video_mime, lang: 'ru', updatedAt }
+  if (row.video_mime_kk) return { name: row.video_name_kk || 'video', mime: row.video_mime_kk, lang: 'kk', updatedAt }
   return null
 }
 
@@ -528,8 +488,8 @@ export async function getLesson(actor, id, lang = 'ru') {
     slidesKk: format === 'video' ? [] : presentSlides(kkSlides),
     questions: presentQuestions(ruQuestions, true),
     questionsKk: presentQuestions(kkQuestions, true),
-    video: format === 'video' && row.video_mime ? { name: row.video_name || 'video', mime: row.video_mime } : null,
-    videoKk: format === 'video' && row.video_mime_kk ? { name: row.video_name_kk || 'video', mime: row.video_mime_kk } : null,
+    video: format === 'video' && row.video_mime ? { name: row.video_name || 'video', mime: row.video_mime, lang: 'ru', updatedAt: row.updated_at || '' } : null,
+    videoKk: format === 'video' && row.video_mime_kk ? { name: row.video_name_kk || 'video', mime: row.video_mime_kk, lang: 'kk', updatedAt: row.updated_at || '' } : null,
   }
 }
 
@@ -755,18 +715,70 @@ async function saveLesson(id, input, seedKey) {
   return getLesson({ role: 'super' }, id)
 }
 
-export async function saveLessonVideo(actor, id, buffer, mime, name, lang = 'ru') {
+async function writeVideoFile(target, source) {
+  await fs.promises.mkdir(mediaRoot(), { recursive: true })
+  const tmp = `${target}.${crypto.randomUUID()}.tmp`
+  try {
+    if (Buffer.isBuffer(source) || source instanceof Uint8Array || Array.isArray(source)) {
+      const bytes = Buffer.isBuffer(source) ? source : Buffer.from(source || [])
+      if (!bytes.length) fail('Файл пустой')
+      if (bytes.length > MAX_VIDEO) fail('Видео больше 80 МБ')
+      await fs.promises.writeFile(tmp, bytes)
+    } else if (source && typeof source.pipe === 'function') {
+      let total = 0
+      await new Promise((resolve, reject) => {
+        const out = fs.createWriteStream(tmp)
+        let settled = false
+        const stop = (err) => {
+          if (settled) return
+          settled = true
+          source.unpipe(out)
+          source.resume()
+          out.destroy()
+          reject(err)
+        }
+        source.on('data', (chunk) => {
+          total += chunk.length
+          if (total > MAX_VIDEO) {
+            const err = new Error('Видео больше 80 МБ')
+            err.status = 400
+            stop(err)
+          }
+        })
+        source.on('error', stop)
+        out.on('error', stop)
+        out.on('finish', () => {
+          if (!settled) {
+            settled = true
+            resolve()
+          }
+        })
+        source.pipe(out)
+      })
+      if (!total) fail('Файл пустой')
+    } else {
+      fail('Файл пустой')
+    }
+    try {
+      await fs.promises.rename(tmp, target)
+    } catch {
+      await fs.promises.copyFile(tmp, target)
+      await fs.promises.rm(tmp, { force: true })
+    }
+  } catch (error) {
+    await fs.promises.rm(tmp, { force: true }).catch(() => {})
+    throw error
+  }
+}
+
+export async function saveLessonVideo(actor, id, source, mime, name, lang = 'ru') {
   assertRole(actor, 'super')
   const row = await mustLesson(id)
   if (lessonFormat(row) !== 'video') fail('Этот урок — презентация')
   const type = String(mime || '').split(';')[0].trim().toLowerCase()
   if (!VIDEO_TYPES.has(type)) fail('Нужен ролик MP4, WebM, MOV или OGG')
-  const bytes = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer || [])
-  if (!bytes.length) fail('Файл пустой')
-  if (bytes.length > MAX_VIDEO) fail('Видео больше 80 МБ')
   const chosen = readLang(lang)
-  await fs.promises.mkdir(mediaRoot(), { recursive: true })
-  await fs.promises.writeFile(mediaPath(id, chosen), bytes)
+  await writeVideoFile(mediaPath(id, chosen), source)
   const safeName = clean(name).slice(0, 120) || 'video'
   if (chosen === 'kk') {
     await db.run(
@@ -790,7 +802,13 @@ export async function saveLessonVideo(actor, id, buffer, mime, name, lang = 'ru'
 
 export async function openLessonMedia(actor, id, lang = 'ru') {
   assertRole(actor, 'super', 'learner')
-  const row = await mustLesson(id)
+  const row = await db.get(
+    `SELECT id, format, grades_1_4, grades_5_9, grades_10_11, students,
+            video_mime, video_name, video_mime_kk, video_name_kk, updated_at
+     FROM lessons WHERE id = ?`,
+    id,
+  )
+  if (!row) fail('Урок не найден', 404)
   if (!(await canSee(actor, row)) || lessonFormat(row) !== 'video') fail('Видео не найдено', 404)
   const chosen = readLang(lang)
   const video = videoOf(row, chosen)
@@ -802,13 +820,23 @@ export async function openLessonMedia(actor, id, lang = 'ru') {
   } catch {
     fail('Видео не найдено', 404)
   }
-  return { mime: video.mime, size: stat.size, path: target, name: video.name, fileName: video.lang === 'kk' ? `${id}.kk` : id }
+  const mtimeMs = Math.trunc(stat.mtimeMs || 0)
+  const etag = `"${stat.size.toString(16)}-${mtimeMs.toString(16)}"`
+  return {
+    mime: video.mime,
+    size: stat.size,
+    mtimeMs,
+    etag,
+    path: target,
+    name: video.name,
+    fileName: video.lang === 'kk' ? `${id}.kk` : id,
+  }
 }
 
-export async function importPptx(actor, buffer) {
+export async function importPptx(actor, buffer, lang = 'ru') {
   assertRole(actor, 'super')
   const parsed = await slidesFromPptx(buffer)
-  const bucket = `import:${actor.id}`
+  const bucket = `import:${actor.id}:${readLang(lang)}`
   await dropLessonFiles(bucket)
   const slides = []
   for (const slide of parsed.slides) {
@@ -842,8 +870,10 @@ export async function deleteLesson(actor, id) {
   await mustLesson(id)
   await removeVideoFile(id)
   await dropLessonFiles(id)
-  await db.run('DELETE FROM lesson_attempts WHERE lesson_id = ?', id)
-  await db.run('DELETE FROM lessons WHERE id = ?', id)
+  await db.tx(async (tx) => {
+    await tx.run('DELETE FROM lesson_attempts WHERE lesson_id = ?', id)
+    await tx.run('DELETE FROM lessons WHERE id = ?', id)
+  })
 }
 
 export async function checkLesson(actor, id, answers, lang = 'ru') {

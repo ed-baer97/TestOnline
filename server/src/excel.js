@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import ExcelJS from 'exceljs'
+import { cellText, fail } from './domain.js'
 
 const THEME = ['FFFFFF', '000000', 'E7E6E6', '44546A', '5B9BD5', 'ED7D31', 'A9D08E', 'FFC000', '4472C4', '70AD47']
 const INDEXED = [
@@ -12,30 +13,6 @@ const INDEXED = [
   '3366FF', '33CCCC', '99CC00', 'FFCC00', 'FF9900', 'FF6600', '666699', '969696',
   '003366', '339966', '003300', '333300', '993300', '993366', '333399', '333333',
 ]
-
-function bad(message) {
-  const error = new Error(message)
-  error.status = 400
-  return error
-}
-
-function clean(value) {
-  return String(value ?? '')
-    .replace(/[\r\n\t]+/g, ' ')
-    .replace(/[\u0000-\u001F]/g, '')
-    .trim()
-    .replace(/\s+/g, ' ')
-}
-
-function cellText(value) {
-  if (value == null) return ''
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return clean(value)
-  if (value instanceof Date) return clean(value.toLocaleDateString('ru-RU'))
-  if (Array.isArray(value.richText)) return clean(value.richText.map((part) => part.text || '').join(''))
-  if (value.result != null) return cellText(value.result)
-  if (typeof value.text === 'string') return clean(value.text)
-  return ''
-}
 
 function rgbOf(hex) {
   const value = String(hex || '').replace(/^#/, '')
@@ -112,10 +89,10 @@ export async function questionsFromXlsx(buffer) {
   try {
     await workbook.xlsx.load(buffer)
   } catch {
-    throw bad('Не удалось прочитать файл. Нужен Excel .xlsx')
+    fail('Не удалось прочитать файл. Нужен Excel .xlsx')
   }
   const sheet = workbook.worksheets[0]
-  if (!sheet) throw bad('В файле нет листа')
+  if (!sheet) fail('В файле нет листа')
 
   const questions = []
   let headerSkipped = false
@@ -142,11 +119,11 @@ export async function questionsFromXlsx(buffer) {
       return
     }
     const label = `Строка ${row.number}`
-    if (text.length < 2 || text.length > 200) throw bad(`${label}: вопрос от 2 до 200 символов`)
-    if (options.length < 2 || options.length > 4) throw bad(`${label}: нужно от 2 до 4 вариантов`)
-    if (options.some((option) => option.text.length > 400)) throw bad(`${label}: вариант длиннее 400 символов`)
-    if (marks === 0) throw bad(`${label}: залейте правильный ответ цветом, отличным от белого`)
-    if (marks > 1) throw bad(`${label}: цветом можно отметить только один ответ`)
+    if (text.length < 2 || text.length > 200) fail(`${label}: вопрос от 2 до 200 символов`)
+    if (options.length < 2 || options.length > 4) fail(`${label}: нужно от 2 до 4 вариантов`)
+    if (options.some((option) => option.text.length > 400)) fail(`${label}: вариант длиннее 400 символов`)
+    if (marks === 0) fail(`${label}: залейте правильный ответ цветом, отличным от белого`)
+    if (marks > 1) fail(`${label}: цветом можно отметить только один ответ`)
     questions.push({
       id: crypto.randomUUID(),
       text,
@@ -156,7 +133,7 @@ export async function questionsFromXlsx(buffer) {
     })
   })
 
-  if (questions.length < 1) throw bad('В файле нет вопросов')
-  if (questions.length > 50) throw bad('Максимум 50 вопросов')
+  if (questions.length < 1) fail('В файле нет вопросов')
+  if (questions.length > 50) fail('Максимум 50 вопросов')
   return questions
 }

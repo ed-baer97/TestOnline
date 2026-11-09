@@ -24,8 +24,16 @@ function toPg(sql) {
   return sql.replace(/\?/g, () => `$${++index}`)
 }
 
-function isUnique(error) {
+export function isUnique(error) {
   return error?.code === '23505' || String(error?.message || '').includes('UNIQUE')
+}
+
+function wrapQueryable(client) {
+  return {
+    get: async (sql, ...params) => (await client.query(toPg(sql), params)).rows[0],
+    all: async (sql, ...params) => (await client.query(toPg(sql), params)).rows,
+    run: async (sql, ...params) => ({ changes: (await client.query(toPg(sql), params)).rowCount }),
+  }
 }
 
 async function openDatabase() {
@@ -182,12 +190,23 @@ async function openDatabase() {
   ]
   for (const statement of statements) await pool.query(statement)
   return {
-    get: async (sql, ...params) => (await pool.query(toPg(sql), params)).rows[0],
-    all: async (sql, ...params) => (await pool.query(toPg(sql), params)).rows,
-    run: async (sql, ...params) => ({ changes: (await pool.query(toPg(sql), params)).rowCount }),
+    ...wrapQueryable(pool),
+    tx: async (fn) => {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const result = await fn(wrapQueryable(client))
+        await client.query('COMMIT')
+        return result
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {})
+        throw error
+      } finally {
+        client.release()
+      }
+    },
   }
 }
-
 
 let opened
 function ready() {
@@ -210,6 +229,7 @@ export const db = {
   get: async (...args) => (await ready()).get(...args),
   all: async (...args) => (await ready()).all(...args),
   run: async (...args) => (await ready()).run(...args),
+  tx: async (fn) => (await ready()).tx(fn),
 }
 
 export async function closeDatabase() {
