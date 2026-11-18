@@ -31,7 +31,7 @@ export async function saveLessonVideo(actor, id, buffer, mime, name) {
   if (!VIDEO_TYPES.has(type)) fail('Нужен ролик MP4, WebM, MOV или OGG')
   const bytes = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer || [])
   if (!bytes.length) fail('Файл пустой')
-  if (bytes.length > MAX_VIDEO) fail('Видео больше 80 МБ')
+  if (bytes.length > MAX_VIDEO) fail('Видео больше 150 МБ')
   await ensureMediaDir()
   await writeMediaFile(mediaPath(id), bytes)
   const safeName = cleanText(name).slice(0, 120) || 'video'

@@ -148,8 +148,8 @@ export function useLessonEditor(id, navigate, initialSectionId = '') {
       setError('Нужен ролик MP4, WebM, MOV или OGG')
       return
     }
-    if (file.size > 80 * 1024 * 1024) {
-      setError('Видео больше 80 МБ')
+    if (file.size > 150 * 1024 * 1024) {
+      setError('Видео больше 150 МБ')
       return
     }
     setError('')

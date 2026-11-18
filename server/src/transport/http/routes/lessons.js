@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import express from 'express'
+import { MAX_VIDEO } from '../../../domain/lesson.js'
 import { config } from '../../../infrastructure/config.js'
 import {
   assignLessonSection,
@@ -82,7 +83,7 @@ export function registerLessonRoutes(app) {
   app.post('/api/lessons/:id/check', guard, route(async (req, res) => {
     res.json(await checkLesson(req.user, req.params.id, req.body?.answers))
   }))
-  app.put('/api/admin/lessons/:id/video', guard, express.raw({ type: () => true, limit: '80mb' }), route(async (req, res) => {
+  app.put('/api/admin/lessons/:id/video', guard, express.raw({ type: () => true, limit: MAX_VIDEO }), route(async (req, res) => {
     let name
     try {
       name = decodeURIComponent(String(req.get('x-file-name') || ''))
