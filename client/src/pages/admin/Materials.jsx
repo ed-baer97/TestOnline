@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, newId } from '../../api.js'
-import { BANDS, EMPTY_GROUPS } from '../../bands.js'
+import { EMPTY_GROUPS, groupLabels } from '../../bands.js'
 import { pick, useI18n } from '../../i18n.jsx'
 import { Crumbs, SegmentButtons, Segments } from '../../kit.jsx'
 import { QuizCatalog } from '../Quizzes.jsx'
@@ -94,7 +94,7 @@ function lessonMeta(lesson, lang, t) {
 
 function LessonRow({ lesson, sections, onMove }) {
   const { lang, t } = useI18n()
-  const current = lesson.sectionByBand?.[sections[0]?.band]?.id || ''
+  const canMove = sections.length > 0 && (sections.length > 1 || !lesson.section)
   return (
     <article className="lesson-card">
       <div>
@@ -102,9 +102,9 @@ function LessonRow({ lesson, sections, onMove }) {
         <p className="muted">{lessonMeta(lesson, lang, t)}</p>
       </div>
       <div className="row-actions">
-        {sections.length > 1 && (
-          <select aria-label={t('Раздел')} value={current} onChange={(event) => onMove(lesson.id, event.target.value)}>
-            {!current && <option value="">{t('Без раздела')}</option>}
+        {canMove && (
+          <select aria-label={t('Раздел')} value={lesson.section?.id || ''} onChange={(event) => onMove(lesson.id, event.target.value)}>
+            {!lesson.section && <option value="">{t('Без раздела')}</option>}
             {sections.map((section) => <option key={section.id} value={section.id}>{pick(lang, section.name, section.nameKk)}</option>)}
           </select>
         )}
@@ -115,51 +115,26 @@ function LessonRow({ lesson, sections, onMove }) {
   )
 }
 
-function BandLessons({ band, lessons, sections, onChanged, onError }) {
+function SectionBlock({ section, lessons, sections, onChanged, onMove, onError }) {
   const { lang, t } = useI18n()
-  const [adding, setAdding] = useState(false)
-  const [name, setName] = useState('')
-  const [nameKk, setNameKk] = useState('')
-  const [editing, setEditing] = useState(null)
-  const [draft, setDraft] = useState({ name: '', nameKk: '' })
-  const items = lessons.filter((lesson) => lesson.groups?.[band.id])
-  const bandSections = sections.filter((section) => section.band === band.id)
-  const placed = new Set()
-  const groups = bandSections.map((section) => {
-    const rows = items.filter((lesson) => lesson.sectionByBand?.[band.id]?.id === section.id)
-    rows.forEach((lesson) => placed.add(lesson.id))
-    return { section, lessons: rows }
-  })
-  const loose = items.filter((lesson) => !placed.has(lesson.id))
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState({ name: section.name, nameKk: section.nameKk || '', groups: section.groups })
+  const rows = lessons.filter((lesson) => lesson.section?.id === section.id)
 
-  async function create(event) {
+  async function save(event) {
     event.preventDefault()
     onError('')
     try {
-      await api.createLessonSection({ band: band.id, name, nameKk })
-      setName('')
-      setNameKk('')
-      setAdding(false)
+      await api.updateLessonSection(section.id, draft)
+      setEditing(false)
       await onChanged()
     } catch (err) {
       onError(err.message)
     }
   }
 
-  async function rename(event) {
-    event.preventDefault()
-    onError('')
-    try {
-      await api.updateLessonSection(editing, draft)
-      setEditing(null)
-      await onChanged()
-    } catch (err) {
-      onError(err.message)
-    }
-  }
-
-  async function remove(section) {
-    if (!window.confirm(t('Удалить раздел «{name}»? Уроки останутся в этой группе.', { name: pick(lang, section.name, section.nameKk) }))) return
+  async function remove() {
+    if (!window.confirm(t('Удалить раздел «{name}»? Уроки останутся без раздела.', { name: pick(lang, section.name, section.nameKk) }))) return
     onError('')
     try {
       await api.deleteLessonSection(section.id)
@@ -169,69 +144,37 @@ function BandLessons({ band, lessons, sections, onChanged, onError }) {
     }
   }
 
-  async function move(lessonId, sectionId) {
-    if (!sectionId) return
-    onError('')
-    try {
-      await api.assignLessonSection(lessonId, sectionId)
-      await onChanged()
-    } catch (err) {
-      onError(err.message)
-    }
-  }
-
   return (
     <details open>
       <summary>
-        {t(band.label)}
-        <span className="muted"> {items.length}</span>
+        {pick(lang, section.name, section.nameKk)}
+        <span className="muted"> {rows.length}</span>
       </summary>
       <div className="stack">
-        {groups.map((group) => (
-          <details key={group.section.id} open>
-            <summary>
-              {pick(lang, group.section.name, group.section.nameKk)}
-              <span className="muted"> {group.lessons.length}</span>
-            </summary>
-            <div className="stack">
-              {editing === group.section.id ? (
-                <form className="add-line" onSubmit={rename}>
-                  <input aria-label={t('Название, русский')} value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
-                  <input aria-label={t('Название, қазақша')} value={draft.nameKk} onChange={(event) => setDraft((current) => ({ ...current, nameKk: event.target.value }))} />
-                  <button className="ghost" type="submit">{t('Сохранить')}</button>
-                </form>
-              ) : (
-                <div className="row-actions">
-                  <button className="ghost" type="button" onClick={() => { setEditing(group.section.id); setDraft({ name: group.section.name, nameKk: group.section.nameKk || '' }) }}>{t('Изменить')}</button>
-                  <button className="ghost danger-btn" type="button" onClick={() => remove(group.section)}>{t('Удалить')}</button>
-                </div>
-              )}
-              {group.lessons.length === 0 && <p className="muted">{t('Нет уроков')}</p>}
-              {group.lessons.map((lesson) => (
-                <LessonRow key={lesson.id} lesson={lesson} sections={bandSections} onMove={move} />
-              ))}
+        <p className="muted">{groupLabels(section.groups, t) || t('Блоки не отмечены')}</p>
+        {editing ? (
+          <form className="stack" onSubmit={save}>
+            <div className="add-line">
+              <input aria-label={t('Название, русский')} value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
+              <input aria-label={t('Название, қазақша')} value={draft.nameKk} onChange={(event) => setDraft((current) => ({ ...current, nameKk: event.target.value }))} />
             </div>
-          </details>
-        ))}
-        {loose.length > 0 && (
-          <div className="stack">
-            {bandSections.length > 0 && <h3>{t('Без раздела')}</h3>}
-            {loose.map((lesson) => (
-              <LessonRow key={lesson.id} lesson={lesson} sections={bandSections} onMove={move} />
-            ))}
-          </div>
-        )}
-        {items.length === 0 && bandSections.length === 0 && <p className="muted">{t('Нет уроков')}</p>}
-        {adding ? (
-          <form className="add-line" onSubmit={create}>
-            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Название раздела')} autoFocus />
-            <input value={nameKk} onChange={(event) => setNameKk(event.target.value)} placeholder="Бөлім атауы" />
-            <button className="primary" type="submit">{t('Создать раздел')}</button>
-            <button className="ghost" type="button" onClick={() => setAdding(false)}>{t('Закрыть')}</button>
+            <GroupChecks groups={draft.groups} onChange={(groups) => setDraft((current) => ({ ...current, groups }))} />
+            <div className="row-actions">
+              <button className="primary" type="submit">{t('Сохранить')}</button>
+              <button className="ghost" type="button" onClick={() => setEditing(false)}>{t('Закрыть')}</button>
+            </div>
           </form>
         ) : (
-          <button className="ghost add" type="button" onClick={() => setAdding(true)}>+ {t('Добавить раздел')}</button>
+          <div className="row-actions">
+            <button className="ghost" type="button" onClick={() => { setDraft({ name: section.name, nameKk: section.nameKk || '', groups: section.groups }); setEditing(true) }}>{t('Изменить')}</button>
+            <button className="ghost danger-btn" type="button" onClick={remove}>{t('Удалить')}</button>
+            <Link className="ghost" to={`/admin/materials/new?section=${section.id}`}>+ {t('Урок')}</Link>
+          </div>
         )}
+        {rows.length === 0 && <p className="muted">{t('Нет уроков')}</p>}
+        {rows.map((lesson) => (
+          <LessonRow key={lesson.id} lesson={lesson} sections={sections} onMove={onMove} />
+        ))}
       </div>
     </details>
   )
@@ -242,6 +185,10 @@ export function MaterialList() {
   const [lessons, setLessons] = useState(null)
   const [sections, setSections] = useState([])
   const [error, setError] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [name, setName] = useState('')
+  const [nameKk, setNameKk] = useState('')
+  const [groups, setGroups] = useState({ ...EMPTY_GROUPS, grades_5_9: true })
 
   function load() {
     return Promise.all([api.lessons(), api.lessonSections()]).then(([lessonData, sectionData]) => {
@@ -254,6 +201,34 @@ export function MaterialList() {
     load().catch((err) => setError(err.message))
   }, [])
 
+  async function create(event) {
+    event.preventDefault()
+    setError('')
+    try {
+      await api.createLessonSection({ name, nameKk, groups })
+      setName('')
+      setNameKk('')
+      setGroups({ ...EMPTY_GROUPS, grades_5_9: true })
+      setAdding(false)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function move(lessonId, sectionId) {
+    if (!sectionId) return
+    setError('')
+    try {
+      await api.assignLessonSection(lessonId, sectionId)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const loose = (lessons || []).filter((lesson) => !lesson.section)
+
   return (
     <section className="stack">
       <div className="section-head">
@@ -263,15 +238,37 @@ export function MaterialList() {
             <MaterialTabs />
           </div>
         </div>
-        <Link className="primary" to="/admin/materials/new">+ {t('Новый урок')}</Link>
+        <button className="primary" type="button" onClick={() => setAdding(true)}>+ {t('Раздел')}</button>
       </div>
       {error && <p className="form-error">{t(error)}</p>}
       {lessons === null && !error && <p className="muted">{t('Загрузка…')}</p>}
+      {adding && (
+        <form className="stack" onSubmit={create}>
+          <div className="add-line">
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Название раздела')} autoFocus />
+            <input value={nameKk} onChange={(event) => setNameKk(event.target.value)} placeholder="Бөлім атауы" />
+          </div>
+          <GroupChecks groups={groups} onChange={setGroups} />
+          <div className="row-actions">
+            <button className="primary" type="submit">{t('Создать раздел')}</button>
+            <button className="ghost" type="button" onClick={() => setAdding(false)}>{t('Закрыть')}</button>
+          </div>
+        </form>
+      )}
       {lessons && (
         <div className="accordion">
-          {BANDS.map((band) => (
-            <BandLessons key={band.id} band={band} lessons={lessons} sections={sections} onChanged={load} onError={setError} />
+          {sections.map((section) => (
+            <SectionBlock key={section.id} section={section} lessons={lessons} sections={sections} onChanged={load} onMove={move} onError={setError} />
           ))}
+          {sections.length === 0 && <p className="muted">{t('Нет разделов')}</p>}
+          {loose.length > 0 && (
+            <div className="stack">
+              <h2>{t('Без раздела')}</h2>
+              {loose.map((lesson) => (
+                <LessonRow key={lesson.id} lesson={lesson} sections={sections} onMove={move} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </section>
@@ -299,14 +296,14 @@ export function MaterialQuizzes() {
 export function LessonEditor() {
   const { lang, t } = useI18n()
   const { id } = useParams()
+  const [params] = useSearchParams()
   const isNew = !id
   const navigate = useNavigate()
   const [title, setTitle] = useState('')
   const [titleKk, setTitleKk] = useState('')
   const [format, setFormat] = useState('slides')
-  const [groups, setGroups] = useState({ ...EMPTY_GROUPS, grades_5_9: true })
   const [sections, setSections] = useState([])
-  const [sectionByBand, setSectionByBand] = useState({})
+  const [sectionId, setSectionId] = useState(params.get('section') || '')
   const [contentLang, setContentLang] = useState('ru')
   const [packs, setPacks] = useState(() => ({ ru: emptyPack(), kk: emptyPack() }))
   const savedId = useRef(id || null)
@@ -345,10 +342,7 @@ export function LessonEditor() {
       setTitle(lesson.title)
       setTitleKk(lesson.titleKk || '')
       setFormat(lesson.format === 'video' ? 'video' : 'slides')
-      setGroups(lesson.groups)
-      const chosen = {}
-      for (const [band, section] of Object.entries(lesson.sectionByBand || {})) chosen[band] = section.id
-      setSectionByBand(chosen)
+      setSectionId(lesson.section?.id || '')
       setPacks({
         ru: packFrom(lesson.slides, lesson.questions, lesson.video, lesson.id, 'ru'),
         kk: packFrom(lesson.slidesKk, lesson.questionsKk, lesson.videoKk, lesson.id, 'kk'),
@@ -431,20 +425,15 @@ export function LessonEditor() {
       setError(format === 'video' ? 'Загрузите ролик на русском и казахском' : 'Заполните презентацию и тест на русском и казахском')
       return
     }
-    const placement = {}
-    for (const band of BANDS) {
-      if (!groups[band.id]) continue
-      const options = sections.filter((section) => section.band === band.id)
-      if (!options.length) continue
-      const current = sectionByBand[band.id]
-      placement[band.id] = options.some((section) => section.id === current) ? current : options[0].id
+    if (!sectionId) {
+      setError('Выберите раздел')
+      return
     }
     const body = {
       title,
       titleKk,
       format,
-      groups,
-      sectionByBand: placement,
+      sectionId,
       questions: packs.ru.questions,
       questionsKk: packs.kk.questions,
     }
@@ -529,19 +518,14 @@ export function LessonEditor() {
           {t('Название, қазақша')}
           <input value={titleKk} onChange={(event) => setTitleKk(event.target.value)} placeholder="Күн жүйесі" />
         </label>
-        <GroupChecks groups={groups} onChange={setGroups} />
-        {BANDS.filter((band) => groups[band.id]).map((band) => {
-          const options = sections.filter((section) => section.band === band.id)
-          if (!options.length) return null
-          return (
-            <label key={band.id}>
-              {t(band.label)} · {t('Раздел')}
-              <select value={sectionByBand[band.id] || options[0].id} onChange={(event) => setSectionByBand((current) => ({ ...current, [band.id]: event.target.value }))}>
-                {options.map((section) => <option key={section.id} value={section.id}>{pick(lang, section.name, section.nameKk)}</option>)}
-              </select>
-            </label>
-          )
-        })}
+        <label>
+          {t('Раздел')}
+          <select value={sectionId} onChange={(event) => setSectionId(event.target.value)}>
+            <option value="">{t('Выберите раздел')}</option>
+            {sections.map((section) => <option key={section.id} value={section.id}>{pick(lang, section.name, section.nameKk)}</option>)}
+          </select>
+        </label>
+        {sectionId && <p className="muted">{groupLabels(sections.find((section) => section.id === sectionId)?.groups, t)}</p>}
       </div>
       <div className="list-tools">
         <SegmentButtons

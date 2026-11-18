@@ -137,13 +137,19 @@ async function openDatabase() {
     'CREATE UNIQUE INDEX IF NOT EXISTS lessons_seed_key ON lessons (seed_key) WHERE seed_key IS NOT NULL',
     `CREATE TABLE IF NOT EXISTS lesson_sections (
       id TEXT PRIMARY KEY,
-      band TEXT NOT NULL,
       name TEXT NOT NULL,
       name_kk TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0,
+      grades_1_4 INTEGER NOT NULL DEFAULT 0,
+      grades_5_9 INTEGER NOT NULL DEFAULT 0,
+      grades_10_11 INTEGER NOT NULL DEFAULT 0,
+      students INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     )`,
-    'CREATE INDEX IF NOT EXISTS lesson_sections_band ON lesson_sections (band)',
+    'ALTER TABLE lesson_sections ADD COLUMN IF NOT EXISTS grades_1_4 INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE lesson_sections ADD COLUMN IF NOT EXISTS grades_5_9 INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE lesson_sections ADD COLUMN IF NOT EXISTS grades_10_11 INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE lesson_sections ADD COLUMN IF NOT EXISTS students INTEGER NOT NULL DEFAULT 0',
     `CREATE TABLE IF NOT EXISTS lesson_section_lessons (
       section_id TEXT NOT NULL,
       lesson_id TEXT NOT NULL,

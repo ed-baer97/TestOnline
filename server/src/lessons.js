@@ -303,14 +303,14 @@ function parseList(value) {
   }
 }
 
-function summary(row, best, sectionByBand = {}) {
+function summary(row, best, section = null) {
   return {
     id: row.id,
     title: row.title,
     titleKk: row.title_kk || '',
     format: lessonFormat(row),
     groups: mapGroups(row),
-    sectionByBand,
+    section,
     slideCount: parseList(row.slides).length,
     slideCountKk: parseList(row.slides_kk).length,
     questionCount: parseList(row.questions).length,
@@ -360,139 +360,196 @@ async function bestAttempts(userId) {
   return best
 }
 
-const DEFAULT_LESSON_SECTIONS = [
-  ['grades_1_4', 1],
-  ['grades_5_9', 2],
-  ['grades_10_11', 3],
-  ['students', 4],
-]
+const SECTION_FIELDS = 'id, name, name_kk, sort_order, grades_1_4, grades_5_9, grades_10_11, students'
 
 function sameText(left, right) {
   return left.localeCompare(right, 'ru', { sensitivity: 'accent' }) === 0
 }
 
+function mapSection(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    nameKk: row.name_kk || '',
+    sortOrder: Number(row.sort_order),
+    groups: mapGroups(row),
+  }
+}
+
 async function sectionMap() {
   const rows = await db.all(
-    `SELECT p.lesson_id, s.id, s.band, s.name, s.name_kk, s.sort_order
+    `SELECT p.lesson_id, s.${SECTION_FIELDS.split(', ').join(', s.')}
      FROM lesson_section_lessons p
      JOIN lesson_sections s ON s.id = p.section_id`,
   )
   const map = new Map()
   for (const row of rows) {
-    if (!map.has(row.lesson_id)) map.set(row.lesson_id, {})
-    map.get(row.lesson_id)[row.band] = {
-      id: row.id,
-      name: row.name,
-      nameKk: row.name_kk || '',
-      sortOrder: Number(row.sort_order),
-    }
+    if (!map.has(row.lesson_id)) map.set(row.lesson_id, mapSection(row))
   }
   return map
 }
 
-async function sectionsOf(lessonId) {
+async function sectionOfLesson(lessonId) {
   const map = await sectionMap()
-  return map.get(lessonId) || {}
+  return map.get(lessonId) || null
 }
 
 export async function ensureLessonSections() {
   await db.tx(async (tx) => {
-    const done = await tx.get('SELECT key FROM app_seeds WHERE key = ?', 'lesson-sections-v1')
-    if (done) return
-    const now = new Date().toISOString()
-    for (const [band, order] of DEFAULT_LESSON_SECTIONS) {
-      let section = await tx.get('SELECT id FROM lesson_sections WHERE band = ? AND lower(name) = lower(?)', band, 'Уроки')
-      if (!section) {
-        const id = crypto.randomUUID()
+    const band = await tx.get(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = current_schema() AND table_name = 'lesson_sections' AND column_name = 'band'`,
+    )
+    if (band) {
+      await tx.run('ALTER TABLE lesson_sections ALTER COLUMN band DROP NOT NULL')
+      for (const key of GROUP_KEYS) {
         await tx.run(
-          'INSERT INTO lesson_sections (id, band, name, name_kk, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-          id,
-          band,
-          'Уроки',
-          'Сабақтар',
-          order,
-          now,
-        )
-        section = { id }
-      }
-      const lessons = await tx.all(`SELECT id FROM lessons WHERE ${band} = 1`)
-      for (const lesson of lessons) {
-        const placed = await tx.get(
-          `SELECT p.section_id FROM lesson_section_lessons p
-           JOIN lesson_sections s ON s.id = p.section_id
-           WHERE p.lesson_id = ? AND s.band = ?`,
-          lesson.id,
-          band,
-        )
-        if (placed) continue
-        await tx.run(
-          'INSERT INTO lesson_section_lessons (section_id, lesson_id, sort_order) VALUES (?, ?, 0)',
-          section.id,
-          lesson.id,
+          `UPDATE lesson_sections SET ${key} = 1
+           WHERE band = ? AND grades_1_4 = 0 AND grades_5_9 = 0 AND grades_10_11 = 0 AND students = 0`,
+          key,
         )
       }
     }
-    await tx.run('INSERT INTO app_seeds (key, applied_at) VALUES (?, ?)', 'lesson-sections-v1', now)
+    const done = await tx.get('SELECT key FROM app_seeds WHERE key = ?', 'lesson-sections-v2')
+    if (done) return
+    const seeded = await tx.all(
+      `SELECT id FROM lesson_sections WHERE name = ? AND COALESCE(name_kk, '') = ?`,
+      'Уроки',
+      'Сабақтар',
+    )
+    for (const section of seeded) {
+      await tx.run('DELETE FROM lesson_section_lessons WHERE section_id = ?', section.id)
+      await tx.run('DELETE FROM lesson_sections WHERE id = ?', section.id)
+    }
+    const dupes = await tx.all(
+      'SELECT lesson_id FROM lesson_section_lessons GROUP BY lesson_id HAVING COUNT(*) > 1',
+    )
+    for (const row of dupes) {
+      const keep = await tx.get(
+        `SELECT p.section_id FROM lesson_section_lessons p
+         JOIN lesson_sections s ON s.id = p.section_id
+         WHERE p.lesson_id = ?
+         ORDER BY s.sort_order, s.name
+         LIMIT 1`,
+        row.lesson_id,
+      )
+      await tx.run(
+        'DELETE FROM lesson_section_lessons WHERE lesson_id = ? AND section_id <> ?',
+        row.lesson_id,
+        keep.section_id,
+      )
+    }
+    const placed = await tx.all(
+      `SELECT p.lesson_id, s.grades_1_4, s.grades_5_9, s.grades_10_11, s.students
+       FROM lesson_section_lessons p
+       JOIN lesson_sections s ON s.id = p.section_id`,
+    )
+    for (const row of placed) {
+      await tx.run(
+        'UPDATE lessons SET grades_1_4 = ?, grades_5_9 = ?, grades_10_11 = ?, students = ? WHERE id = ?',
+        row.grades_1_4,
+        row.grades_5_9,
+        row.grades_10_11,
+        row.students,
+        row.lesson_id,
+      )
+    }
+    await tx.run('INSERT INTO app_seeds (key, applied_at) VALUES (?, ?)', 'lesson-sections-v2', new Date().toISOString())
   })
 }
 
-function mapSection(row) {
-  return {
-    id: row.id,
-    band: row.band,
-    name: row.name,
-    nameKk: row.name_kk || '',
-    sortOrder: Number(row.sort_order),
+async function loadSection(id) {
+  const row = await db.get(`SELECT ${SECTION_FIELDS} FROM lesson_sections WHERE id = ?`, id)
+  return row ? mapSection(row) : null
+}
+
+async function assertSectionNameFree(name, nameKk, exceptId = '') {
+  const rows = await db.all('SELECT id, name, name_kk FROM lesson_sections')
+  if (rows.some((row) => row.id !== exceptId && (sameText(row.name, name) || (nameKk && row.name_kk && sameText(row.name_kk, nameKk))))) {
+    fail('Такой раздел уже есть', 409)
+  }
+}
+
+async function placeLesson(lessonId, sectionId) {
+  await db.tx(async (tx) => {
+    await tx.run('DELETE FROM lesson_section_lessons WHERE lesson_id = ?', lessonId)
+    if (!sectionId) return
+    await tx.run(
+      'INSERT INTO lesson_section_lessons (section_id, lesson_id, sort_order) VALUES (?, ?, 0)',
+      sectionId,
+      lessonId,
+    )
+  })
+}
+
+async function copySectionGroups(sectionId) {
+  const section = await db.get(`SELECT ${SECTION_FIELDS} FROM lesson_sections WHERE id = ?`, sectionId)
+  if (!section) return
+  const lessons = await db.all('SELECT lesson_id FROM lesson_section_lessons WHERE section_id = ?', sectionId)
+  for (const row of lessons) {
+    await db.run(
+      'UPDATE lessons SET grades_1_4 = ?, grades_5_9 = ?, grades_10_11 = ?, students = ? WHERE id = ?',
+      section.grades_1_4,
+      section.grades_5_9,
+      section.grades_10_11,
+      section.students,
+      row.lesson_id,
+    )
   }
 }
 
 export async function listLessonSections(actor) {
   assertRole(actor, 'super')
-  const rows = await db.all('SELECT id, band, name, name_kk, sort_order FROM lesson_sections ORDER BY sort_order, name')
+  const rows = await db.all(`SELECT ${SECTION_FIELDS} FROM lesson_sections ORDER BY sort_order, name`)
   return rows.map(mapSection)
 }
 
 export async function createLessonSection(actor, input) {
   assertRole(actor, 'super')
-  const band = input?.band
-  if (!GROUP_KEYS.includes(band)) fail('Неизвестная группа')
   const name = cleanLabel(input?.name, 2, 80, 'Название раздела')
   const nameKk = optionalLabel(input?.nameKk, 80, 'Название раздела')
-  const rows = await db.all('SELECT id, name, name_kk FROM lesson_sections WHERE band = ?', band)
-  if (rows.some((row) => sameText(row.name, name) || (nameKk && row.name_kk && sameText(row.name_kk, nameKk)))) {
-    fail('Такой раздел уже есть', 409)
-  }
-  const orderRow = await db.get('SELECT COALESCE(MAX(sort_order), 0) AS n FROM lesson_sections WHERE band = ?', band)
+  const groups = readGroups(input)
+  await assertSectionNameFree(name, nameKk)
+  const orderRow = await db.get('SELECT COALESCE(MAX(sort_order), 0) AS n FROM lesson_sections')
   const id = crypto.randomUUID()
   await db.run(
-    'INSERT INTO lesson_sections (id, band, name, name_kk, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    `INSERT INTO lesson_sections (
+      id, name, name_kk, sort_order, grades_1_4, grades_5_9, grades_10_11, students, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
-    band,
     name,
     nameKk,
     Number(orderRow?.n || 0) + 1,
+    ...groupNumbers(groups),
     new Date().toISOString(),
   )
-  return mapSection(await db.get('SELECT id, band, name, name_kk, sort_order FROM lesson_sections WHERE id = ?', id))
+  return loadSection(id)
 }
 
 export async function updateLessonSection(actor, id, input) {
   assertRole(actor, 'super')
-  const current = await db.get('SELECT id, band FROM lesson_sections WHERE id = ?', id)
+  const current = await loadSection(id)
   if (!current) fail('Раздел не найден', 404)
   const name = cleanLabel(input?.name, 2, 80, 'Название раздела')
   const nameKk = optionalLabel(input?.nameKk, 80, 'Название раздела')
-  const rows = await db.all('SELECT id, name, name_kk FROM lesson_sections WHERE band = ?', current.band)
-  if (rows.some((row) => row.id !== id && (sameText(row.name, name) || (nameKk && row.name_kk && sameText(row.name_kk, nameKk))))) {
-    fail('Такой раздел уже есть', 409)
-  }
-  await db.run('UPDATE lesson_sections SET name = ?, name_kk = ? WHERE id = ?', name, nameKk, id)
-  return mapSection(await db.get('SELECT id, band, name, name_kk, sort_order FROM lesson_sections WHERE id = ?', id))
+  const groups = readGroups(input)
+  await assertSectionNameFree(name, nameKk, id)
+  await db.run(
+    `UPDATE lesson_sections
+     SET name = ?, name_kk = ?, grades_1_4 = ?, grades_5_9 = ?, grades_10_11 = ?, students = ?
+     WHERE id = ?`,
+    name,
+    nameKk,
+    ...groupNumbers(groups),
+    id,
+  )
+  await copySectionGroups(id)
+  return loadSection(id)
 }
 
 export async function deleteLessonSection(actor, id) {
   assertRole(actor, 'super')
-  const current = await db.get('SELECT id FROM lesson_sections WHERE id = ?', id)
+  const current = await loadSection(id)
   if (!current) fail('Раздел не найден', 404)
   await db.tx(async (tx) => {
     await tx.run('DELETE FROM lesson_section_lessons WHERE section_id = ?', id)
@@ -502,71 +559,12 @@ export async function deleteLessonSection(actor, id) {
 
 export async function assignLessonSection(actor, lessonId, sectionId) {
   assertRole(actor, 'super')
-  const section = await db.get('SELECT id, band FROM lesson_sections WHERE id = ?', sectionId)
-  if (!section || !GROUP_KEYS.includes(section.band)) fail('Раздел не найден', 404)
-  const lesson = await mustLesson(lessonId)
-  if (!lesson[section.band]) fail('Урок не входит в эту группу')
-  await db.tx(async (tx) => {
-    await tx.run(
-      `DELETE FROM lesson_section_lessons
-       WHERE lesson_id = ? AND section_id IN (SELECT id FROM lesson_sections WHERE band = ?)`,
-      lessonId,
-      section.band,
-    )
-    await tx.run(
-      'INSERT INTO lesson_section_lessons (section_id, lesson_id, sort_order) VALUES (?, ?, 0)',
-      section.id,
-      lessonId,
-    )
-  })
-  return { lessonId, sectionId, band: section.band }
-}
-
-async function syncPlacements(lessonId, groups, sectionByBand) {
-  const chosen = sectionByBand && typeof sectionByBand === 'object' ? sectionByBand : {}
-  for (const band of GROUP_KEYS) {
-    if (!groups[band]) {
-      await db.run(
-        `DELETE FROM lesson_section_lessons
-         WHERE lesson_id = ? AND section_id IN (SELECT id FROM lesson_sections WHERE band = ?)`,
-        lessonId,
-        band,
-      )
-      continue
-    }
-    const wanted = typeof chosen[band] === 'string' ? chosen[band] : ''
-    if (wanted) {
-      const section = await db.get('SELECT id FROM lesson_sections WHERE id = ? AND band = ?', wanted, band)
-      if (!section) fail('Раздел не найден', 404)
-      await db.run(
-        `DELETE FROM lesson_section_lessons
-         WHERE lesson_id = ? AND section_id IN (SELECT id FROM lesson_sections WHERE band = ?)`,
-        lessonId,
-        band,
-      )
-      await db.run(
-        'INSERT INTO lesson_section_lessons (section_id, lesson_id, sort_order) VALUES (?, ?, 0)',
-        section.id,
-        lessonId,
-      )
-      continue
-    }
-    const placed = await db.get(
-      `SELECT p.section_id FROM lesson_section_lessons p
-       JOIN lesson_sections s ON s.id = p.section_id
-       WHERE p.lesson_id = ? AND s.band = ?`,
-      lessonId,
-      band,
-    )
-    if (placed) continue
-    const first = await db.get('SELECT id FROM lesson_sections WHERE band = ? ORDER BY sort_order, name LIMIT 1', band)
-    if (!first) continue
-    await db.run(
-      'INSERT INTO lesson_section_lessons (section_id, lesson_id, sort_order) VALUES (?, ?, 0)',
-      first.id,
-      lessonId,
-    )
-  }
+  const section = await loadSection(sectionId)
+  if (!section) fail('Раздел не найден', 404)
+  await mustLesson(lessonId)
+  await placeLesson(lessonId, section.id)
+  await copySectionGroups(section.id)
+  return { lessonId, sectionId: section.id }
 }
 
 export async function listLessons(actor) {
@@ -574,12 +572,12 @@ export async function listLessons(actor) {
   const placed = await sectionMap()
   if (actor.role === 'super') {
     const rows = await db.all('SELECT * FROM lessons ORDER BY created_at DESC')
-    return rows.map((row) => summary(row, null, placed.get(row.id) || {}))
+    return rows.map((row) => summary(row, null, placed.get(row.id) || null))
   }
   const band = await learnerBand(actor)
   const rows = await db.all(`SELECT * FROM lessons WHERE ${band} = 1 ORDER BY created_at DESC`)
   const best = await bestAttempts(actor.id)
-  return rows.map((row) => summary(row, best.get(row.id), placed.get(row.id) || {}))
+  return rows.map((row) => summary(row, best.get(row.id), placed.get(row.id) || null))
 }
 
 function slideFileId(slide) {
@@ -679,7 +677,7 @@ export async function getLesson(actor, id, lang = 'ru') {
     attempts = { ...attemptState(rows, attemptLimit()), last: presentAttempt(last, lastQuestions) }
   }
   const lesson = {
-    ...summary(row, best, await sectionsOf(id)),
+    ...summary(row, best, await sectionOfLesson(id)),
     title: pack.title,
     slides: format === 'video' ? [] : presentSlides(pack.slides),
     video: format === 'video' ? videoOf(row, pack.lang) : null,
@@ -861,10 +859,23 @@ function readFormat(input) {
   fail('Неизвестный вид урока')
 }
 
+async function groupsForSave(id, input) {
+  const requested = typeof input?.sectionId === 'string' ? input.sectionId : ''
+  if (requested) {
+    const section = await loadSection(requested)
+    if (!section) fail('Раздел не найден', 404)
+    return { groups: section.groups, sectionId: section.id }
+  }
+  const current = id ? await sectionOfLesson(id) : null
+  if (current && input?.groups == null) return { groups: current.groups, sectionId: '' }
+  return { groups: readGroups(input), sectionId: '' }
+}
+
 async function saveLesson(id, input, seedKey) {
   const title = cleanLabel(input?.title, 2, 80, 'Название урока')
   const titleKk = optionalLabel(input?.titleKk, 80, 'Название урока')
-  const groups = readGroups(input)
+  const placement = await groupsForSave(id, input)
+  const groups = placement.groups
   const format = readFormat(input)
   const questions = normalizeQuestions(input?.questions)
   const questionsKk = isBlankQuestions(input?.questionsKk) ? [] : normalizeQuestions(input?.questionsKk)
@@ -923,7 +934,7 @@ async function saveLesson(id, input, seedKey) {
       id,
     )
   }
-  await syncPlacements(id, groups, input?.sectionByBand)
+  if (placement.sectionId) await placeLesson(id, placement.sectionId)
   return getLesson({ role: 'super' }, id)
 }
 

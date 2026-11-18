@@ -6,11 +6,11 @@ import { Brand } from '../Brand.jsx'
 import { EnvControls, TopbarSlot, TopbarSlots } from '../topbar.jsx'
 import LessonView from './LessonView.jsx'
 
-function lessonBlocks(lessons, band, lang) {
+function lessonBlocks(lessons, lang) {
   const buckets = new Map()
   const loose = []
   for (const lesson of lessons || []) {
-    const section = lesson.sectionByBand?.[band]
+    const section = lesson.section
     if (!section) {
       loose.push(lesson)
       continue
@@ -29,9 +29,9 @@ function lessonBlocks(lessons, band, lang) {
   return blocks
 }
 
-function LessonSections({ lessons, band }) {
+function LessonSections({ lessons }) {
   const { lang, t } = useI18n()
-  const blocks = lessonBlocks(lessons, band, lang)
+  const blocks = lessonBlocks(lessons, lang)
   return blocks.map((block) => (
     <section className="stack" key={block.key}>
       {(block.key === 'loose' ? blocks.length > 1 : Boolean(block.title)) && (
@@ -166,7 +166,7 @@ export default function LearnerHome({ me: initialMe, onLogout }) {
               </Link>
             ))}
             {lessons?.length === 0 && <p className="muted">{t('Для вашего класса пока нет уроков.')}</p>}
-            <LessonSections lessons={lessons} band={me.band} />
+            <LessonSections lessons={lessons} />
           </div>
         </section>
       )}

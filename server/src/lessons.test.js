@@ -299,14 +299,36 @@ test('урок: презентация, тест и видимость по гр
 
   await lessons.ensureLessonSections()
   const placed = (await lessons.listLessons(pupil)).find((item) => item.title === 'Солнечная система')
-  assert.equal(placed.sectionByBand.grades_5_9.name, 'Уроки')
-  assert.equal(placed.sectionByBand.grades_5_9.nameKk, 'Сабақтар')
-  assert.equal((await lessons.listLessonSections(root)).length, 4)
-  const extra = await lessons.createLessonSection(root, { band: 'grades_5_9', name: 'Планеты', nameKk: 'Планеталар' })
-  await lessons.assignLessonSection(root, placed.id, extra.id)
-  assert.equal((await lessons.getLesson(root, placed.id)).sectionByBand.grades_5_9.name, 'Планеты')
-  await lessons.deleteLessonSection(root, extra.id)
-  assert.equal((await lessons.getLesson(root, placed.id)).sectionByBand.grades_5_9, undefined)
-  await lessons.ensureLessonSections()
-  assert.equal((await lessons.getLesson(root, placed.id)).sectionByBand.grades_5_9, undefined)
+  const solar = await lessons.createLessonSection(root, {
+    name: 'Планеты',
+    nameKk: 'Планеталар',
+    groups: { grades_5_9: true },
+  })
+  await lessons.assignLessonSection(root, placed.id, solar.id)
+  const inside = await lessons.getLesson(root, placed.id)
+  assert.equal(inside.section.name, 'Планеты')
+  assert.equal(inside.section.nameKk, 'Планеталар')
+  assert.equal(inside.groups.grades_5_9, true)
+  assert.equal(inside.groups.grades_1_4, false)
+  const mercury = await lessons.createLesson(root, {
+    title: 'Меркурий',
+    titleKk: 'Меркурий',
+    sectionId: solar.id,
+    slides: [{ kind: 'frame', tone: 'orbit', kicker: 'Слайд', title: 'Меркурий', lines: ['Ближе всех к Солнцу'] }],
+    questions: [{ text: 'Какая планета ближе всех к Солнцу?', correctIndex: 0, options: [{ text: 'Меркурий' }, { text: 'Венера' }] }],
+    slidesKk: [{ kind: 'frame', tone: 'orbit', kicker: 'Слайд', title: 'Меркурий', lines: ['Күнге ең жақын'] }],
+    questionsKk: [{ text: 'Күнге ең жақын ғаламшар?', correctIndex: 0, options: [{ text: 'Меркурий' }, { text: 'Шолпан' }] }],
+  })
+  assert.equal(mercury.section.id, solar.id)
+  assert.equal((await lessons.listLessons(pupil)).some((item) => item.id === mercury.id), true)
+  assert.equal((await lessons.listLessons(student)).some((item) => item.id === mercury.id), false)
+  await lessons.updateLessonSection(root, solar.id, {
+    name: 'Планеты',
+    nameKk: 'Планеталар',
+    groups: { grades_5_9: true, students: true },
+  })
+  assert.equal((await lessons.getLesson(root, mercury.id)).groups.students, true)
+  assert.equal((await lessons.listLessons(student)).some((item) => item.id === mercury.id), true)
+  await lessons.deleteLessonSection(root, solar.id)
+  assert.equal((await lessons.getLesson(root, mercury.id)).section, null)
 })
