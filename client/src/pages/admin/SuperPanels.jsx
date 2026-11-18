@@ -4,6 +4,7 @@ import { api } from '../../api.js'
 import { formatNumber } from '../../format.js'
 import { pick, useI18n } from '../../i18n.jsx'
 import { Modal, SearchBox } from '../../kit.jsx'
+import { RegionCatalog } from './Directory.jsx'
 import { Notice } from './ui.jsx'
 
 export function Regions() {
@@ -98,7 +99,8 @@ export function Regions() {
       {regions?.length === 0 && <p className="muted">{t('Регионов пока нет. Нажмите «Добавить».')}</p>}
       <div className="stack">
         {regions?.map((region) => (
-          <article className="person" key={region.id}>
+          <div className="stack" key={region.id}>
+          <article className="person">
             <form onSubmit={(event) => rename(event, region.id)}>
               <input
                 aria-label={t('Название, русский')}
@@ -120,6 +122,8 @@ export function Regions() {
               <button className="ghost danger-btn" type="button" onClick={() => remove(region)}>{t('Удалить')}</button>
             </div>
           </article>
+          <RegionCatalog regionId={region.id} onChanged={load} />
+          </div>
         ))}
       </div>
     </section>

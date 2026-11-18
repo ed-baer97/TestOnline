@@ -18,7 +18,9 @@ import {
   createRegionalAdmin,
   createTrack,
   dashboard,
+  createDistrict,
   deleteClass,
+  deleteDistrict,
   deleteLearner,
   deleteOrgAdmin,
   deleteOrganization,
@@ -34,6 +36,7 @@ import {
   listOrganizations,
   listRegionalAdmins,
   listRegions,
+  listCatalog,
   listDistricts,
   launchTargets,
   listLaunchQuizzes,
@@ -287,6 +290,16 @@ export function createApp() {
   }))
   app.delete('/api/admin/regions/:id', guard, route(async (req, res) => {
     await deleteRegion(req.user, req.params.id)
+    res.json({ ok: true })
+  }))
+  app.get('/api/admin/regions/:id/catalog', guard, route(async (req, res) => {
+    res.json(await listCatalog(req.user, req.params.id))
+  }))
+  app.post('/api/admin/districts', guard, route(async (req, res) => {
+    res.status(201).json(await createDistrict(req.user, req.body || {}))
+  }))
+  app.delete('/api/admin/districts/:id', guard, route(async (req, res) => {
+    await deleteDistrict(req.user, req.params.id)
     res.json({ ok: true })
   }))
   app.get('/api/admin/regional-admins', guard, route(async (req, res) => {

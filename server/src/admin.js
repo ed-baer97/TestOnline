@@ -14,6 +14,7 @@ import {
   readGroups,
 } from './domain.js'
 import { hashPassword, verifyPassword } from './passwords.js'
+import { ensureMangystauCatalog, isMangystau, MANGYSTAU_DISTRICTS } from './mangystau.js'
 import { dashboard, orgStats, platformStats } from './stats.js'
 
 export { BANDS, dashboard, orgStats, platformStats }
@@ -38,30 +39,6 @@ function bandForGrade(grade) {
   return BANDS.find((band) => band.grades.includes(grade)) || null
 }
 
-const MANGYSTAU_DIVISIONS = [
-  [1, 'Бейнеуский район', 'Бейнеу ауданы'],
-  [2, 'Каракиянский район', 'Қарақия ауданы'],
-  [3, 'Мангистауский район', 'Маңғыстау ауданы'],
-  [4, 'Мунайлинский район', 'Мұнайлы ауданы'],
-  [5, 'Тупкараганский район', 'Түпқараған ауданы'],
-  [6, 'город Актау', 'Ақтау қаласы'],
-  [7, 'город Жанаозен', 'Жаңаөзен қаласы'],
-]
-
-function isMangystau(name, nameKk = '') {
-  const folded = `${name} ${nameKk}`
-    .toLowerCase()
-    .replaceAll('ё', 'е')
-    .replaceAll('ғ', 'г')
-    .replaceAll('ң', 'н')
-    .replaceAll('ұ', 'у')
-    .replaceAll('ү', 'у')
-    .replaceAll('қ', 'к')
-    .replaceAll('ө', 'о')
-    .replaceAll('і', 'и')
-    .replaceAll('ы', 'и')
-  return folded.includes('мангистау')
-}
 
 export function mapOrg(row) {
   return {
@@ -123,7 +100,7 @@ export function bootAdmin() {
   if (!boot) {
     boot = (async () => {
       const user = await ensureSuperAdmin()
-      await ensureRegionalDivisions()
+      await ensureMangystauCatalog()
       const { ensureDemoLesson, migrateLessonFiles } = await import('./lessons.js')
       await ensureDemoLesson()
       const moved = await migrateLessonFiles()
@@ -230,17 +207,18 @@ export async function ensureRegionalDivisions(regionId) {
     : await db.all('SELECT id, name, name_kk FROM regions')
   for (const region of rows) {
     if (!isMangystau(region.name, region.name_kk || '')) continue
-    for (const [order, name, nameKk] of MANGYSTAU_DIVISIONS) {
-      const existing = await db.get('SELECT id FROM districts WHERE region_id = ? AND lower(name) = lower(?)', region.id, name)
-      if (existing) continue
+    const existing = await count('SELECT COUNT(*) AS n FROM districts WHERE region_id = ?', region.id)
+    if (existing) continue
+    const now = new Date().toISOString()
+    for (const district of MANGYSTAU_DISTRICTS) {
       await db.run(
         'INSERT INTO districts (id, region_id, name, name_kk, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)',
         crypto.randomUUID(),
         region.id,
-        name,
-        nameKk,
-        order,
-        new Date().toISOString(),
+        district.name,
+        district.nameKk,
+        district.order,
+        now,
       )
     }
   }
@@ -253,6 +231,71 @@ export async function listDistricts(actor) {
     actor.regionId,
   )
   return rows.map((row) => ({ id: row.id, name: row.name, nameKk: row.name_kk || '' }))
+}
+
+function regionScope(actor, regionId) {
+  assertRole(actor, 'super', 'regional')
+  if (actor.role === 'regional') return actor.regionId
+  if (!regionId) fail('Регион не найден', 404)
+  return regionId
+}
+
+export async function listCatalog(actor, regionId) {
+  const scope = regionScope(actor, regionId)
+  await mustRegion(scope)
+  const districts = await db.all(
+    'SELECT id, name, name_kk FROM districts WHERE region_id = ? ORDER BY sort_order, name',
+    scope,
+  )
+  const schools = await db.all(
+    'SELECT id, district_id, name, name_kk, grades_1_4, grades_5_9, grades_10_11, students FROM organizations WHERE region_id = ?',
+    scope,
+  )
+  return {
+    districts: districts.map((row) => ({ id: row.id, name: row.name, nameKk: row.name_kk || '' })),
+    schools: schools
+      .map((row) => ({
+        id: row.id,
+        districtId: row.district_id || null,
+        name: row.name,
+        nameKk: row.name_kk || '',
+        groups: mapGroups(row),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
+  }
+}
+
+export async function createDistrict(actor, input) {
+  const regionId = regionScope(actor, input?.regionId)
+  await mustRegion(regionId)
+  const name = cleanLabel(input?.name, 2, 80, 'Название района')
+  const nameKk = optionalLabel(input?.nameKk, 80, 'Название района')
+  const rows = await db.all('SELECT id, name, name_kk FROM districts WHERE region_id = ?', regionId)
+  if (rows.some((row) => sameText(row.name, name) || (nameKk && row.name_kk && sameText(row.name_kk, nameKk)))) {
+    fail('Такой район уже есть', 409)
+  }
+  const orderRow = await db.get('SELECT COALESCE(MAX(sort_order), 0) AS n FROM districts WHERE region_id = ?', regionId)
+  const id = crypto.randomUUID()
+  await db.run(
+    'INSERT INTO districts (id, region_id, name, name_kk, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    id,
+    regionId,
+    name,
+    nameKk,
+    Number(orderRow?.n || 0) + 1,
+    new Date().toISOString(),
+  )
+  return { id, name, nameKk }
+}
+
+export async function deleteDistrict(actor, id) {
+  assertRole(actor, 'super', 'regional')
+  const row = await db.get('SELECT id, region_id FROM districts WHERE id = ?', id)
+  if (!row) fail('Район не найден', 404)
+  if (actor.role === 'regional' && row.region_id !== actor.regionId) fail('Район не найден', 404)
+  const schools = await count('SELECT COUNT(*) AS n FROM organizations WHERE district_id = ?', id)
+  if (schools) fail('Сначала удалите школы этого района')
+  await db.run('DELETE FROM districts WHERE id = ?', id)
 }
 
 async function orgInRegion(id, regionId) {
@@ -513,18 +556,19 @@ async function assertGroupsFree(orgId, groups) {
 }
 
 export async function createOrganization(actor, input) {
-  assertRole(actor, 'regional')
+  const regionId = regionScope(actor, input?.regionId)
+  await mustRegion(regionId)
   const name = cleanLabel(input?.name, 2, 120, 'Название организации')
   const nameKk = optionalLabel(input?.nameKk, 120, 'Название организации')
   const groups = readGroups(input)
-  const districtId = await districtInRegion(input?.districtId, actor.regionId)
-  await assertUniqueOrg(actor.regionId, name, nameKk)
+  const districtId = await districtInRegion(input?.districtId, regionId)
+  await assertUniqueOrg(regionId, name, nameKk)
   const id = crypto.randomUUID()
   await db.run(
     `INSERT INTO organizations (id, region_id, district_id, name, name_kk, grades_1_4, grades_5_9, grades_10_11, students, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
-    actor.regionId,
+    regionId,
     districtId,
     name,
     nameKk,
@@ -535,13 +579,14 @@ export async function createOrganization(actor, input) {
 }
 
 export async function updateOrganization(actor, id, input) {
-  assertRole(actor, 'regional')
-  await orgInRegion(id, actor.regionId)
+  assertRole(actor, 'regional', 'super')
+  const current = await mustOrg(id)
+  if (actor.role === 'regional' && current.regionId !== actor.regionId) fail('Организация не найдена', 404)
   const name = cleanLabel(input?.name, 2, 120, 'Название организации')
   const nameKk = optionalLabel(input?.nameKk, 120, 'Название организации')
   const groups = readGroups(input)
-  const districtId = await districtInRegion(input?.districtId, actor.regionId)
-  await assertUniqueOrg(actor.regionId, name, nameKk, id)
+  const districtId = await districtInRegion(input?.districtId, current.regionId)
+  await assertUniqueOrg(current.regionId, name, nameKk, id)
   await assertGroupsFree(id, groups)
   await db.run(
     `UPDATE organizations SET district_id = ?, name = ?, name_kk = ?, grades_1_4 = ?, grades_5_9 = ?, grades_10_11 = ?, students = ? WHERE id = ?`,
@@ -555,8 +600,9 @@ export async function updateOrganization(actor, id, input) {
 }
 
 export async function deleteOrganization(actor, id) {
-  assertRole(actor, 'regional')
-  await orgInRegion(id, actor.regionId)
+  assertRole(actor, 'regional', 'super')
+  const current = await mustOrg(id)
+  if (actor.role === 'regional' && current.regionId !== actor.regionId) fail('Организация не найдена', 404)
   await db.tx(async (tx) => {
     await tx.run(
       `DELETE FROM lesson_attempts WHERE user_id IN (

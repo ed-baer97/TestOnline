@@ -461,7 +461,16 @@ test('регион видит своих, организация собирае�
   }
 
   await admin.deleteOrganization(regional, school.id)
-  assert.deepEqual(await admin.listOrganizations(regional), [])
+  const left = await admin.listOrganizations(regional)
+  assert.equal(left.some((item) => item.id === school.id), false)
+  assert.ok(left.some((item) => item.name === 'Бейнеуская гимназия'))
+  assert.equal(left.some((item) => item.nameKk === 'Бейнеу гимназиясы'), true)
+  const extraDistrict = await admin.createDistrict(regional, { name: 'Тестовый округ', nameKk: 'Сынақ округі' })
+  await admin.deleteDistrict(regional, extraDistrict.id)
+  await assert.rejects(
+    () => admin.deleteDistrict(regional, districts[0].id),
+    (error) => error.message.includes('школы этого района'),
+  )
   assert.deepEqual(await admin.listOrgAdmins(regional), [])
   const people = await db.get('SELECT COUNT(*) AS n FROM users WHERE organization_id = ?', school.id)
   const classesLeft = await db.get('SELECT COUNT(*) AS n FROM classes WHERE organization_id = ?', school.id)

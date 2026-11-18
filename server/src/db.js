@@ -98,6 +98,10 @@ async function openDatabase() {
       created_at TEXT NOT NULL
     )`,
     'CREATE INDEX IF NOT EXISTS districts_region ON districts (region_id)',
+    `CREATE TABLE IF NOT EXISTS app_seeds (
+      key TEXT PRIMARY KEY,
+      applied_at TEXT NOT NULL
+    )`,
     `CREATE TABLE IF NOT EXISTS tracks (
       id TEXT PRIMARY KEY,
       organization_id TEXT NOT NULL,

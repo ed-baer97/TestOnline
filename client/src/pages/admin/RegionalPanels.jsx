@@ -5,6 +5,7 @@ import { EMPTY_GROUPS, groupLabels } from '../../bands.js'
 import { formatNumber } from '../../format.js'
 import { pick, useI18n } from '../../i18n.jsx'
 import { Modal, SearchBox } from '../../kit.jsx'
+import { DistrictManager } from './Directory.jsx'
 import { GroupChecks, Notice } from './ui.jsx'
 
 const ORG_PAGE = 50
@@ -137,6 +138,13 @@ export function Organizations() {
         <button className="primary" type="button" onClick={() => { setError(''); setNotice(''); setAdding(true) }}>+ {t('Добавить')}</button>
       </div>
       <Notice error={adding ? '' : error} notice={notice} />
+      {organizations && (
+        <DistrictManager
+          districts={districts}
+          onChanged={load}
+          onError={setError}
+        />
+      )}
       <Modal open={adding} title={t('Создать организацию')} onClose={() => setAdding(false)}>
         <form className="stack" onSubmit={create}>
           <Notice error={error} />
