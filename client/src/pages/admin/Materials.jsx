@@ -238,7 +238,7 @@ export function MaterialList() {
             <MaterialTabs />
           </div>
         </div>
-        <button className="primary" type="button" onClick={() => setAdding(true)}>+ {t('Раздел')}</button>
+        <button className="primary" type="button" onClick={() => setAdding(true)}>+ {t('Новый раздел')}</button>
       </div>
       {error && <p className="form-error">{t(error)}</p>}
       {lessons === null && !error && <p className="muted">{t('Загрузка…')}</p>}
@@ -248,7 +248,10 @@ export function MaterialList() {
             <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Название раздела')} autoFocus />
             <input value={nameKk} onChange={(event) => setNameKk(event.target.value)} placeholder="Бөлім атауы" />
           </div>
-          <GroupChecks groups={groups} onChange={setGroups} />
+          <div className="stack">
+            <p className="muted">{t('Показывать в блоках')}</p>
+            <GroupChecks groups={groups} onChange={setGroups} />
+          </div>
           <div className="row-actions">
             <button className="primary" type="submit">{t('Создать раздел')}</button>
             <button className="ghost" type="button" onClick={() => setAdding(false)}>{t('Закрыть')}</button>
