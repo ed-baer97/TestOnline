@@ -303,13 +303,14 @@ function parseList(value) {
   }
 }
 
-function summary(row, best) {
+function summary(row, best, sectionByBand = {}) {
   return {
     id: row.id,
     title: row.title,
     titleKk: row.title_kk || '',
     format: lessonFormat(row),
     groups: mapGroups(row),
+    sectionByBand,
     slideCount: parseList(row.slides).length,
     slideCountKk: parseList(row.slides_kk).length,
     questionCount: parseList(row.questions).length,
@@ -359,16 +360,226 @@ async function bestAttempts(userId) {
   return best
 }
 
+const DEFAULT_LESSON_SECTIONS = [
+  ['grades_1_4', 1],
+  ['grades_5_9', 2],
+  ['grades_10_11', 3],
+  ['students', 4],
+]
+
+function sameText(left, right) {
+  return left.localeCompare(right, 'ru', { sensitivity: 'accent' }) === 0
+}
+
+async function sectionMap() {
+  const rows = await db.all(
+    `SELECT p.lesson_id, s.id, s.band, s.name, s.name_kk, s.sort_order
+     FROM lesson_section_lessons p
+     JOIN lesson_sections s ON s.id = p.section_id`,
+  )
+  const map = new Map()
+  for (const row of rows) {
+    if (!map.has(row.lesson_id)) map.set(row.lesson_id, {})
+    map.get(row.lesson_id)[row.band] = {
+      id: row.id,
+      name: row.name,
+      nameKk: row.name_kk || '',
+      sortOrder: Number(row.sort_order),
+    }
+  }
+  return map
+}
+
+async function sectionsOf(lessonId) {
+  const map = await sectionMap()
+  return map.get(lessonId) || {}
+}
+
+export async function ensureLessonSections() {
+  await db.tx(async (tx) => {
+    const done = await tx.get('SELECT key FROM app_seeds WHERE key = ?', 'lesson-sections-v1')
+    if (done) return
+    const now = new Date().toISOString()
+    for (const [band, order] of DEFAULT_LESSON_SECTIONS) {
+      let section = await tx.get('SELECT id FROM lesson_sections WHERE band = ? AND lower(name) = lower(?)', band, 'Уроки')
+      if (!section) {
+        const id = crypto.randomUUID()
+        await tx.run(
+          'INSERT INTO lesson_sections (id, band, name, name_kk, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+          id,
+          band,
+          'Уроки',
+          'Сабақтар',
+          order,
+          now,
+        )
+        section = { id }
+      }
+      const lessons = await tx.all(`SELECT id FROM lessons WHERE ${band} = 1`)
+      for (const lesson of lessons) {
+        const placed = await tx.get(
+          `SELECT p.section_id FROM lesson_section_lessons p
+           JOIN lesson_sections s ON s.id = p.section_id
+           WHERE p.lesson_id = ? AND s.band = ?`,
+          lesson.id,
+          band,
+        )
+        if (placed) continue
+        await tx.run(
+          'INSERT INTO lesson_section_lessons (section_id, lesson_id, sort_order) VALUES (?, ?, 0)',
+          section.id,
+          lesson.id,
+        )
+      }
+    }
+    await tx.run('INSERT INTO app_seeds (key, applied_at) VALUES (?, ?)', 'lesson-sections-v1', now)
+  })
+}
+
+function mapSection(row) {
+  return {
+    id: row.id,
+    band: row.band,
+    name: row.name,
+    nameKk: row.name_kk || '',
+    sortOrder: Number(row.sort_order),
+  }
+}
+
+export async function listLessonSections(actor) {
+  assertRole(actor, 'super')
+  const rows = await db.all('SELECT id, band, name, name_kk, sort_order FROM lesson_sections ORDER BY sort_order, name')
+  return rows.map(mapSection)
+}
+
+export async function createLessonSection(actor, input) {
+  assertRole(actor, 'super')
+  const band = input?.band
+  if (!GROUP_KEYS.includes(band)) fail('Неизвестная группа')
+  const name = cleanLabel(input?.name, 2, 80, 'Название раздела')
+  const nameKk = optionalLabel(input?.nameKk, 80, 'Название раздела')
+  const rows = await db.all('SELECT id, name, name_kk FROM lesson_sections WHERE band = ?', band)
+  if (rows.some((row) => sameText(row.name, name) || (nameKk && row.name_kk && sameText(row.name_kk, nameKk)))) {
+    fail('Такой раздел уже есть', 409)
+  }
+  const orderRow = await db.get('SELECT COALESCE(MAX(sort_order), 0) AS n FROM lesson_sections WHERE band = ?', band)
+  const id = crypto.randomUUID()
+  await db.run(
+    'INSERT INTO lesson_sections (id, band, name, name_kk, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    id,
+    band,
+    name,
+    nameKk,
+    Number(orderRow?.n || 0) + 1,
+    new Date().toISOString(),
+  )
+  return mapSection(await db.get('SELECT id, band, name, name_kk, sort_order FROM lesson_sections WHERE id = ?', id))
+}
+
+export async function updateLessonSection(actor, id, input) {
+  assertRole(actor, 'super')
+  const current = await db.get('SELECT id, band FROM lesson_sections WHERE id = ?', id)
+  if (!current) fail('Раздел не найден', 404)
+  const name = cleanLabel(input?.name, 2, 80, 'Название раздела')
+  const nameKk = optionalLabel(input?.nameKk, 80, 'Название раздела')
+  const rows = await db.all('SELECT id, name, name_kk FROM lesson_sections WHERE band = ?', current.band)
+  if (rows.some((row) => row.id !== id && (sameText(row.name, name) || (nameKk && row.name_kk && sameText(row.name_kk, nameKk))))) {
+    fail('Такой раздел уже есть', 409)
+  }
+  await db.run('UPDATE lesson_sections SET name = ?, name_kk = ? WHERE id = ?', name, nameKk, id)
+  return mapSection(await db.get('SELECT id, band, name, name_kk, sort_order FROM lesson_sections WHERE id = ?', id))
+}
+
+export async function deleteLessonSection(actor, id) {
+  assertRole(actor, 'super')
+  const current = await db.get('SELECT id FROM lesson_sections WHERE id = ?', id)
+  if (!current) fail('Раздел не найден', 404)
+  await db.tx(async (tx) => {
+    await tx.run('DELETE FROM lesson_section_lessons WHERE section_id = ?', id)
+    await tx.run('DELETE FROM lesson_sections WHERE id = ?', id)
+  })
+}
+
+export async function assignLessonSection(actor, lessonId, sectionId) {
+  assertRole(actor, 'super')
+  const section = await db.get('SELECT id, band FROM lesson_sections WHERE id = ?', sectionId)
+  if (!section || !GROUP_KEYS.includes(section.band)) fail('Раздел не найден', 404)
+  const lesson = await mustLesson(lessonId)
+  if (!lesson[section.band]) fail('Урок не входит в эту группу')
+  await db.tx(async (tx) => {
+    await tx.run(
+      `DELETE FROM lesson_section_lessons
+       WHERE lesson_id = ? AND section_id IN (SELECT id FROM lesson_sections WHERE band = ?)`,
+      lessonId,
+      section.band,
+    )
+    await tx.run(
+      'INSERT INTO lesson_section_lessons (section_id, lesson_id, sort_order) VALUES (?, ?, 0)',
+      section.id,
+      lessonId,
+    )
+  })
+  return { lessonId, sectionId, band: section.band }
+}
+
+async function syncPlacements(lessonId, groups, sectionByBand) {
+  const chosen = sectionByBand && typeof sectionByBand === 'object' ? sectionByBand : {}
+  for (const band of GROUP_KEYS) {
+    if (!groups[band]) {
+      await db.run(
+        `DELETE FROM lesson_section_lessons
+         WHERE lesson_id = ? AND section_id IN (SELECT id FROM lesson_sections WHERE band = ?)`,
+        lessonId,
+        band,
+      )
+      continue
+    }
+    const wanted = typeof chosen[band] === 'string' ? chosen[band] : ''
+    if (wanted) {
+      const section = await db.get('SELECT id FROM lesson_sections WHERE id = ? AND band = ?', wanted, band)
+      if (!section) fail('Раздел не найден', 404)
+      await db.run(
+        `DELETE FROM lesson_section_lessons
+         WHERE lesson_id = ? AND section_id IN (SELECT id FROM lesson_sections WHERE band = ?)`,
+        lessonId,
+        band,
+      )
+      await db.run(
+        'INSERT INTO lesson_section_lessons (section_id, lesson_id, sort_order) VALUES (?, ?, 0)',
+        section.id,
+        lessonId,
+      )
+      continue
+    }
+    const placed = await db.get(
+      `SELECT p.section_id FROM lesson_section_lessons p
+       JOIN lesson_sections s ON s.id = p.section_id
+       WHERE p.lesson_id = ? AND s.band = ?`,
+      lessonId,
+      band,
+    )
+    if (placed) continue
+    const first = await db.get('SELECT id FROM lesson_sections WHERE band = ? ORDER BY sort_order, name LIMIT 1', band)
+    if (!first) continue
+    await db.run(
+      'INSERT INTO lesson_section_lessons (section_id, lesson_id, sort_order) VALUES (?, ?, 0)',
+      first.id,
+      lessonId,
+    )
+  }
+}
+
 export async function listLessons(actor) {
   assertRole(actor, 'super', 'learner')
+  const placed = await sectionMap()
   if (actor.role === 'super') {
     const rows = await db.all('SELECT * FROM lessons ORDER BY created_at DESC')
-    return rows.map((row) => summary(row, null))
+    return rows.map((row) => summary(row, null, placed.get(row.id) || {}))
   }
   const band = await learnerBand(actor)
   const rows = await db.all(`SELECT * FROM lessons WHERE ${band} = 1 ORDER BY created_at DESC`)
   const best = await bestAttempts(actor.id)
-  return rows.map((row) => summary(row, best.get(row.id)))
+  return rows.map((row) => summary(row, best.get(row.id), placed.get(row.id) || {}))
 }
 
 function slideFileId(slide) {
@@ -468,7 +679,7 @@ export async function getLesson(actor, id, lang = 'ru') {
     attempts = { ...attemptState(rows, attemptLimit()), last: presentAttempt(last, lastQuestions) }
   }
   const lesson = {
-    ...summary(row, best),
+    ...summary(row, best, await sectionsOf(id)),
     title: pack.title,
     slides: format === 'video' ? [] : presentSlides(pack.slides),
     video: format === 'video' ? videoOf(row, pack.lang) : null,
@@ -712,6 +923,7 @@ async function saveLesson(id, input, seedKey) {
       id,
     )
   }
+  await syncPlacements(id, groups, input?.sectionByBand)
   return getLesson({ role: 'super' }, id)
 }
 
@@ -871,6 +1083,7 @@ export async function deleteLesson(actor, id) {
   await removeVideoFile(id)
   await dropLessonFiles(id)
   await db.tx(async (tx) => {
+    await tx.run('DELETE FROM lesson_section_lessons WHERE lesson_id = ?', id)
     await tx.run('DELETE FROM lesson_attempts WHERE lesson_id = ?', id)
     await tx.run('DELETE FROM lessons WHERE id = ?', id)
   })

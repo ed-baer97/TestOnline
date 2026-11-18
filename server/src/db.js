@@ -135,6 +135,22 @@ async function openDatabase() {
       updated_at TEXT NOT NULL
     )`,
     'CREATE UNIQUE INDEX IF NOT EXISTS lessons_seed_key ON lessons (seed_key) WHERE seed_key IS NOT NULL',
+    `CREATE TABLE IF NOT EXISTS lesson_sections (
+      id TEXT PRIMARY KEY,
+      band TEXT NOT NULL,
+      name TEXT NOT NULL,
+      name_kk TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    )`,
+    'CREATE INDEX IF NOT EXISTS lesson_sections_band ON lesson_sections (band)',
+    `CREATE TABLE IF NOT EXISTS lesson_section_lessons (
+      section_id TEXT NOT NULL,
+      lesson_id TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (section_id, lesson_id)
+    )`,
+    'CREATE INDEX IF NOT EXISTS lesson_section_lessons_lesson ON lesson_section_lessons (lesson_id)',
     `CREATE TABLE IF NOT EXISTS lesson_files (
       id TEXT PRIMARY KEY,
       lesson_id TEXT NOT NULL,

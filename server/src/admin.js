@@ -101,8 +101,9 @@ export function bootAdmin() {
     boot = (async () => {
       const user = await ensureSuperAdmin()
       await ensureMangystauCatalog()
-      const { ensureDemoLesson, migrateLessonFiles } = await import('./lessons.js')
+      const { ensureDemoLesson, ensureLessonSections, migrateLessonFiles } = await import('./lessons.js')
       await ensureDemoLesson()
+      await ensureLessonSections()
       const moved = await migrateLessonFiles()
       if (moved) console.log(`Картинки слайдов перенесены на диск: ${moved}`)
       return user

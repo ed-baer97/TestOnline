@@ -53,7 +53,7 @@ import {
   updateTrack,
 } from './admin.js'
 import { authenticate, createQuiz, deleteQuiz, getQuiz, listQuizzes, listResults, quizStats, statsOverview, updateQuiz } from './db.js'
-import { checkLesson, createLesson, deleteLesson, getLesson, importPptx, listLessons, openLessonFile, openLessonMedia, saveLessonVideo, updateLesson } from './lessons.js'
+import { assignLessonSection, checkLesson, createLesson, createLessonSection, deleteLesson, deleteLessonSection, getLesson, importPptx, listLessonSections, listLessons, openLessonFile, openLessonMedia, saveLessonVideo, updateLesson, updateLessonSection } from './lessons.js'
 import { normalizeQuiz } from './domain.js'
 import { questionsFromXlsx, templateWorkbook } from './excel.js'
 import {
@@ -484,6 +484,22 @@ export function createApp() {
   }))
   app.post('/api/admin/lessons/pptx', guard, express.raw({ type: () => true, limit: '30mb' }), route(async (req, res) => {
     res.json(await importPptx(req.user, req.body, req.query.lang || req.get('x-lang')))
+  }))
+  app.get('/api/admin/lesson-sections', guard, route(async (req, res) => {
+    res.json({ sections: await listLessonSections(req.user) })
+  }))
+  app.post('/api/admin/lesson-sections', guard, route(async (req, res) => {
+    res.status(201).json(await createLessonSection(req.user, req.body || {}))
+  }))
+  app.patch('/api/admin/lesson-sections/:id', guard, route(async (req, res) => {
+    res.json(await updateLessonSection(req.user, req.params.id, req.body || {}))
+  }))
+  app.delete('/api/admin/lesson-sections/:id', guard, route(async (req, res) => {
+    await deleteLessonSection(req.user, req.params.id)
+    res.json({ ok: true })
+  }))
+  app.patch('/api/admin/lessons/:id/section', guard, route(async (req, res) => {
+    res.json(await assignLessonSection(req.user, req.params.id, req.body?.sectionId))
   }))
   app.post('/api/admin/lessons', guard, route(async (req, res) => {
     res.status(201).json(await createLesson(req.user, req.body || {}))

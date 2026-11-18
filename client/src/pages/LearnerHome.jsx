@@ -6,6 +6,59 @@ import { Brand } from '../Brand.jsx'
 import { EnvControls, TopbarSlot, TopbarSlots } from '../topbar.jsx'
 import LessonView from './LessonView.jsx'
 
+function lessonBlocks(lessons, band, lang) {
+  const buckets = new Map()
+  const loose = []
+  for (const lesson of lessons || []) {
+    const section = lesson.sectionByBand?.[band]
+    if (!section) {
+      loose.push(lesson)
+      continue
+    }
+    if (!buckets.has(section.id)) buckets.set(section.id, { section, lessons: [] })
+    buckets.get(section.id).lessons.push(lesson)
+  }
+  const blocks = [...buckets.values()]
+    .sort((left, right) => left.section.sortOrder - right.section.sortOrder)
+    .map((block) => ({
+      key: block.section.id,
+      title: pick(lang, block.section.name, block.section.nameKk),
+      lessons: block.lessons,
+    }))
+  if (loose.length) blocks.push({ key: 'loose', title: '', lessons: loose })
+  return blocks
+}
+
+function LessonSections({ lessons, band }) {
+  const { lang, t } = useI18n()
+  const blocks = lessonBlocks(lessons, band, lang)
+  return blocks.map((block) => (
+    <section className="stack" key={block.key}>
+      {(block.key === 'loose' ? blocks.length > 1 : Boolean(block.title)) && (
+        <h2>{block.key === 'loose' ? t('Без раздела') : block.title}</h2>
+      )}
+      {block.lessons.map((lesson) => {
+        const done = Boolean(lesson.best)
+        return (
+          <Link className={`lesson-card ${done ? 'done' : ''}`} key={lesson.id} to={`/learn/lessons/${lesson.id}`}>
+            <div>
+              <h2>{pick(lang, lesson.title, lesson.titleKk)}</h2>
+              <p className="muted">
+                {lesson.format === 'video'
+                  ? t('Видео · {count} вопр.', { count: lessonCounts(lesson, lang).questions })
+                  : t('Презентация · {slides} сл. · {count} вопр.', { slides: lessonCounts(lesson, lang).slides, count: lessonCounts(lesson, lang).questions })}
+              </p>
+            </div>
+            <span className={done ? 'score-pill' : 'ghost'}>
+              {done ? `✓ ${t('{score} из {total}', { score: lesson.best.score, total: lesson.best.total })}` : t('Открыть')}
+            </span>
+          </Link>
+        )
+      })}
+    </section>
+  ))
+}
+
 function lessonCounts(lesson, lang) {
   const kk = lang === 'kk' && (lesson.slideCountKk || lesson.questionCountKk || lesson.hasVideoKk)
   return {
@@ -113,24 +166,7 @@ export default function LearnerHome({ me: initialMe, onLogout }) {
               </Link>
             ))}
             {lessons?.length === 0 && <p className="muted">{t('Для вашего класса пока нет уроков.')}</p>}
-            {lessons?.map((lesson) => {
-              const done = Boolean(lesson.best)
-              return (
-                <Link className={`lesson-card ${done ? 'done' : ''}`} key={lesson.id} to={`/learn/lessons/${lesson.id}`}>
-                  <div>
-                    <h2>{pick(lang, lesson.title, lesson.titleKk)}</h2>
-                    <p className="muted">
-                      {lesson.format === 'video'
-                        ? t('Видео · {count} вопр.', { count: lessonCounts(lesson, lang).questions })
-                        : t('Презентация · {slides} сл. · {count} вопр.', { slides: lessonCounts(lesson, lang).slides, count: lessonCounts(lesson, lang).questions })}
-                    </p>
-                  </div>
-                  <span className={done ? 'score-pill' : 'ghost'}>
-                    {done ? `✓ ${t('{score} из {total}', { score: lesson.best.score, total: lesson.best.total })}` : t('Открыть')}
-                  </span>
-                </Link>
-              )
-            })}
+            <LessonSections lessons={lessons} band={me.band} />
           </div>
         </section>
       )}

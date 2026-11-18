@@ -85,13 +85,173 @@ function MaterialTabs() {
   )
 }
 
-export function MaterialList() {
+function lessonMeta(lesson, lang, t) {
+  const questions = lang === 'kk' && lesson.questionCountKk ? lesson.questionCountKk : lesson.questionCount
+  if (lesson.format === 'video') return t('Видео · {count} вопр.', { count: questions })
+  const slides = lang === 'kk' && lesson.slideCountKk ? lesson.slideCountKk : lesson.slideCount
+  return t('Презентация · {slides} сл. · {count} вопр.', { slides, count: questions })
+}
+
+function LessonRow({ lesson, sections, onMove }) {
   const { lang, t } = useI18n()
+  const current = lesson.sectionByBand?.[sections[0]?.band]?.id || ''
+  return (
+    <article className="lesson-card">
+      <div>
+        <h2>{pick(lang, lesson.title, lesson.titleKk)}</h2>
+        <p className="muted">{lessonMeta(lesson, lang, t)}</p>
+      </div>
+      <div className="row-actions">
+        {sections.length > 1 && (
+          <select aria-label={t('Раздел')} value={current} onChange={(event) => onMove(lesson.id, event.target.value)}>
+            {!current && <option value="">{t('Без раздела')}</option>}
+            {sections.map((section) => <option key={section.id} value={section.id}>{pick(lang, section.name, section.nameKk)}</option>)}
+          </select>
+        )}
+        <Link className="primary" to={`/admin/materials/${lesson.id}/play`}>{t('Открыть')}</Link>
+        <Link className="ghost" to={`/admin/materials/${lesson.id}`}>{t('Изменить')}</Link>
+      </div>
+    </article>
+  )
+}
+
+function BandLessons({ band, lessons, sections, onChanged, onError }) {
+  const { lang, t } = useI18n()
+  const [adding, setAdding] = useState(false)
+  const [name, setName] = useState('')
+  const [nameKk, setNameKk] = useState('')
+  const [editing, setEditing] = useState(null)
+  const [draft, setDraft] = useState({ name: '', nameKk: '' })
+  const items = lessons.filter((lesson) => lesson.groups?.[band.id])
+  const bandSections = sections.filter((section) => section.band === band.id)
+  const placed = new Set()
+  const groups = bandSections.map((section) => {
+    const rows = items.filter((lesson) => lesson.sectionByBand?.[band.id]?.id === section.id)
+    rows.forEach((lesson) => placed.add(lesson.id))
+    return { section, lessons: rows }
+  })
+  const loose = items.filter((lesson) => !placed.has(lesson.id))
+
+  async function create(event) {
+    event.preventDefault()
+    onError('')
+    try {
+      await api.createLessonSection({ band: band.id, name, nameKk })
+      setName('')
+      setNameKk('')
+      setAdding(false)
+      await onChanged()
+    } catch (err) {
+      onError(err.message)
+    }
+  }
+
+  async function rename(event) {
+    event.preventDefault()
+    onError('')
+    try {
+      await api.updateLessonSection(editing, draft)
+      setEditing(null)
+      await onChanged()
+    } catch (err) {
+      onError(err.message)
+    }
+  }
+
+  async function remove(section) {
+    if (!window.confirm(t('Удалить раздел «{name}»? Уроки останутся в этой группе.', { name: pick(lang, section.name, section.nameKk) }))) return
+    onError('')
+    try {
+      await api.deleteLessonSection(section.id)
+      await onChanged()
+    } catch (err) {
+      onError(err.message)
+    }
+  }
+
+  async function move(lessonId, sectionId) {
+    if (!sectionId) return
+    onError('')
+    try {
+      await api.assignLessonSection(lessonId, sectionId)
+      await onChanged()
+    } catch (err) {
+      onError(err.message)
+    }
+  }
+
+  return (
+    <details open>
+      <summary>
+        {t(band.label)}
+        <span className="muted"> {items.length}</span>
+      </summary>
+      <div className="stack">
+        {groups.map((group) => (
+          <details key={group.section.id} open>
+            <summary>
+              {pick(lang, group.section.name, group.section.nameKk)}
+              <span className="muted"> {group.lessons.length}</span>
+            </summary>
+            <div className="stack">
+              {editing === group.section.id ? (
+                <form className="add-line" onSubmit={rename}>
+                  <input aria-label={t('Название, русский')} value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
+                  <input aria-label={t('Название, қазақша')} value={draft.nameKk} onChange={(event) => setDraft((current) => ({ ...current, nameKk: event.target.value }))} />
+                  <button className="ghost" type="submit">{t('Сохранить')}</button>
+                </form>
+              ) : (
+                <div className="row-actions">
+                  <button className="ghost" type="button" onClick={() => { setEditing(group.section.id); setDraft({ name: group.section.name, nameKk: group.section.nameKk || '' }) }}>{t('Изменить')}</button>
+                  <button className="ghost danger-btn" type="button" onClick={() => remove(group.section)}>{t('Удалить')}</button>
+                </div>
+              )}
+              {group.lessons.length === 0 && <p className="muted">{t('Нет уроков')}</p>}
+              {group.lessons.map((lesson) => (
+                <LessonRow key={lesson.id} lesson={lesson} sections={bandSections} onMove={move} />
+              ))}
+            </div>
+          </details>
+        ))}
+        {loose.length > 0 && (
+          <div className="stack">
+            {bandSections.length > 0 && <h3>{t('Без раздела')}</h3>}
+            {loose.map((lesson) => (
+              <LessonRow key={lesson.id} lesson={lesson} sections={bandSections} onMove={move} />
+            ))}
+          </div>
+        )}
+        {items.length === 0 && bandSections.length === 0 && <p className="muted">{t('Нет уроков')}</p>}
+        {adding ? (
+          <form className="add-line" onSubmit={create}>
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Название раздела')} autoFocus />
+            <input value={nameKk} onChange={(event) => setNameKk(event.target.value)} placeholder="Бөлім атауы" />
+            <button className="primary" type="submit">{t('Создать раздел')}</button>
+            <button className="ghost" type="button" onClick={() => setAdding(false)}>{t('Закрыть')}</button>
+          </form>
+        ) : (
+          <button className="ghost add" type="button" onClick={() => setAdding(true)}>+ {t('Добавить раздел')}</button>
+        )}
+      </div>
+    </details>
+  )
+}
+
+export function MaterialList() {
+  const { t } = useI18n()
   const [lessons, setLessons] = useState(null)
+  const [sections, setSections] = useState([])
   const [error, setError] = useState('')
 
+  function load() {
+    return Promise.all([api.lessons(), api.lessonSections()]).then(([lessonData, sectionData]) => {
+      setLessons(lessonData.lessons)
+      setSections(sectionData.sections)
+    })
+  }
+
   useEffect(() => {
-    api.lessons().then((data) => setLessons(data.lessons)).catch((err) => setError(err.message))
+    load().catch((err) => setError(err.message))
   }, [])
 
   return (
@@ -109,32 +269,9 @@ export function MaterialList() {
       {lessons === null && !error && <p className="muted">{t('Загрузка…')}</p>}
       {lessons && (
         <div className="accordion">
-          {BANDS.map((band) => {
-            const items = lessons.filter((lesson) => lesson.groups?.[band.id])
-            return (
-              <details key={band.id} open>
-                <summary>
-                  {t(band.label)}
-                  <span className="muted"> {items.length}</span>
-                </summary>
-                <div className="stack">
-                  {items.length === 0 && <p className="muted">{t('Нет уроков')}</p>}
-                  {items.map((lesson) => (
-                    <article className="lesson-card" key={lesson.id}>
-                      <div>
-                        <h2>{pick(lang, lesson.title, lesson.titleKk)}</h2>
-                        <p className="muted">{lesson.format === 'video' ? t('Видео · {count} вопр.', { count: lang === 'kk' && (lesson.questionCountKk || lesson.hasVideoKk) ? lesson.questionCountKk : lesson.questionCount }) : t('Презентация · {slides} сл. · {count} вопр.', { slides: lang === 'kk' && lesson.slideCountKk ? lesson.slideCountKk : lesson.slideCount, count: lang === 'kk' && lesson.questionCountKk ? lesson.questionCountKk : lesson.questionCount })}</p>
-                      </div>
-                      <div className="row-actions">
-                        <Link className="primary" to={`/admin/materials/${lesson.id}/play`}>{t('Открыть')}</Link>
-                        <Link className="ghost" to={`/admin/materials/${lesson.id}`}>{t('Изменить')}</Link>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </details>
-            )
-          })}
+          {BANDS.map((band) => (
+            <BandLessons key={band.id} band={band} lessons={lessons} sections={sections} onChanged={load} onError={setError} />
+          ))}
         </div>
       )}
     </section>
@@ -160,7 +297,7 @@ export function MaterialQuizzes() {
 }
 
 export function LessonEditor() {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const { id } = useParams()
   const isNew = !id
   const navigate = useNavigate()
@@ -168,6 +305,8 @@ export function LessonEditor() {
   const [titleKk, setTitleKk] = useState('')
   const [format, setFormat] = useState('slides')
   const [groups, setGroups] = useState({ ...EMPTY_GROUPS, grades_5_9: true })
+  const [sections, setSections] = useState([])
+  const [sectionByBand, setSectionByBand] = useState({})
   const [contentLang, setContentLang] = useState('ru')
   const [packs, setPacks] = useState(() => ({ ru: emptyPack(), kk: emptyPack() }))
   const savedId = useRef(id || null)
@@ -197,12 +336,19 @@ export function LessonEditor() {
   const setVideoUrl = (value) => setField('videoUrl', value)
 
   useEffect(() => {
+    api.lessonSections().then((data) => setSections(data.sections)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
     if (isNew) return undefined
     api.lesson(id).then((lesson) => {
       setTitle(lesson.title)
       setTitleKk(lesson.titleKk || '')
       setFormat(lesson.format === 'video' ? 'video' : 'slides')
       setGroups(lesson.groups)
+      const chosen = {}
+      for (const [band, section] of Object.entries(lesson.sectionByBand || {})) chosen[band] = section.id
+      setSectionByBand(chosen)
       setPacks({
         ru: packFrom(lesson.slides, lesson.questions, lesson.video, lesson.id, 'ru'),
         kk: packFrom(lesson.slidesKk, lesson.questionsKk, lesson.videoKk, lesson.id, 'kk'),
@@ -285,11 +431,20 @@ export function LessonEditor() {
       setError(format === 'video' ? 'Загрузите ролик на русском и казахском' : 'Заполните презентацию и тест на русском и казахском')
       return
     }
+    const placement = {}
+    for (const band of BANDS) {
+      if (!groups[band.id]) continue
+      const options = sections.filter((section) => section.band === band.id)
+      if (!options.length) continue
+      const current = sectionByBand[band.id]
+      placement[band.id] = options.some((section) => section.id === current) ? current : options[0].id
+    }
     const body = {
       title,
       titleKk,
       format,
       groups,
+      sectionByBand: placement,
       questions: packs.ru.questions,
       questionsKk: packs.kk.questions,
     }
@@ -375,6 +530,18 @@ export function LessonEditor() {
           <input value={titleKk} onChange={(event) => setTitleKk(event.target.value)} placeholder="Күн жүйесі" />
         </label>
         <GroupChecks groups={groups} onChange={setGroups} />
+        {BANDS.filter((band) => groups[band.id]).map((band) => {
+          const options = sections.filter((section) => section.band === band.id)
+          if (!options.length) return null
+          return (
+            <label key={band.id}>
+              {t(band.label)} · {t('Раздел')}
+              <select value={sectionByBand[band.id] || options[0].id} onChange={(event) => setSectionByBand((current) => ({ ...current, [band.id]: event.target.value }))}>
+                {options.map((section) => <option key={section.id} value={section.id}>{pick(lang, section.name, section.nameKk)}</option>)}
+              </select>
+            </label>
+          )
+        })}
       </div>
       <div className="list-tools">
         <SegmentButtons
