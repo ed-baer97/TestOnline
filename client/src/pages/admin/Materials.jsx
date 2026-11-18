@@ -1,5 +1,6 @@
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { groupLabels } from '../../lib/bands.js'
+import { useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { EMPTY_GROUPS, groupLabels } from '../../lib/bands.js'
 import { blankFrame, blankQuestion, useLessonEditor, useMaterialList } from '../../state/admin/materials.js'
 import { GroupChecks, Notice } from '../../components/admin/ui.jsx'
 
@@ -10,31 +11,128 @@ const TONES = [
   { id: 'earth', label: 'Земля' },
 ]
 
+function LessonRow({ lesson, sections, onMove }) {
+  return (
+    <article className="lesson-card">
+      <div>
+        <h2>{lesson.title}</h2>
+        <p className="muted">{lesson.format === 'video' ? `Видео · ${lesson.questionCount} вопр.` : `Презентация · ${lesson.slideCount} сл. · ${lesson.questionCount} вопр.`}</p>
+      </div>
+      <div className="row-actions">
+        <select value={lesson.section?.id || ''} onChange={(event) => event.target.value && onMove(lesson.id, event.target.value)}>
+          {!lesson.section && <option value="">В раздел…</option>}
+          {sections.map((section) => (
+            <option key={section.id} value={section.id}>{section.name}</option>
+          ))}
+        </select>
+        <Link className="primary" to={`/admin/materials/${lesson.id}/play`}>Открыть</Link>
+        <Link className="ghost" to={`/admin/materials/${lesson.id}`}>Изменить</Link>
+      </div>
+    </article>
+  )
+}
+
 export function MaterialList() {
-  const { lessons, error } = useMaterialList()
+  const { lessons, sections, error, createSection, saveSection, removeSection, moveLesson } = useMaterialList()
+  const [creating, setCreating] = useState(false)
+  const [name, setName] = useState('')
+  const [groups, setGroups] = useState({ ...EMPTY_GROUPS, grades_5_9: true })
+  const [formError, setFormError] = useState('')
+  const [drafts, setDrafts] = useState({})
+
+  function draftOf(section) {
+    return drafts[section.id] || { name: section.name, groups: section.groups }
+  }
+
+  function patchDraft(section, patch) {
+    setDrafts((current) => ({ ...current, [section.id]: { ...draftOf(section), ...patch } }))
+  }
+
+  async function submitSection(event) {
+    event.preventDefault()
+    setFormError('')
+    try {
+      await createSection({ name, groups })
+      setName('')
+      setGroups({ ...EMPTY_GROUPS, grades_5_9: true })
+      setCreating(false)
+    } catch (err) {
+      setFormError(err.message)
+    }
+  }
+
+  async function keepSection(section) {
+    setFormError('')
+    try {
+      await saveSection(section.id, draftOf(section))
+      setDrafts((current) => {
+        const next = { ...current }
+        delete next[section.id]
+        return next
+      })
+    } catch (err) {
+      setFormError(err.message)
+    }
+  }
+
+  function dropSection(section) {
+    if (!window.confirm(`Удалить раздел «${section.name}»? Уроки останутся без раздела.`)) return
+    setFormError('')
+    removeSection(section.id).catch((err) => setFormError(err.message))
+  }
+
+  const loose = lessons?.filter((lesson) => !lesson.section) || []
 
   return (
     <section className="stack">
       <div className="section-head">
         <h1>Материалы</h1>
-        <Link className="primary" to="/admin/materials/new">Новый урок</Link>
+        <button className="primary" type="button" onClick={() => setCreating((value) => !value)}>Новый раздел</button>
       </div>
       {error && <p className="form-error">{error}</p>}
+      {formError && <p className="form-error">{formError}</p>}
+      {creating && (
+        <form className="stack" onSubmit={submitSection}>
+          <label>
+            Название раздела
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Солнечная система" />
+          </label>
+          <p className="muted">Показывать в блоках</p>
+          <GroupChecks groups={groups} onChange={setGroups} />
+          <button className="primary" type="submit">Создать раздел</button>
+        </form>
+      )}
       {lessons === null && !error && <p className="muted">Загрузка…</p>}
       <div className="stack">
-        {lessons?.map((lesson) => (
-          <article className="lesson-card" key={lesson.id}>
-            <div>
-              <h2>{lesson.title}</h2>
-              <p className="muted">{groupLabels(lesson.groups)}</p>
-              <p className="muted">{lesson.format === 'video' ? `Видео · ${lesson.questionCount} вопр.` : `Презентация · ${lesson.slideCount} сл. · ${lesson.questionCount} вопр.`}</p>
-            </div>
-            <div className="row-actions">
-              <Link className="primary" to={`/admin/materials/${lesson.id}/play`}>Открыть</Link>
-              <Link className="ghost" to={`/admin/materials/${lesson.id}`}>Изменить</Link>
-            </div>
-          </article>
-        ))}
+        {sections.map((section) => {
+          const draft = draftOf(section)
+          const inside = lessons?.filter((lesson) => lesson.section?.id === section.id) || []
+          return (
+            <section className="stack" key={section.id}>
+              <div className="section-head">
+                <h2>{section.name}</h2>
+                <Link className="primary" to={`/admin/materials/new?section=${section.id}`}>+ Урок</Link>
+              </div>
+              <label>
+                Название
+                <input value={draft.name} onChange={(event) => patchDraft(section, { name: event.target.value })} />
+              </label>
+              <GroupChecks groups={draft.groups} onChange={(next) => patchDraft(section, { groups: next })} />
+              <p className="muted">{groupLabels(draft.groups) || 'Блоки не выбраны'}</p>
+              <div className="row-actions">
+                <button className="primary" type="button" onClick={() => keepSection(section)}>Сохранить раздел</button>
+                <button className="ghost" type="button" onClick={() => dropSection(section)}>Удалить раздел</button>
+              </div>
+              {inside.map((lesson) => <LessonRow lesson={lesson} sections={sections} onMove={moveLesson} key={lesson.id} />)}
+            </section>
+          )
+        })}
+        {loose.length > 0 && (
+          <section className="stack">
+            <h2>Без раздела</h2>
+            {loose.map((lesson) => <LessonRow lesson={lesson} sections={sections} onMove={moveLesson} key={lesson.id} />)}
+          </section>
+        )}
       </div>
     </section>
   )
@@ -43,10 +141,11 @@ export function MaterialList() {
 export function LessonEditor() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   const {
-    isNew, title, setTitle, format, setFormat, groups, setGroups, slides, setSlides, videoName, videoUrl,
+    isNew, title, setTitle, format, setFormat, sections, sectionId, setSectionId, slides, setSlides, videoName, videoUrl,
     questions, setQuestions, error, notice, ready, patchSlide, moveSlide, upload, pickVideo, save, remove,
-  } = useLessonEditor(id, navigate)
+  } = useLessonEditor(id, navigate, params.get('section') || '')
 
   function confirmRemove() {
     if (window.confirm(`Удалить урок «${title}»?`)) remove()
@@ -68,7 +167,16 @@ export function LessonEditor() {
         Название
         <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Солнечная система" />
       </label>
-      <GroupChecks groups={groups} onChange={setGroups} />
+      <label>
+        Раздел
+        <select value={sectionId} onChange={(event) => setSectionId(event.target.value)}>
+          <option value="">Выберите раздел</option>
+          {sections.map((section) => (
+            <option key={section.id} value={section.id}>{section.name}</option>
+          ))}
+        </select>
+      </label>
+      {sectionId && <p className="muted">{groupLabels(sections.find((section) => section.id === sectionId)?.groups)}</p>}
       <div className="tone-row">
         <button className={`ghost ${format === 'slides' ? 'on' : ''}`} type="button" onClick={() => setFormat('slides')}>Презентация</button>
         <button className={`ghost ${format === 'video' ? 'on' : ''}`} type="button" onClick={() => setFormat('video')}>Видео</button>

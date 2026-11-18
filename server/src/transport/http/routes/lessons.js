@@ -2,16 +2,21 @@ import fs from 'node:fs'
 import express from 'express'
 import { config } from '../../../infrastructure/config.js'
 import {
+  assignLessonSection,
   checkLesson,
   createLesson,
+  createLessonSection,
   deleteLesson,
+  deleteLessonSection,
   getLesson,
   importPptx,
+  listLessonSections,
   listLessons,
   openLessonFile,
   openLessonMedia,
   saveLessonVideo,
   updateLesson,
+  updateLessonSection,
 } from '../../../services/lessons/index.js'
 import { requireUser, route } from '../middleware.js'
 
@@ -98,5 +103,21 @@ export function registerLessonRoutes(app) {
   app.delete('/api/admin/lessons/:id', guard, route(async (req, res) => {
     await deleteLesson(req.user, req.params.id)
     res.json({ ok: true })
+  }))
+  app.get('/api/admin/lesson-sections', guard, route(async (req, res) => {
+    res.json({ sections: await listLessonSections(req.user) })
+  }))
+  app.post('/api/admin/lesson-sections', guard, route(async (req, res) => {
+    res.status(201).json(await createLessonSection(req.user, req.body || {}))
+  }))
+  app.patch('/api/admin/lesson-sections/:id', guard, route(async (req, res) => {
+    res.json(await updateLessonSection(req.user, req.params.id, req.body || {}))
+  }))
+  app.delete('/api/admin/lesson-sections/:id', guard, route(async (req, res) => {
+    await deleteLessonSection(req.user, req.params.id)
+    res.json({ ok: true })
+  }))
+  app.patch('/api/admin/lessons/:id/section', guard, route(async (req, res) => {
+    res.json(await assignLessonSection(req.user, req.params.id, req.body?.sectionId))
   }))
 }

@@ -24,4 +24,9 @@ export const lessonsApi = {
     })
   },
   deleteLesson: (id) => request(`/api/admin/lessons/${id}`, { method: 'DELETE' }),
+  lessonSections: () => request('/api/admin/lesson-sections'),
+  createLessonSection: (body) => request('/api/admin/lesson-sections', { method: 'POST', body: JSON.stringify(body) }),
+  updateLessonSection: (id, body) => request(`/api/admin/lesson-sections/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteLessonSection: (id) => request(`/api/admin/lesson-sections/${id}`, { method: 'DELETE' }),
+  assignLessonSection: (id, sectionId) => request(`/api/admin/lessons/${id}/section`, { method: 'PATCH', body: JSON.stringify({ sectionId }) }),
 }

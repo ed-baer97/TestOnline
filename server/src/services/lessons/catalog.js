@@ -19,13 +19,15 @@ import * as lessonsRepo from '../../repositories/lessons.js'
 import { attemptLimit, canSee, learnerBand, mustLesson } from './access.js'
 import { attemptsOf, presentAttempt } from './attempts.js'
 import { claimImportedFile, dropFiles, dropLessonFiles, fileUrl, removeVideoFile, storeFile } from './files.js'
+import { detachLesson, placeLesson, requireSection, sectionBrief, sectionBriefs } from './sections.js'
 
-function summary(row, best) {
+function summary(row, best, section = null) {
   return {
     id: row.id,
     title: row.title,
     format: lessonFormat(row),
     groups: groupsFromRow(row),
+    section,
     slideCount: JSON.parse(row.slides).length,
     questionCount: JSON.parse(row.questions).length,
     best: best ? { score: Number(best.score), total: Number(best.total) } : null,
@@ -41,14 +43,15 @@ async function bestAttempts(userId) {
 
 export async function listLessons(actor) {
   assertRole(actor, 'super', 'learner')
+  const sections = await sectionBriefs()
   if (actor.role === 'super') {
     const rows = await lessonsRepo.listAllLessons()
-    return rows.map((row) => summary(row, null))
+    return rows.map((row) => summary(row, null, sections.get(row.id) || null))
   }
   const band = await learnerBand(actor)
   const rows = await lessonsRepo.listLessonsForBand(band)
   const best = await bestAttempts(actor.id)
-  return rows.map((row) => summary(row, best.get(row.id)))
+  return rows.map((row) => summary(row, best.get(row.id), sections.get(row.id) || null))
 }
 
 function slideFileId(slide) {
@@ -79,7 +82,7 @@ export async function getLesson(actor, id) {
     attempts = { ...attemptState(rows, attemptLimit()), last: presentAttempt(rows[rows.length - 1], questions) }
   }
   return {
-    ...summary(row, best),
+    ...summary(row, best, await sectionBrief(id)),
     slides: format === 'video' ? [] : presentSlides(slides),
     video: format === 'video' && row.video_mime ? { name: row.video_name || 'video', mime: row.video_mime } : null,
     questions: presentQuestions(questions, actor.role === 'super'),
@@ -132,9 +135,16 @@ async function normalizeSlides(slides, lessonId) {
   return result
 }
 
+async function groupsForSave(input) {
+  const sectionId = typeof input?.sectionId === 'string' ? input.sectionId.trim() : ''
+  if (!sectionId) return { groups: readLessonGroups(input), sectionId: '' }
+  const section = await requireSection(sectionId)
+  return { groups: section.groups, sectionId }
+}
+
 async function saveLesson(id, input, seedKey) {
   const title = cleanLabel(input?.title, 2, 80, 'Название урока')
-  const groups = readLessonGroups(input)
+  const { groups, sectionId } = await groupsForSave(input)
   const format = readFormat(input)
   const questions = normalizeQuestions(input?.questions)
   const slides = format === 'video' ? [] : await normalizeSlides(input?.slides, id)
@@ -147,6 +157,7 @@ async function saveLesson(id, input, seedKey) {
   } else {
     await lessonsRepo.updateLesson(id, { title, groups, format, slides, questions, updatedAt: now })
   }
+  if (sectionId) await placeLesson(id, sectionId)
   return getLesson({ role: 'super' }, id)
 }
 
@@ -167,5 +178,6 @@ export async function deleteLesson(actor, id) {
   await removeVideoFile(id)
   await dropLessonFiles(id)
   await lessonAttemptsRepo.deleteLessonAttempts(id)
+  await detachLesson(id)
   await lessonsRepo.deleteLesson(id)
 }

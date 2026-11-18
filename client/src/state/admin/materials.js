@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api/index.js'
-import { EMPTY_GROUPS } from '../../lib/bands.js'
 import { newId } from '../../lib/ids.js'
 
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg']
@@ -20,21 +19,56 @@ export function blankQuestion() {
 
 export function useMaterialList() {
   const [lessons, setLessons] = useState(null)
+  const [sections, setSections] = useState([])
   const [error, setError] = useState('')
 
+  function load() {
+    return Promise.all([api.lessons(), api.lessonSections()])
+      .then(([data, sectionsData]) => {
+        setLessons(data.lessons)
+        setSections(sectionsData.sections)
+      })
+      .catch((err) => setError(err.message))
+  }
+
   useEffect(() => {
-    api.lessons().then((data) => setLessons(data.lessons)).catch((err) => setError(err.message))
+    load()
   }, [])
 
-  return { lessons, error }
+  async function createSection(body) {
+    await api.createLessonSection(body)
+    await load()
+  }
+
+  async function saveSection(id, body) {
+    await api.updateLessonSection(id, body)
+    await load()
+  }
+
+  async function removeSection(id) {
+    await api.deleteLessonSection(id)
+    await load()
+  }
+
+  async function moveLesson(lessonId, sectionId) {
+    try {
+      await api.assignLessonSection(lessonId, sectionId)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  return { lessons, sections, error, createSection, saveSection, removeSection, moveLesson }
 }
 
 // Редактор урока. После первого сохранения урок обновляется по savedId, а новый адрес подменяет /new.
-export function useLessonEditor(id, navigate) {
+export function useLessonEditor(id, navigate, initialSectionId = '') {
   const isNew = !id
   const [title, setTitle] = useState('')
   const [format, setFormat] = useState('slides')
-  const [groups, setGroups] = useState({ ...EMPTY_GROUPS, grades_5_9: true })
+  const [sections, setSections] = useState([])
+  const [sectionId, setSectionId] = useState(initialSectionId)
   const [slides, setSlides] = useState([blankFrame()])
   const [videoFile, setVideoFile] = useState(null)
   const [videoName, setVideoName] = useState('')
@@ -46,11 +80,12 @@ export function useLessonEditor(id, navigate) {
   const [ready, setReady] = useState(isNew)
 
   useEffect(() => {
+    api.lessonSections().then((data) => setSections(data.sections)).catch((err) => setError(err.message))
     if (isNew) return undefined
     api.lesson(id).then((lesson) => {
       setTitle(lesson.title)
       setFormat(lesson.format === 'video' ? 'video' : 'slides')
-      setGroups(lesson.groups)
+      if (lesson.section?.id) setSectionId(lesson.section.id)
       setVideoName(lesson.video?.name || '')
       setVideoUrl(lesson.video ? `/api/lessons/${lesson.id}/media` : '')
       const source = lesson.slides.length ? lesson.slides : [blankFrame()]
@@ -132,10 +167,14 @@ export function useLessonEditor(id, navigate) {
       setError('Загрузите видео')
       return
     }
+    if (!sectionId) {
+      setError('Сначала выберите раздел')
+      return
+    }
     const body = {
       title,
       format,
-      groups,
+      sectionId,
       questions,
     }
     if (format === 'slides') {
@@ -179,8 +218,9 @@ export function useLessonEditor(id, navigate) {
     setTitle,
     format,
     setFormat,
-    groups,
-    setGroups,
+    sections,
+    sectionId,
+    setSectionId,
     slides,
     setSlides,
     videoName,

@@ -69,6 +69,7 @@ test('уроки по HTTP: список, правка, тест, картинк
     title: 'Солнечная система',
     format: 'slides',
     groups: { grades_1_4: false, grades_5_9: true, grades_10_11: false, students: false },
+    section: null,
     slideCount: 4,
     questionCount: 4,
     best: null,
@@ -78,7 +79,7 @@ test('уроки по HTTP: список, правка, тест, картинк
   assert.equal((await call(base, '/api/lessons', { cookie: who.student })).body.lessons.length, 0)
 
   const demo = (await call(base, `/api/lessons/${demoId}`, { cookie: who.pupil })).body
-  assert.deepEqual(Object.keys(demo), ['id', 'title', 'format', 'groups', 'slideCount', 'questionCount', 'best', 'slides', 'video', 'questions', 'attempts'])
+  assert.deepEqual(Object.keys(demo), ['id', 'title', 'format', 'groups', 'section', 'slideCount', 'questionCount', 'best', 'slides', 'video', 'questions', 'attempts'])
   assert.deepEqual(demo.slides[0], {
     id: 'sun',
     kind: 'frame',

@@ -101,3 +101,11 @@ export async function setLessonVideo(id, { mime, name, updatedAt }) {
 export async function deleteLesson(id) {
   await db.run('DELETE FROM lessons WHERE id = ?', id)
 }
+
+export async function setLessonGroups(id, groups) {
+  await db.run(
+    'UPDATE lessons SET grades_1_4 = ?, grades_5_9 = ?, grades_10_11 = ?, students = ? WHERE id = ?',
+    ...groupNumbers(groups),
+    id,
+  )
+}

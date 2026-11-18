@@ -263,3 +263,36 @@ test('урок: презентация, тест и видимость по гр
   assert.equal(heavySlides.slides[0].kind, 'image')
   assert.match(heavySlides.slides[0].dataUrl, /^data:image\/jpeg;base64,/)
 })
+
+test('раздел задаёт блоки урока', async () => {
+  const lessons = await import('../src/services/lessons/index.js')
+  const { ensureSuperAdmin } = await import('../src/services/accounts.js')
+  const root = await ensureSuperAdmin()
+  const section = await lessons.createLessonSection(root, {
+    name: 'Планеты',
+    groups: { grades_5_9: true },
+  })
+  const lesson = await lessons.createLesson(root, {
+    title: 'Меркурий',
+    sectionId: section.id,
+    slides: [{ kind: 'frame', tone: 'orbit', kicker: 'Слайд', title: 'Меркурий', lines: ['Ближайшая к Солнцу'] }],
+    questions: [{ text: 'Это планета?', correctIndex: 0, options: [{ text: 'Да' }, { text: 'Нет' }] }],
+  })
+  assert.equal(lesson.section.id, section.id)
+  assert.equal(lesson.section.name, 'Планеты')
+  assert.deepEqual(lesson.groups, { grades_1_4: false, grades_5_9: true, grades_10_11: false, students: false })
+
+  const updated = await lessons.updateLessonSection(root, section.id, {
+    name: 'Планеты',
+    groups: { grades_5_9: true, students: true },
+  })
+  assert.equal(updated.groups.students, true)
+  const again = await lessons.getLesson(root, lesson.id)
+  assert.equal(again.groups.students, true)
+  assert.equal(again.section.name, 'Планеты')
+
+  await lessons.deleteLessonSection(root, section.id)
+  const detached = await lessons.getLesson(root, lesson.id)
+  assert.equal(detached.section, null)
+  assert.equal(detached.groups.students, true)
+})

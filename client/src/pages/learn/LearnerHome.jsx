@@ -3,6 +3,21 @@ import { LearnFrame } from '../../components/layout/LearnFrame.jsx'
 import { useLearnerHome } from '../../state/learnerHome.js'
 import LessonView from '../lessons/LessonView.jsx'
 
+function groupLessons(lessons) {
+  const blocks = []
+  const index = new Map()
+  for (const lesson of lessons || []) {
+    const key = lesson.section?.id || ''
+    if (!index.has(key)) {
+      const block = { key, title: lesson.section?.name || '', sort: lesson.section?.sortOrder ?? 9999, lessons: [] }
+      index.set(key, block)
+      blocks.push(block)
+    }
+    index.get(key).lessons.push(lesson)
+  }
+  return blocks.sort((left, right) => left.sort - right.sort || left.title.localeCompare(right.title, 'ru'))
+}
+
 export default function LearnerHome({ onLogout }) {
   const { me, lessons, error } = useLearnerHome()
 
@@ -16,14 +31,19 @@ export default function LearnerHome({ onLogout }) {
           <p className="muted">{me.organizationName} · {me.classLabel || me.className}</p>
           <div className="stack">
             {lessons?.length === 0 && <p className="muted">Для вашего класса пока нет уроков.</p>}
-            {lessons?.map((lesson) => (
-              <Link className="lesson-card" key={lesson.id} to={`/learn/lessons/${lesson.id}`}>
-                <div>
-                  <h2>{lesson.title}</h2>
-                  <p className="muted">{lesson.format === 'video' ? `Видео · ${lesson.questionCount} вопр.` : `Презентация · ${lesson.slideCount} сл. · ${lesson.questionCount} вопр.`}</p>
-                </div>
-                <span>{lesson.best ? `${lesson.best.score} из ${lesson.best.total}` : 'Открыть'}</span>
-              </Link>
+            {groupLessons(lessons).map((block) => (
+              <section className="stack" key={block.key || 'loose'}>
+                {block.title && <h2>{block.title}</h2>}
+                {block.lessons.map((lesson) => (
+                  <Link className="lesson-card" key={lesson.id} to={`/learn/lessons/${lesson.id}`}>
+                    <div>
+                      <h2>{lesson.title}</h2>
+                      <p className="muted">{lesson.format === 'video' ? `Видео · ${lesson.questionCount} вопр.` : `Презентация · ${lesson.slideCount} сл. · ${lesson.questionCount} вопр.`}</p>
+                    </div>
+                    <span>{lesson.best ? `${lesson.best.score} из ${lesson.best.total}` : 'Открыть'}</span>
+                  </Link>
+                ))}
+              </section>
             ))}
           </div>
         </>

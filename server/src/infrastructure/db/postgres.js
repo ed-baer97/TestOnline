@@ -62,6 +62,22 @@ const SCHEMA = [
       updated_at TEXT NOT NULL
     )`,
   'CREATE UNIQUE INDEX IF NOT EXISTS lessons_seed_key ON lessons (seed_key) WHERE seed_key IS NOT NULL',
+  `CREATE TABLE IF NOT EXISTS lesson_sections (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      grades_1_4 INTEGER NOT NULL DEFAULT 0,
+      grades_5_9 INTEGER NOT NULL DEFAULT 0,
+      grades_10_11 INTEGER NOT NULL DEFAULT 0,
+      students INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    )`,
+  `CREATE TABLE IF NOT EXISTS lesson_section_lessons (
+      section_id TEXT NOT NULL,
+      lesson_id TEXT NOT NULL PRIMARY KEY,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )`,
+  'CREATE INDEX IF NOT EXISTS lesson_section_lessons_section ON lesson_section_lessons (section_id)',
   `CREATE TABLE IF NOT EXISTS lesson_files (
       id TEXT PRIMARY KEY,
       lesson_id TEXT NOT NULL,
