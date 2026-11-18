@@ -72,6 +72,23 @@ const SCHEMA = [
       students INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     )`,
+  'ALTER TABLE lesson_sections ADD COLUMN IF NOT EXISTS grades_1_4 INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE lesson_sections ADD COLUMN IF NOT EXISTS grades_5_9 INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE lesson_sections ADD COLUMN IF NOT EXISTS grades_10_11 INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE lesson_sections ADD COLUMN IF NOT EXISTS students INTEGER NOT NULL DEFAULT 0',
+  `DO $$
+   BEGIN
+     IF EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'lesson_sections' AND column_name = 'band'
+     ) THEN
+       UPDATE lesson_sections SET grades_1_4 = 1 WHERE band = 'grades_1_4' AND grades_1_4 = 0 AND grades_5_9 = 0 AND grades_10_11 = 0 AND students = 0;
+       UPDATE lesson_sections SET grades_5_9 = 1 WHERE band = 'grades_5_9' AND grades_1_4 = 0 AND grades_5_9 = 0 AND grades_10_11 = 0 AND students = 0;
+       UPDATE lesson_sections SET grades_10_11 = 1 WHERE band = 'grades_10_11' AND grades_1_4 = 0 AND grades_5_9 = 0 AND grades_10_11 = 0 AND students = 0;
+       UPDATE lesson_sections SET students = 1 WHERE band = 'students' AND grades_1_4 = 0 AND grades_5_9 = 0 AND grades_10_11 = 0 AND students = 0;
+       ALTER TABLE lesson_sections DROP COLUMN band;
+     END IF;
+   END $$`,
   `CREATE TABLE IF NOT EXISTS lesson_section_lessons (
       section_id TEXT NOT NULL,
       lesson_id TEXT NOT NULL PRIMARY KEY,
