@@ -1,4 +1,5 @@
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Brand } from '../../components/Brand.jsx'
 import { COLOR_NAMES } from '../../components/shapes.jsx'
 import { blankQuestion, useQuizEditor } from '../../state/host/quizzes.js'
 
@@ -15,7 +16,7 @@ export default function Editor({ onLogout }) {
   return (
     <main className="sheet editor">
       <header className="topbar">
-        <Link className="brand" to="/host">TestOnline</Link>
+        <Brand to="/host" />
         <div className="top-actions">
           <button className="ghost" type="button" onClick={save}>Сохранить</button>
           <button className="primary" type="button" onClick={saveAndStart}>Запустить</button>

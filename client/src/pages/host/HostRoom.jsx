@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { Brand } from '../../components/Brand.jsx'
 import { formatCode } from '../../lib/format.js'
 import { useCountdown } from '../../state/countdown.js'
 import { useHostRoom, useJoinLink } from '../../state/hostRoom.js'
@@ -46,7 +47,7 @@ export default function HostRoom() {
   return (
     <main className="stage">
       <header className="stage-bar">
-        <Link to="/host">TestOnline</Link>
+        <Brand to="/host" />
         <strong data-testid="pin">{formatCode(state.code)}</strong>
         <span>{state.status === 'lobby' ? 'Лобби' : state.status === 'podium' ? 'Итог' : `${state.questionIndex + 1} / ${state.questionCount}`}</span>
       </header>

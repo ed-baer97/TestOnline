@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Brand } from '../Brand.jsx'
 import { TopbarSlot, TopbarSlots } from './topbar.jsx'
 
 export function LearnFrame({ onLogout, children }) {
@@ -6,7 +6,7 @@ export function LearnFrame({ onLogout, children }) {
     <TopbarSlots>
       <main className="sheet admin-sheet">
         <header className="topbar">
-          <Link className="brand" to="/learn">TestOnline</Link>
+          <Brand to="/learn" />
           <div className="top-actions">
             <TopbarSlot />
             <button className="ghost" type="button" onClick={onLogout}>Выйти</button>

@@ -81,7 +81,7 @@ body::before {
   content: "";
   position: fixed;
   inset: 0;
-  background: url("/department-logo.png") center 46% / min(560px, 72vw) no-repeat;
+  background: url("/department-logo.png?v=afm") center 46% / min(560px, 72vw) no-repeat;
   opacity: 0.16;
   mix-blend-mode: multiply;
   pointer-events: none;
@@ -89,7 +89,7 @@ body::before {
 }
 
 [data-theme="dark"] body::before {
-  opacity: 0.42;
+  opacity: 0.16;
   mix-blend-mode: screen;
 }
 
@@ -106,7 +106,9 @@ button, input, textarea, select { font: inherit; color: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 a { color: inherit; }
 
-.brand { letter-spacing: 0.04em; font-weight: 700; text-decoration: none; }
+.brand { display: inline-flex; align-items: center; margin: 0; letter-spacing: 0.04em; font-weight: 700; text-decoration: none; line-height: 0; }
+.brand-mark { width: 44px; height: 44px; object-fit: contain; display: block; }
+.home .brand-mark, .auth .brand-mark { width: 56px; height: 56px; }
 
 .home {
   min-height: 100dvh;

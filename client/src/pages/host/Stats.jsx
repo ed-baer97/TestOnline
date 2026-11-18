@@ -1,4 +1,5 @@
 import { Link, useParams } from 'react-router-dom'
+import { Brand } from '../../components/Brand.jsx'
 import { formatCode, formatWhen, shortWhen } from '../../lib/format.js'
 import { BarChart, RateList } from '../../components/charts.jsx'
 import { useQuizStats } from '../../state/host/stats.js'
@@ -61,7 +62,7 @@ export default function Stats({ onLogout }) {
   return (
     <main className="sheet editor">
       <header className="topbar">
-        <Link className="brand" to="/host">TestOnline</Link>
+        <Brand to="/host" />
         <div className="top-actions">
           <Link to={`/host/quiz/${id}`}>Править</Link>
           <button className="ghost" type="button" onClick={onLogout}>Выйти</button>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { Brand } from '../components/Brand.jsx'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -19,7 +20,7 @@ export default function Home() {
   return (
     <main className="home">
       <section className="home-copy">
-        <p className="brand">TestOnline</p>
+        <Brand />
         <h1>Обучение и тесты для школ и вузов</h1>
         <p className="lead">
           Организации, классы и тестируемые. Войдите логином, который выдал администратор.

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { Brand } from '../../components/Brand.jsx'
 import { useCountdown } from '../../state/countdown.js'
 import { usePlayerRoom } from '../../state/playerRoom.js'
 import { COLOR_NAMES, SHAPES, Shape } from '../../components/shapes.jsx'
@@ -24,7 +25,7 @@ export default function Play() {
     return (
       <main className="auth">
         <form className="card" onSubmit={enter}>
-          <p className="brand">TestOnline</p>
+          <Brand to="/" />
           <h1>{info.title}</h1>
           {info.joinable ? <p className="muted">Напишите имя, которое увидит ведущий.</p> : <p className="form-error">Игра уже началась. Войти можно было до старта.</p>}
           <label>

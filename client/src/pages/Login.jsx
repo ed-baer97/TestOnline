@@ -1,4 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
+import { Brand } from '../components/Brand.jsx'
 import { useLogin } from '../state/session.js'
 
 export default function Login() {
@@ -8,7 +9,7 @@ export default function Login() {
   return (
     <main className="auth">
       <form className="card" onSubmit={submit}>
-        <p className="brand">TestOnline</p>
+        <Brand to="/" />
         <h1>Вход</h1>
         <p className="muted">Логин и пароль выдаёт администратор.</p>
         <label>
