@@ -49,7 +49,8 @@ export function useQuizList(navigate) {
 
 // Редактор квиза по адресу /host/quiz/new создаёт квиз при первом сохранении и подменяет адрес на /host/quiz/:id.
 export function useQuizEditor(id, navigate, editorBase = '/host/quiz') {
-  const isNew = id === 'new'
+  // /host/quiz/new передаёт id «new», а /admin/quizzes/new — отдельный маршрут без параметра.
+  const isNew = !id || id === 'new'
   const [title, setTitle] = useState('')
   const [questions, setQuestions] = useState([blankQuestion()])
   const [error, setError] = useState('')

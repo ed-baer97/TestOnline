@@ -87,7 +87,7 @@ export default function Editor({ onLogout, embedded = false }) {
     return (
       <section className="stack editor">
         <div className="section-head">
-          <h1>{id === 'new' ? 'Новый квиз' : 'Квиз'}</h1>
+          <h1>{!id || id === 'new' ? 'Новый квиз' : 'Квиз'}</h1>
           <div className="row-actions">
             <Link className="ghost" to="/admin/quizzes">К списку</Link>
             <QuizActions save={save} saveAndStart={saveAndStart} />
