@@ -41,15 +41,16 @@ function scoreText(value) {
   return value == null ? '—' : String(value)
 }
 
-export default function Stats({ onLogout }) {
+export default function Stats({ onLogout, base = '/host/quiz', listTo = '/host' }) {
   const { id, resultId, player } = useParams()
   const { stats, error } = useQuizStats(id)
+  const statsTo = (suffix = '') => `${base}/${id}/stats${suffix}`
 
   if (error) {
     return (
       <main className="sheet">
         <p className="form-error">{error}</p>
-        <Link to="/host">К списку квизов</Link>
+        <Link to={listTo}>К списку квизов</Link>
       </main>
     )
   }
@@ -62,23 +63,23 @@ export default function Stats({ onLogout }) {
   return (
     <main className="sheet editor">
       <header className="topbar">
-        <Brand to="/host" />
+        <Brand to={listTo.startsWith('/admin') ? '/admin' : '/host'} />
         <div className="top-actions">
-          <Link to={`/host/quiz/${id}`}>Править</Link>
+          <Link to={`${base}/${id}`}>Править</Link>
           <button className="ghost" type="button" onClick={onLogout}>Выйти</button>
         </div>
       </header>
-      <p className="muted"><Link to="/host">Квизы</Link> / {stats.title}</p>
+      <p className="muted"><Link to={listTo}>Квизы</Link> / {stats.title}</p>
       <h1>{person ? `${person.rank}. ${person.name}` : session ? launchLabel(session) : stats.title}</h1>
 
       {person && session ? (
-        <PlayerReport quizId={id} session={session} person={person} />
+        <PlayerReport session={session} person={person} statsTo={statsTo} />
       ) : session ? (
-        <SessionReport quizId={id} session={session} />
+        <SessionReport session={session} statsTo={statsTo} />
       ) : resultId ? (
-        <p className="form-error">Такой запуск не найден. <Link to={`/host/quiz/${id}/stats`}>Ко всем запускам</Link></p>
+        <p className="form-error">Такой запуск не найден. <Link to={statsTo()}>Ко всем запускам</Link></p>
       ) : (
-        <QuizReport stats={stats} />
+        <QuizReport stats={stats} statsTo={statsTo} />
       )}
     </main>
   )
@@ -97,7 +98,7 @@ function Tiles({ items }) {
   )
 }
 
-function QuizReport({ stats }) {
+function QuizReport({ stats, statsTo }) {
   const runs = [...stats.sessions].reverse()
   return (
     <>
@@ -128,7 +129,7 @@ function QuizReport({ stats }) {
         <ul className="session-list">
           {stats.sessions.map((session) => (
             <li key={session.id}>
-              <Link to={`/host/quiz/${stats.id}/stats/${session.id}`}>
+              <Link to={statsTo(`/${session.id}`)}>
                 <strong>{launchLabel(session)}</strong>
                 <span>код {formatCode(session.code)}</span>
                 <span>{session.playerCount} участ.</span>
@@ -143,13 +144,13 @@ function QuizReport({ stats }) {
   )
 }
 
-function SessionReport({ quizId, session }) {
+function SessionReport({ session, statsTo }) {
   const questions = questionsOf(session.players)
   const answers = session.players.flatMap((person) => person.answers || [])
   const correctRate = answers.length ? Math.round((answers.filter((answer) => answer.ok).length / answers.length) * 100) : null
   return (
     <>
-      <p className="muted"><Link to={`/host/quiz/${quizId}/stats`}>Все запуски</Link> · код {formatCode(session.code)}</p>
+      <p className="muted"><Link to={statsTo()}>Все запуски</Link> · код {formatCode(session.code)}</p>
       <Tiles items={[
         { label: 'Участников', value: session.playerCount },
         { label: 'Средний балл', value: scoreText(session.averageScore) },
@@ -170,7 +171,7 @@ function SessionReport({ quizId, session }) {
         <ul className="session-list">
           {session.players.map((person, index) => (
             <li key={`${person.rank}-${person.name}`}>
-              <Link to={`/host/quiz/${quizId}/stats/${session.id}/${index}`}>
+              <Link to={statsTo(`/${session.id}/${index}`)}>
                 <strong>{person.rank}. {person.name}</strong>
                 <span>{person.score} очков</span>
                 <span>{person.answers ? `верных ${person.answers.filter((answer) => answer.ok).length} · ошибок ${person.answers.filter((answer) => !answer.ok).length}` : 'ответы не сохранены'}</span>
@@ -183,13 +184,13 @@ function SessionReport({ quizId, session }) {
   )
 }
 
-function PlayerReport({ quizId, session, person }) {
+function PlayerReport({ session, person, statsTo }) {
   const answers = person.answers
   const wrong = answers ? answers.filter((answer) => !answer.ok) : []
   const right = answers ? answers.filter((answer) => answer.ok) : []
   return (
     <section className="results">
-      <p><Link to={`/host/quiz/${quizId}/stats/${session.id}`}>К участникам запуска</Link></p>
+      <p><Link to={statsTo(`/${session.id}`)}>К участникам запуска</Link></p>
       <Tiles items={[
         { label: 'Баллы', value: person.score },
         { label: 'Место', value: person.rank },

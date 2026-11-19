@@ -9,7 +9,7 @@ export function registerQuizRoutes(app) {
     res.json(await statsOverview(req.userId))
   }))
 
-  app.get('/api/quizzes/:id/stats', requireHost, route(async (req, res) => {
+  app.get('/api/quizzes/:id/stats', requireQuizAuthor, route(async (req, res) => {
     const stats = await quizStats(req.userId, req.params.id)
     if (!stats) {
       res.status(404).json({ error: 'Квиз не найден' })

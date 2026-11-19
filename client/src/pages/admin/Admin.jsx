@@ -7,6 +7,7 @@ import { LessonEditor, MaterialList, MaterialQuizEditor, MaterialQuizzes } from 
 import { Regions, RegionalStaff } from './SuperPanels.jsx'
 import { DashboardView } from '../../components/admin/ui.jsx'
 import LessonView from '../lessons/LessonView.jsx'
+import Stats from '../host/Stats.jsx'
 
 function tabsFor(role) {
   if (role === 'super') {
@@ -62,6 +63,9 @@ export default function Admin({ onLogout }) {
             <Route path="materials/:id" element={<LessonEditor />} />
             <Route path="quizzes" element={<MaterialQuizzes />} />
             <Route path="quizzes/new" element={<MaterialQuizEditor />} />
+            <Route path="quizzes/:id/stats/:resultId/:player" element={<Stats onLogout={onLogout} base="/admin/quizzes" listTo="/admin/quizzes" />} />
+            <Route path="quizzes/:id/stats/:resultId" element={<Stats onLogout={onLogout} base="/admin/quizzes" listTo="/admin/quizzes" />} />
+            <Route path="quizzes/:id/stats" element={<Stats onLogout={onLogout} base="/admin/quizzes" listTo="/admin/quizzes" />} />
             <Route path="quizzes/:id" element={<MaterialQuizEditor />} />
             <Route path="regions" element={<Regions />} />
             <Route path="staff" element={<RegionalStaff />} />

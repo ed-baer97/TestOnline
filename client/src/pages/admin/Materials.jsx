@@ -366,6 +366,7 @@ export function MaterialQuizzes() {
             </div>
             <div className="top-actions">
               <button className="primary" type="button" onClick={() => start(quiz.id)}>Запустить</button>
+              <Link to={`/admin/quizzes/${quiz.id}/stats`}>Статистика</Link>
               <Link to={`/admin/quizzes/${quiz.id}`}>Править</Link>
               <button className="ghost" type="button" onClick={() => confirmRemove(quiz)}>Удалить</button>
             </div>
