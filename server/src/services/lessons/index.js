@@ -11,5 +11,6 @@ export {
 export { ensureDemoLesson } from './demo.js'
 export { migrateLessonFiles } from './files.js'
 export { importPptx, openLessonFile, openLessonMedia, saveLessonVideo } from './media.js'
+export { MAX_VIDEO } from '../../domain/lesson.js'
 
 

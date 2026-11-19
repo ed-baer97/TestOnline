@@ -2,12 +2,23 @@ import { useState } from 'react'
 import { GroupChecks, Notice } from '../../components/admin/ui.jsx'
 import { groupLabels } from '../../lib/bands.js'
 import { useOrganizations, useOrgStaff } from '../../state/admin/organizations.js'
+import { pick, useI18n } from '../../state/i18n.jsx'
 
 export function Organizations() {
+  const { lang } = useI18n()
   const {
     organizations,
+    districts,
     name,
     setName,
+    nameKk,
+    setNameKk,
+    districtId,
+    setDistrictId,
+    districtName,
+    setDistrictName,
+    districtNameKk,
+    setDistrictNameKk,
     groups,
     setGroups,
     error,
@@ -17,6 +28,9 @@ export function Organizations() {
     setEditing,
     create,
     remove,
+    addDistrict,
+    removeDistrict,
+    seedCatalog,
     saveOrganization,
     organizationSaved,
   } = useOrganizations()
@@ -29,13 +43,52 @@ export function Organizations() {
     <section className="stack">
       <div className="section-head"><h1>Организации</h1></div>
       <Notice error={error} notice={notice} />
+      <div className="row-actions">
+        <button className="ghost" type="button" onClick={seedCatalog}>Загрузить районы и школы Мангистау</button>
+      </div>
+      <form className="admin-form" onSubmit={addDistrict}>
+        <label>
+          Район
+          <input value={districtName} onChange={(event) => setDistrictName(event.target.value)} placeholder="Бейнеуский район" />
+        </label>
+        <label>
+          Район, қазақша
+          <input value={districtNameKk} onChange={(event) => setDistrictNameKk(event.target.value)} placeholder="Бейнеу ауданы" />
+        </label>
+        <button className="ghost add" type="submit">Добавить район</button>
+      </form>
+      {districts.length > 0 && (
+        <div className="stack">
+          {districts.map((district) => (
+            <div className="class-line" key={district.id}>
+              <span>{pick(lang, district.name, district.nameKk)}</span>
+              <button className="ghost" type="button" onClick={() => { if (window.confirm(`Удалить район «${district.name}»?`)) removeDistrict(district) }}>Удалить</button>
+            </div>
+          ))}
+        </div>
+      )}
       <form className="admin-form" onSubmit={create}>
         <label>
           Название
           <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Школа №3" />
         </label>
+        <label>
+          Название, қазақша
+          <input value={nameKk} onChange={(event) => setNameKk(event.target.value)} placeholder="№3 мектеп" />
+        </label>
+        {districts.length > 0 && (
+          <label>
+            Район
+            <select value={districtId} onChange={(event) => setDistrictId(event.target.value)}>
+              <option value="">Выберите район</option>
+              {districts.map((district) => (
+                <option key={district.id} value={district.id}>{pick(lang, district.name, district.nameKk)}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <GroupChecks groups={groups} onChange={setGroups} />
-        <button className="primary add" type="submit">Создать организацию</button>
+        <button className="primary add" type="submit" disabled={districts.length > 0 && !districtId}>Создать организацию</button>
       </form>
       {organizations === null && !error && <p className="muted">Загрузка…</p>}
       <div className="stack">
@@ -43,7 +96,8 @@ export function Organizations() {
           <article className="question-card" key={org.id}>
             <header>
               <div>
-                <h2>{org.name}</h2>
+                <h2>{pick(lang, org.name, org.nameKk)}</h2>
+                {org.districtName && <p className="muted">{pick(lang, org.districtName, org.districtNameKk)}</p>}
                 <p className="muted">{groupLabels(org.groups) || 'Группы не отмечены'}</p>
                 <p className="muted">{org.classes} кл. · {org.learners} тест. · {org.admins} адм.</p>
               </div>
@@ -57,6 +111,7 @@ export function Organizations() {
             {editing === org.id && (
               <OrgEditor
                 org={org}
+                districts={districts}
                 onSave={(body) => saveOrganization(org.id, body)}
                 onSaved={organizationSaved}
                 onError={setError}
@@ -69,15 +124,23 @@ export function Organizations() {
   )
 }
 
-function OrgEditor({ org, onSave, onSaved, onError }) {
+function OrgEditor({ org, districts, onSave, onSaved, onError }) {
+  const { lang } = useI18n()
   const [name, setName] = useState(org.name)
+  const [nameKk, setNameKk] = useState(org.nameKk || '')
+  const [districtId, setDistrictId] = useState(org.districtId || '')
   const [groups, setGroups] = useState(org.groups)
 
   async function save(event) {
     event.preventDefault()
     onError('')
     try {
-      await onSave({ name, groups })
+      await onSave({
+        name,
+        nameKk,
+        districtId: districts.length ? districtId : org.districtId,
+        groups,
+      })
       await onSaved()
     } catch (err) {
       onError(err.message)
@@ -90,6 +153,21 @@ function OrgEditor({ org, onSave, onSaved, onError }) {
         Название
         <input value={name} onChange={(event) => setName(event.target.value)} />
       </label>
+      <label>
+        Название, қазақша
+        <input value={nameKk} onChange={(event) => setNameKk(event.target.value)} />
+      </label>
+      {districts.length > 0 && (
+        <label>
+          Район
+          <select value={districtId} onChange={(event) => setDistrictId(event.target.value)}>
+            <option value="">Выберите район</option>
+            {districts.map((district) => (
+              <option key={district.id} value={district.id}>{pick(lang, district.name, district.nameKk)}</option>
+            ))}
+          </select>
+        </label>
+      )}
       <GroupChecks groups={groups} onChange={setGroups} />
       <button className="primary add" type="submit">Сохранить</button>
     </form>

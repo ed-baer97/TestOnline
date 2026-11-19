@@ -1,6 +1,7 @@
 import express from 'express'
 import {
   createClass,
+  createDistrict,
   createLearner,
   createOrgAdmin,
   createOrganization,
@@ -9,6 +10,7 @@ import {
   createTrack,
   dashboard,
   deleteClass,
+  deleteDistrict,
   deleteLearner,
   deleteOrgAdmin,
   deleteOrganization,
@@ -17,11 +19,15 @@ import {
   deleteTrack,
   importLearners,
   learnersTemplate,
+  listDistricts,
   listLearners,
   listOrgAdmins,
   listOrganizations,
   listRegionalAdmins,
   listRegions,
+  orgStats,
+  platformStats,
+  seedRegionCatalog,
   structure,
   updateClass,
   updateLearner,
@@ -37,6 +43,27 @@ export function registerAdminRoutes(app) {
   const guard = requireUser
   app.get('/api/admin/dashboard', guard, route(async (req, res) => {
     res.json(await dashboard(req.user))
+  }))
+  app.get('/api/admin/platform-stats', guard, route(async (req, res) => {
+    const requested = typeof req.query.regionId === 'string' ? req.query.regionId : null
+    res.json(await platformStats(req.user, requested || null))
+  }))
+  app.get('/api/admin/org-stats', guard, route(async (req, res) => {
+    const requested = typeof req.query.organizationId === 'string' ? req.query.organizationId : null
+    res.json(await orgStats(req.user, requested || null))
+  }))
+  app.post('/api/admin/catalog', guard, route(async (req, res) => {
+    res.json(await seedRegionCatalog(req.user, req.body?.regionId))
+  }))
+  app.get('/api/admin/districts', guard, route(async (req, res) => {
+    res.json({ districts: await listDistricts(req.user) })
+  }))
+  app.post('/api/admin/districts', guard, route(async (req, res) => {
+    res.status(201).json(await createDistrict(req.user, req.body || {}))
+  }))
+  app.delete('/api/admin/districts/:id', guard, route(async (req, res) => {
+    await deleteDistrict(req.user, req.params.id)
+    res.json({ ok: true })
   }))
   app.get('/api/admin/regions', guard, route(async (req, res) => {
     res.json({ regions: await listRegions(req.user) })

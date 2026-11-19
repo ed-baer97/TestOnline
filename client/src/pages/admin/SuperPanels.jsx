@@ -3,7 +3,7 @@ import { Notice } from '../../components/admin/ui.jsx'
 import { useRegionalStaff, useRegions } from '../../state/admin/regions.js'
 
 export function Regions() {
-  const { regions, name, setName, drafts, setDrafts, error, notice, create, rename, remove } = useRegions()
+  const { regions, name, setName, drafts, setDrafts, error, notice, create, rename, seed, remove } = useRegions()
 
   function confirmRemove(region) {
     if (window.confirm(`Удалить регион «${region.name}»?`)) remove(region)
@@ -35,6 +35,9 @@ export function Regions() {
             <p className="muted">
               {region.organizations} орг. · {region.admins} адм. · {region.learners} тест.
             </p>
+            {/манг[ыи]стау/i.test(region.name) && (
+              <button className="ghost" type="button" onClick={() => seed(region)}>Загрузить школы</button>
+            )}
             <button className="ghost" type="button" onClick={() => confirmRemove(region)}>Удалить</button>
           </article>
         ))}

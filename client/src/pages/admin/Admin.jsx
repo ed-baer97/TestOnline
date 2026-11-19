@@ -8,28 +8,34 @@ import { Regions, RegionalStaff } from './SuperPanels.jsx'
 import { DashboardView } from '../../components/admin/ui.jsx'
 import LessonView from '../lessons/LessonView.jsx'
 import Stats from '../host/Stats.jsx'
+import { PlatformStats } from './StatsPanel.jsx'
+import { useI18n } from '../../state/i18n.jsx'
 
-function tabsFor(role) {
+function tabsFor(role, t) {
+  const tab = (to, label, end = false) => ({ to, label: t(label), end })
   if (role === 'super') {
     return [
-      { to: '/admin', label: 'Обзор', end: true },
-      { to: '/admin/materials', label: 'Материалы' },
-      { to: '/admin/quizzes', label: 'Квизы' },
-      { to: '/admin/regions', label: 'Регионы' },
-      { to: '/admin/staff', label: 'Админы' },
+      tab('/admin', 'Обзор', true),
+      tab('/admin/stats', 'Статистика'),
+      tab('/admin/materials', 'Материалы'),
+      tab('/admin/quizzes', 'Квизы'),
+      tab('/admin/regions', 'Регионы'),
+      tab('/admin/staff', 'Админы'),
     ]
   }
   if (role === 'regional') {
     return [
-      { to: '/admin', label: 'Обзор', end: true },
-      { to: '/admin/organizations', label: 'Организации' },
-      { to: '/admin/staff', label: 'Админы' },
+      tab('/admin', 'Обзор', true),
+      tab('/admin/stats', 'Статистика'),
+      tab('/admin/organizations', 'Организации'),
+      tab('/admin/staff', 'Админы'),
     ]
   }
   return [
-    { to: '/admin', label: 'Обзор', end: true },
-    { to: '/admin/classes', label: 'Классы' },
-    { to: '/admin/learners', label: 'Тестируемые' },
+    tab('/admin', 'Обзор', true),
+    tab('/admin/stats', 'Статистика'),
+    tab('/admin/classes', 'Классы'),
+    tab('/admin/learners', 'Тестируемые'),
   ]
 }
 
@@ -46,15 +52,17 @@ function Overview() {
 }
 
 export default function Admin({ onLogout }) {
+  const { t } = useI18n()
   const { me, error } = useAdminProfile()
 
   if (error) return <p className="center form-error">{error}</p>
   if (!me) return <p className="center muted">Загрузка…</p>
 
   return (
-    <AdminFrame me={me} onLogout={onLogout} tabs={tabsFor(me.role)}>
+    <AdminFrame me={me} onLogout={onLogout} tabs={tabsFor(me.role, t)}>
       <Routes>
         <Route index element={<Overview />} />
+        <Route path="stats/*" element={<PlatformStats me={me} />} />
         {me.role === 'super' && (
           <>
             <Route path="materials" element={<MaterialList />} />

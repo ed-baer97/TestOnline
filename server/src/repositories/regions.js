@@ -1,16 +1,16 @@
 import { db } from '../infrastructure/db/index.js'
 
 function mapRegion(row) {
-  return { id: row.id, name: row.name, createdAt: row.created_at }
+  return { id: row.id, name: row.name, nameKk: row.name_kk || '', createdAt: row.created_at }
 }
 
 export async function findRegion(id) {
-  const row = await db.get('SELECT id, name, created_at FROM regions WHERE id = ?', id)
+  const row = await db.get('SELECT id, name, name_kk, created_at FROM regions WHERE id = ?', id)
   return row ? mapRegion(row) : null
 }
 
 export async function listRegions() {
-  const rows = await db.all('SELECT id, name, created_at FROM regions')
+  const rows = await db.all('SELECT id, name, name_kk, created_at FROM regions')
   return rows.map(mapRegion)
 }
 
@@ -27,5 +27,6 @@ export async function renameRegion(id, name) {
 }
 
 export async function deleteRegion(id) {
+  await db.run('DELETE FROM districts WHERE region_id = ?', id)
   await db.run('DELETE FROM regions WHERE id = ?', id)
 }

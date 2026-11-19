@@ -1,8 +1,8 @@
 import fs from 'node:fs'
 import express from 'express'
-import { MAX_VIDEO } from '../../../domain/lesson.js'
 import { config } from '../../../infrastructure/config.js'
 import {
+  MAX_VIDEO,
   assignLessonSection,
   checkLesson,
   createLesson,

@@ -45,7 +45,7 @@ test('админка по HTTP: регионы, организации, клас
 
   const region = await su('/api/admin/regions', { method: 'POST', json: { name: '  Мангыстауская   область ' } })
   assert.equal(region.status, 201)
-  assert.deepEqual(Object.keys(region.body), ['id', 'name', 'createdAt'])
+  assert.deepEqual(Object.keys(region.body), ['id', 'name', 'nameKk', 'createdAt'])
   assert.equal(region.body.name, 'Мангыстауская область')
   const regionId = region.body.id
   expectError(await su('/api/admin/regions', { method: 'POST', json: { name: 'МАНГЫСТАУСКАЯ ОБЛАСТЬ' } }), 409, 'Такой регион уже есть')
@@ -54,7 +54,7 @@ test('админка по HTTP: регионы, организации, клас
   const other = (await su('/api/admin/regions', { method: 'POST', json: { name: 'Атырауская область' } })).body
   const renamed = await su(`/api/admin/regions/${regionId}`, { method: 'PATCH', json: { name: 'Мангыстау' } })
   assert.equal(renamed.status, 200)
-  assert.deepEqual(renamed.body, { id: regionId, name: 'Мангыстау', createdAt: region.body.createdAt })
+  assert.deepEqual(renamed.body, { id: regionId, name: 'Мангыстау', nameKk: '', createdAt: region.body.createdAt })
   expectError(await su(`/api/admin/regions/${regionId}`, { method: 'PATCH', json: { name: 'Атырауская область' } }), 409, 'Такой регион уже есть')
   expectError(await su('/api/admin/regions/missing', { method: 'PATCH', json: { name: 'Новое' } }), 404, 'Регион не найден')
   assert.deepEqual((await su('/api/admin/regions')).body, {
@@ -105,7 +105,11 @@ test('админка по HTTP: регионы, организации, клас
   assert.deepEqual(school.body, {
     id: school.body.id,
     regionId,
+    districtId: null,
+    districtName: '',
+    districtNameKk: '',
     name: 'Школа №3',
+    nameKk: '',
     groups: { grades_1_4: false, grades_5_9: true, grades_10_11: false, students: true },
     createdAt: school.body.createdAt,
   })
@@ -142,7 +146,7 @@ test('админка по HTTP: регионы, организации, клас
 
   const listedOrgs = (await mang('/api/admin/organizations')).body.organizations
   assert.deepEqual(listedOrgs.map((org) => [org.name, org.classes, org.learners, org.admins]), [['Лицей №1', 0, 0, 0], ['Школа №3', 0, 0, 1]])
-  assert.deepEqual(Object.keys(listedOrgs[0]), ['id', 'regionId', 'name', 'groups', 'createdAt', 'classes', 'learners', 'admins'])
+  assert.deepEqual(Object.keys(listedOrgs[0]), ['id', 'regionId', 'districtId', 'districtName', 'districtNameKk', 'name', 'nameKk', 'groups', 'createdAt', 'classes', 'learners', 'admins'])
 
   const org = as(await login(base, 'school3', 'secret1'))
   expectError(await org('/api/admin/organizations'), 403, 'Недостаточно прав')

@@ -4,14 +4,23 @@ import { EMPTY_GROUPS } from '../../lib/bands.js'
 
 export function useOrganizations() {
   const [organizations, setOrganizations] = useState(null)
+  const [districts, setDistricts] = useState([])
   const [name, setName] = useState('')
+  const [nameKk, setNameKk] = useState('')
+  const [districtId, setDistrictId] = useState('')
+  const [districtName, setDistrictName] = useState('')
+  const [districtNameKk, setDistrictNameKk] = useState('')
   const [groups, setGroups] = useState(EMPTY_GROUPS)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [editing, setEditing] = useState(null)
 
   function load() {
-    return api.organizations().then((data) => setOrganizations(data.organizations))
+    return Promise.all([api.organizations(), api.districts()]).then(([data, area]) => {
+      setOrganizations(data.organizations)
+      setDistricts(area.districts)
+      setDistrictId((current) => current || area.districts[0]?.id || '')
+    })
   }
 
   useEffect(() => {
@@ -23,8 +32,14 @@ export function useOrganizations() {
     setError('')
     setNotice('')
     try {
-      await api.createOrganization({ name, groups })
+      await api.createOrganization({
+        name,
+        nameKk,
+        districtId: districts.length ? districtId : undefined,
+        groups,
+      })
       setName('')
+      setNameKk('')
       setGroups(EMPTY_GROUPS)
       setNotice('Организация создана')
       await load()
@@ -44,6 +59,46 @@ export function useOrganizations() {
     }
   }
 
+  async function addDistrict(event) {
+    event.preventDefault()
+    setError('')
+    setNotice('')
+    try {
+      const created = await api.createDistrict({ name: districtName, nameKk: districtNameKk })
+      setDistrictName('')
+      setDistrictNameKk('')
+      setDistrictId(created.id)
+      setNotice('Район создан')
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function removeDistrict(district) {
+    setError('')
+    setNotice('')
+    try {
+      await api.deleteDistrict(district.id)
+      if (districtId === district.id) setDistrictId('')
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  async function seedCatalog() {
+    setError('')
+    setNotice('')
+    try {
+      const result = await api.seedCatalog()
+      setNotice(result.already ? 'Каталог уже загружен' : `Загружено школ: ${result.schools}`)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   function saveOrganization(id, body) {
     return api.updateOrganization(id, body)
   }
@@ -56,8 +111,17 @@ export function useOrganizations() {
 
   return {
     organizations,
+    districts,
     name,
     setName,
+    nameKk,
+    setNameKk,
+    districtId,
+    setDistrictId,
+    districtName,
+    setDistrictName,
+    districtNameKk,
+    setDistrictNameKk,
     groups,
     setGroups,
     error,
@@ -67,6 +131,9 @@ export function useOrganizations() {
     setEditing,
     create,
     remove,
+    addDistrict,
+    removeDistrict,
+    seedCatalog,
     saveOrganization,
     organizationSaved,
   }

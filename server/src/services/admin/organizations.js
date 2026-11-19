@@ -3,7 +3,8 @@ import { assertRole } from '../../domain/access.js'
 import { readPassword } from '../../domain/accounts.js'
 import { fail } from '../../domain/errors.js'
 import { readGroups } from '../../domain/structure.js'
-import { cleanLabel, sameText } from '../../domain/text.js'
+import { cleanLabel, optionalLabel, sameText } from '../../domain/text.js'
+import { districtForOrganization } from './districts.js'
 import * as classesRepo from '../../repositories/classes.js'
 import * as organizationsRepo from '../../repositories/organizations.js'
 import * as tracksRepo from '../../repositories/tracks.js'
@@ -28,9 +29,11 @@ export async function listOrganizations(actor) {
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
 }
 
-async function assertUniqueOrg(regionId, name, exceptId) {
+async function assertUniqueOrg(regionId, name, nameKk, exceptId) {
   const rows = await organizationsRepo.listOrganizationNames(regionId)
-  if (rows.some((row) => row.id !== exceptId && sameText(row.name, name))) fail('Такая организация в регионе уже есть', 409)
+  if (rows.some((row) => row.id !== exceptId && (sameText(row.name, name) || (nameKk && row.name_kk && sameText(row.name_kk, nameKk))))) {
+    fail('Такая организация в регионе уже есть', 409)
+  }
 }
 
 async function assertGroupsFree(orgId, groups) {
@@ -45,21 +48,35 @@ async function assertGroupsFree(orgId, groups) {
 export async function createOrganization(actor, input) {
   assertRole(actor, 'regional')
   const name = cleanLabel(input?.name, 2, 120, 'Название организации')
+  const nameKk = optionalLabel(input?.nameKk, 120, 'Название организации')
   const groups = readGroups(input)
-  await assertUniqueOrg(actor.regionId, name)
+  const districtId = await districtForOrganization(actor.regionId, input?.districtId)
+  await assertUniqueOrg(actor.regionId, name, nameKk)
   const id = crypto.randomUUID()
-  await organizationsRepo.insertOrganization({ id, regionId: actor.regionId, name, groups, createdAt: new Date().toISOString() })
+  await organizationsRepo.insertOrganization({
+    id,
+    regionId: actor.regionId,
+    name,
+    nameKk,
+    districtId,
+    groups,
+    createdAt: new Date().toISOString(),
+  })
   return mustOrg(id)
 }
 
 export async function updateOrganization(actor, id, input) {
   assertRole(actor, 'regional')
-  await orgInRegion(id, actor.regionId)
+  const current = await orgInRegion(id, actor.regionId)
   const name = cleanLabel(input?.name, 2, 120, 'Название организации')
+  const nameKk = input?.nameKk == null ? current.nameKk : optionalLabel(input.nameKk, 120, 'Название организации')
   const groups = readGroups(input)
-  await assertUniqueOrg(actor.regionId, name, id)
+  const districtId = input?.districtId == null
+    ? current.districtId
+    : await districtForOrganization(actor.regionId, input.districtId)
+  await assertUniqueOrg(actor.regionId, name, nameKk, id)
   await assertGroupsFree(id, groups)
-  await organizationsRepo.updateOrganization(id, { name, groups })
+  await organizationsRepo.updateOrganization(id, { name, nameKk, districtId, groups })
   return mustOrg(id)
 }
 

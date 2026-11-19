@@ -46,6 +46,18 @@ export function useRegions() {
     }
   }
 
+  async function seed(region) {
+    setError('')
+    setNotice('')
+    try {
+      const result = await api.seedCatalog(region.id)
+      setNotice(result.already ? 'Каталог уже загружен' : `Загружено школ: ${result.schools}`)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   async function remove(region) {
     setError('')
     setNotice('')
@@ -57,7 +69,7 @@ export function useRegions() {
     }
   }
 
-  return { regions, name, setName, drafts, setDrafts, error, notice, create, rename, remove }
+  return { regions, name, setName, drafts, setDrafts, error, notice, create, rename, seed, remove }
 }
 
 export function useRegionalStaff() {

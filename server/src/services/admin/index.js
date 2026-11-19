@@ -1,5 +1,8 @@
 // Сценарии админки: суперглавный ведёт регионы, админ региона — организации, админ организации — классы и тестируемых.
+export { seedRegionCatalog } from './catalog.js'
 export { dashboard } from './dashboard.js'
+export { createDistrict, deleteDistrict, listDistricts } from './districts.js'
+export { orgStats, platformStats } from './platformStats.js'
 export { importLearners, learnersTemplate } from './learnersExcel.js'
 export { createLearner, deleteLearner, listLearners, updateLearner } from './learners.js'
 export {

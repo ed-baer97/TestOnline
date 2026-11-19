@@ -2,6 +2,21 @@ import { request } from './http.js'
 
 export const adminApi = {
   dashboard: () => request('/api/admin/dashboard'),
+  platformStats: (regionId) => {
+    const query = regionId ? `?regionId=${encodeURIComponent(regionId)}` : ''
+    return request(`/api/admin/platform-stats${query}`)
+  },
+  orgStats: (organizationId) => {
+    const query = organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : ''
+    return request(`/api/admin/org-stats${query}`)
+  },
+  seedCatalog: (regionId) => request('/api/admin/catalog', {
+    method: 'POST',
+    body: JSON.stringify(regionId ? { regionId } : {}),
+  }),
+  districts: () => request('/api/admin/districts'),
+  createDistrict: (body) => request('/api/admin/districts', { method: 'POST', body: JSON.stringify(body) }),
+  deleteDistrict: (id) => request(`/api/admin/districts/${id}`, { method: 'DELETE' }),
   regions: () => request('/api/admin/regions'),
   createRegion: (body) => request('/api/admin/regions', { method: 'POST', body: JSON.stringify(body) }),
   updateRegion: (id, body) => request(`/api/admin/regions/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),

@@ -141,6 +141,25 @@ const SCHEMA = [
       payload TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )`,
+  'ALTER TABLE regions ADD COLUMN IF NOT EXISTS name_kk TEXT',
+  'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS name_kk TEXT',
+  'ALTER TABLE organizations ADD COLUMN IF NOT EXISTS district_id TEXT',
+  'ALTER TABLE lessons ADD COLUMN IF NOT EXISTS title_kk TEXT',
+  `ALTER TABLE lessons ADD COLUMN IF NOT EXISTS questions_kk TEXT NOT NULL DEFAULT '[]'`,
+  `ALTER TABLE lesson_attempts ADD COLUMN IF NOT EXISTS lang TEXT NOT NULL DEFAULT 'ru'`,
+  `CREATE TABLE IF NOT EXISTS districts (
+      id TEXT PRIMARY KEY,
+      region_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      name_kk TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    )`,
+  'CREATE INDEX IF NOT EXISTS districts_region ON districts (region_id)',
+  `CREATE TABLE IF NOT EXISTS app_seeds (
+      key TEXT PRIMARY KEY,
+      applied_at TEXT NOT NULL
+    )`,
 ]
 
 function toPg(sql) {

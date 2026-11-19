@@ -11,6 +11,7 @@ import Login from '../pages/Login.jsx'
 import Play from '../pages/play/Play.jsx'
 import Quizzes from '../pages/host/Quizzes.jsx'
 import Stats from '../pages/host/Stats.jsx'
+import { I18nProvider, LanguageToggle } from '../state/i18n.jsx'
 import { signOut } from '../state/session.js'
 import { RequireAuth } from './RequireAuth.jsx'
 
@@ -23,8 +24,11 @@ export default function App() {
   }
 
   return (
-    <>
-    <ThemeToggle />
+    <I18nProvider>
+    <div className="env-controls">
+      <LanguageToggle />
+      <ThemeToggle />
+    </div>
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
@@ -44,6 +48,6 @@ export default function App() {
       <Route path="/play/:code" element={<Play />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
-    </>
+    </I18nProvider>
   )
 }
