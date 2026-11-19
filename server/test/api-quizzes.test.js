@@ -44,7 +44,6 @@ test('квизы ведущего: создание, правка, удален�
     [{ title: 'Квиз', questions: [{ text: 'a', timeLimit: 10, correctIndex: 0, options: [{ text: '1' }, { text: '2' }] }] }, 'Вопрос 1: текст от 2 до 200 символов'],
     [{ title: 'Квиз', questions: [{ text: 'Вопрос', timeLimit: 15, correctIndex: 0, options: [{ text: '1' }, { text: '2' }] }] }, 'Вопрос 1: время 10, 20, 30 или 60 секунд'],
     [{ title: 'Квиз', questions: [{ text: 'Вопрос', timeLimit: 10, correctIndex: 0, options: [{ text: '1' }] }] }, 'Вопрос 1: от 2 до 4 вариантов'],
-    [{ title: 'Квиз', questions: [{ text: 'Вопрос', timeLimit: 10, correctIndex: 0, options: [{ text: '1'.repeat(81) }, { text: '2' }] }] }, 'Вопрос 1: вариант длиннее 80 символов'],
   ]
   for (const [body, message] of invalid) {
     const response = await call(base, '/api/quizzes', { method: 'POST', cookie, json: body })
@@ -81,9 +80,10 @@ test('квизы ведущего: создание, правка, удален�
   const generated = await call(base, '/api/quizzes', {
     method: 'POST',
     cookie,
-    json: { title: 'Без id', questions: [{ text: 'Вопрос?', timeLimit: 60, correctIndex: 0, options: [{ text: 'Да' }, { text: 'Нет' }] }] },
+    json: { title: 'Без id', questions: [{ text: 'Вопрос?', timeLimit: 60, correctIndex: 0, options: [{ text: 'А'.repeat(120) }, { text: 'Нет' }] }] },
   })
   assert.match(generated.body.questions[0].id, /^[0-9a-f-]{36}$/)
+  assert.equal(generated.body.questions[0].options[0].text.length, 120)
 
   await new Promise((resolve) => setTimeout(resolve, 5))
   const updated = await call(base, `/api/quizzes/${quiz.id}`, {

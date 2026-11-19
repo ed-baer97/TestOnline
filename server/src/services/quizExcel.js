@@ -139,7 +139,6 @@ export async function questionsFromXlsx(buffer) {
     const label = `Строка ${row.number}`
     if (text.length < 2 || text.length > 200) throw appError(`${label}: вопрос от 2 до 200 символов`)
     if (options.length < 2 || options.length > 4) throw appError(`${label}: нужно от 2 до 4 вариантов`)
-    if (options.some((option) => option.text.length > 80)) throw appError(`${label}: вариант длиннее 80 символов`)
     if (marks === 0) throw appError(`${label}: залейте правильный ответ цветом, отличным от белого`)
     if (marks > 1) throw appError(`${label}: цветом можно отметить только один ответ`)
     questions.push({

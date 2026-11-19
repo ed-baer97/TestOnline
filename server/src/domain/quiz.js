@@ -41,9 +41,6 @@ export function normalizeQuiz(input) {
     if (options.length < 2 || options.length > 4) {
       throw new Error(`${label}: от 2 до 4 вариантов`)
     }
-    if (options.some((option) => option.text.length > 80)) {
-      throw new Error(`${label}: вариант длиннее 80 символов`)
-    }
     if (correctIndex < 0) {
       throw new Error(`${label}: отметьте правильный ответ`)
     }

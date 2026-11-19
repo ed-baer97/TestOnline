@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Brand } from '../../components/Brand.jsx'
+import { FitText } from '../../components/FitText.jsx'
 import { useCountdown } from '../../state/countdown.js'
 import { usePlayerRoom } from '../../state/playerRoom.js'
 import { COLOR_NAMES, SHAPES, Shape } from '../../components/shapes.jsx'
@@ -112,7 +113,7 @@ function PlayerStage({ state, seconds, online, onAnswer }) {
               {state.question.options.map((option) => (
                 <button key={option.index} className={`answer ${COLOR_NAMES[option.index]}`} type="button" data-testid={`answer-${option.index}`} onClick={() => send(option.index)}>
                   <Shape name={SHAPES[option.index]} />
-                  <span>{option.text}</span>
+                  <FitText text={option.text} />
                 </button>
               ))}
             </div>
@@ -129,7 +130,7 @@ function PlayerStage({ state, seconds, online, onAnswer }) {
           <div className="answer-grid compact">
             {state.question.options.map((option) => (
               <div key={option.index} className={`answer ${COLOR_NAMES[option.index]} ${option.index === state.question.correctIndex ? 'correct' : 'dim'}`}>
-                <span>{option.text}</span>
+                <FitText text={option.text} max={20} />
               </div>
             ))}
           </div>

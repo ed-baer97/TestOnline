@@ -85,6 +85,16 @@ test('без цветного ответа, с двумя цветами и с �
   await assert.rejects(questionsFromXlsx(tooMany), /от 2 до 4/)
 })
 
+test('длинный вариант не обрезается', async () => {
+  const text = 'А'.repeat(120)
+  const buffer = await workbook([{
+    values: ['Длинный вопрос?', text, 'Короткий'],
+    fills: { 2: { argb: 'FFFFFF00' } },
+  }])
+  const questions = await questionsFromXlsx(buffer)
+  assert.equal(questions[0].options[0].text, text)
+})
+
 test('шаблон Excel читается как квиз с жёлтым правильным ответом', async () => {
   const questions = await questionsFromXlsx(await templateWorkbook())
   assert.equal(questions.length, 2)

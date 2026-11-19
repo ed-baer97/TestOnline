@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Brand } from '../../components/Brand.jsx'
+import { FitText } from '../../components/FitText.jsx'
 import { formatCode } from '../../lib/format.js'
 import { useCountdown } from '../../state/countdown.js'
 import { useHostRoom, useJoinLink } from '../../state/hostRoom.js'
@@ -84,7 +85,7 @@ export default function HostRoom() {
               return (
                 <div key={option.index} className={`answer ${COLOR_NAMES[option.index]} ${correct ? 'correct' : ''} ${state.status === 'reveal' && !correct ? 'dim' : ''}`}>
                   <Shape name={SHAPES[option.index]} />
-                  <span>{option.text}</span>
+                  <FitText text={option.text} max={32} />
                   {state.status === 'reveal' && <b style={{ width: `${(count / total) * 100}%` }} />}
                   {state.status === 'reveal' && <em>{count}</em>}
                 </div>
