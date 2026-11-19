@@ -73,7 +73,9 @@ export async function ensureSuperAdmin() {
   const password = config.superPassword
   const account = normalizeAccount({ login, password })
   const taken = await usersRepo.findByLogin(account.login)
-  if (taken) return profile(taken.id)
+  if (taken) {
+    fail(`Логин «${account.login}» уже занят другим пользователем. Суперглавный не создан — задайте другой SUPER_LOGIN`, 500)
+  }
   const id = crypto.randomUUID()
   await usersRepo.insertSuperAdmin({
     id,

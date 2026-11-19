@@ -5,8 +5,12 @@ import { route } from '../middleware.js'
 import { createRateLimiter } from '../rateLimit.js'
 
 const LOGIN_WINDOW_MS = 60 * 1000
-const loginAccountLimiter = createRateLimiter({ windowMs: LOGIN_WINDOW_MS, max: 10 })
-const loginIpLimiter = createRateLimiter({ windowMs: LOGIN_WINDOW_MS, max: 30 })
+// Логин считается отдельно от адреса: десять ошибок на один логин с любых IP.
+// Потолок на IP выше, чтобы класс за общим NAT не запирал кабинет друг другу.
+const LOGIN_ACCOUNT_MAX = 10
+const LOGIN_IP_MAX = 120
+const loginAccountLimiter = createRateLimiter({ windowMs: LOGIN_WINDOW_MS, max: LOGIN_ACCOUNT_MAX })
+const loginIpLimiter = createRateLimiter({ windowMs: LOGIN_WINDOW_MS, max: LOGIN_IP_MAX })
 
 function sendSession(res, user, passwordHash, status = 200) {
   res.cookie('session', signSession(user.id, passwordHash), {
@@ -27,24 +31,29 @@ function sendSession(res, user, passwordHash, status = 200) {
 function loginKeys(req) {
   const ip = req.ip || 'unknown'
   const login = String(req.body?.login || '').trim().toLowerCase()
-  return { ip, account: `${ip}:${login}` }
+  return { ip, login }
 }
 
 export function registerAuthRoutes(app) {
   app.post('/api/login', route(async (req, res) => {
     const keys = loginKeys(req)
-    if (loginAccountLimiter.isBlocked(keys.account) || loginIpLimiter.isBlocked(keys.ip)) {
+    if (loginAccountLimiter.isBlocked(keys.login)) {
       res.status(429).json({ error: 'Слишком много попыток входа. Попробуйте через минуту' })
       return
     }
     const user = await authenticate(req.body?.login, req.body?.password)
     if (!user) {
-      loginAccountLimiter.hit(keys.account)
+      if (loginIpLimiter.isBlocked(keys.ip)) {
+        res.status(429).json({ error: 'Слишком много попыток входа. Попробуйте через минуту' })
+        return
+      }
+      loginAccountLimiter.hit(keys.login)
       loginIpLimiter.hit(keys.ip)
       res.status(401).json({ error: 'Неверный логин или пароль' })
       return
     }
-    loginAccountLimiter.reset(keys.account)
+    loginAccountLimiter.reset(keys.login)
+    loginIpLimiter.reset(keys.ip)
     sendSession(res, await profile(user.id), user.passwordHash)
   }))
 

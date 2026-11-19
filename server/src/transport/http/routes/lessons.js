@@ -21,6 +21,8 @@ import {
 } from '../../../services/lessons/index.js'
 import { requireUser, route } from '../middleware.js'
 
+const largeLessonJson = express.json({ limit: '8mb' })
+
 export function registerLessonRoutes(app) {
   const guard = requireUser
   app.get('/api/lessons', guard, route(async (req, res) => {
@@ -116,10 +118,10 @@ export function registerLessonRoutes(app) {
   app.post('/api/admin/lessons/pptx', guard, express.raw({ type: () => true, limit: '30mb' }), route(async (req, res) => {
     res.json(await importPptx(req.user, req.body))
   }))
-  app.post('/api/admin/lessons', guard, route(async (req, res) => {
+  app.post('/api/admin/lessons', guard, largeLessonJson, route(async (req, res) => {
     res.status(201).json(await createLesson(req.user, req.body || {}))
   }))
-  app.patch('/api/admin/lessons/:id', guard, route(async (req, res) => {
+  app.patch('/api/admin/lessons/:id', guard, largeLessonJson, route(async (req, res) => {
     res.json(await updateLesson(req.user, req.params.id, req.body || {}))
   }))
   app.delete('/api/admin/lessons/:id', guard, route(async (req, res) => {

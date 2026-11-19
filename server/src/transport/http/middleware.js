@@ -25,13 +25,20 @@ export function socketBridge(io) {
   }
 }
 
-// Уроки с картинками слайдов приходят большим JSON, остальным запросам хватает 256 КБ.
+// Большой JSON урока разбирается в самом маршруте, уже после проверки входа.
+function defersLessonJson(req) {
+  if (req.method !== 'POST' && req.method !== 'PATCH') return false
+  const path = (req.originalUrl || req.url || '').split('?')[0]
+  if (req.method === 'POST' && path === '/api/admin/lessons') return true
+  return req.method === 'PATCH' && /^\/api\/admin\/lessons\/[^/]+$/.test(path)
+}
+
+// Остальным запросам хватает 256 КБ. Тело урока с картинками слайдов сюда не попадает.
 export function jsonBody() {
-  const largeJson = express.json({ limit: '8mb' })
   const smallJson = express.json({ limit: '256kb' })
   return (req, res, next) => {
-    const lessonWrite = (req.url || '').startsWith('/api/admin/lessons')
-    return (lessonWrite ? largeJson : smallJson)(req, res, next)
+    if (defersLessonJson(req)) return next()
+    return smallJson(req, res, next)
   }
 }
 

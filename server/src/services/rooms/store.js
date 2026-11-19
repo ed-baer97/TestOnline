@@ -141,9 +141,11 @@ export function evictRoom(code) {
 }
 
 export async function flushRooms() {
-  for (const timer of rememberTimers.values()) clearTimeout(timer)
-  rememberTimers.clear()
   for (const room of rooms.values()) clearTimer(room)
+  // remember снимает отложенную запись и сразу кладёт текущее состояние в очередь,
+  // иначе ответ последних 1,5 секунд не попадает в Postgres при остановке.
+  const live = [...rooms.values()]
+  await Promise.all(live.map((room) => remember(room)))
   await Promise.allSettled([...saveTails.values()])
   saveTails.clear()
   rooms.clear()

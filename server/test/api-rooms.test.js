@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { evictRoom } from '../src/services/rooms/index.js'
+import { evictRoom, flushRooms, getRoom, scheduleRemember } from '../src/services/rooms/index.js'
 import { createHost, rawDb, useTestDatabase } from './helpers/db.js'
 import { call, login, startServer } from './helpers/http.js'
 
@@ -321,6 +321,31 @@ test('комната хранится в live_rooms: закрытие вопро
   await writePayload(third.room.code, { status: 'podium', podiumAt: Date.now() - 29 * 60 * 1000 })
   evictRoom(third.room.code)
   assert.equal((await call(base, `/api/rooms/${third.room.code}`)).body.status, 'podium')
+})
+
+test('остановка сохраняет ответ, который ещё ждал отложенной записи', async (t) => {
+  const server = await startServer()
+  t.after(() => server.close())
+  const { base } = server
+  const { room } = await setup(base, 'flush-host')
+  const live = getRoom(room.code)
+  live.players.set('late', {
+    id: 'late',
+    token: 'late-token',
+    name: 'Поздний',
+    score: 7,
+    answered: true,
+    answerIndex: 0,
+    lastPoints: 7,
+    lastCorrect: true,
+    answers: [],
+    online: true,
+    joinedAt: Date.now(),
+  })
+  scheduleRemember(live)
+  await flushRooms()
+  const stored = await readPayload(room.code)
+  assert.equal(stored.players.some((player) => player.name === 'Поздний' && player.score === 7), true)
 })
 
 test('optionIndex — целое число или строка из цифр, пустые и логические значения отклоняются', async (t) => {

@@ -195,6 +195,18 @@ test('разбор тела запроса: лимиты и битый JSON', as
   const lessonBody = await call(base, '/api/admin/lessons', { method: 'POST', cookie: rootCookie, json: { title: 'x', pad: 'a'.repeat(1024 * 1024) } })
   assert.equal(lessonBody.status, 400)
   assert.deepEqual(lessonBody.body, { error: 'Название урока: от 2 до 80 символов' })
+
+  const anonBroken = await call(base, '/api/admin/lessons', {
+    method: 'POST',
+    body: '{"title":',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  assert.equal(anonBroken.status, 401)
+  const anonLarge = await call(base, '/api/admin/lessons', {
+    method: 'POST',
+    json: { title: 'Длинный урок', pad: 'a'.repeat(300 * 1024) },
+  })
+  assert.equal(anonLarge.status, 401)
 })
 
 test('TRUST_PROXY включает trust proxy', async () => {
@@ -230,7 +242,7 @@ test('собранный клиент и запасной маршрут SPA', a
   assert.deepEqual(api.body, { error: 'Такого запроса нет' })
 })
 
-test('ограничение неудачных попыток входа: по логину и по IP', async (t) => {
+test('ограничение неудачных попыток входа: логин отдельно от адреса', async (t) => {
   process.env.TRUST_PROXY = '1'
   let server
   try {
@@ -240,6 +252,7 @@ test('ограничение неудачных попыток входа: по 
   }
   t.after(() => server.close())
   const { base } = server
+  await createHost('real.user', 'secret1')
 
   for (let i = 0; i < 10; i += 1) {
     const attempt = await call(base, '/api/login', {
@@ -251,23 +264,41 @@ test('ограничение неудачных попыток входа: по 
   }
   const accountBlocked = await call(base, '/api/login', {
     method: 'POST',
-    headers: { 'X-Forwarded-For': '198.51.100.10' },
+    headers: { 'X-Forwarded-For': '198.51.100.99' },
     json: { login: 'target.user', password: 'wrong' },
   })
   assert.equal(accountBlocked.status, 429)
+  const otherLogin = await call(base, '/api/login', {
+    method: 'POST',
+    headers: { 'X-Forwarded-For': '198.51.100.10' },
+    json: { login: 'someone.else', password: 'wrong' },
+  })
+  assert.equal(otherLogin.status, 401)
 
-  for (let i = 0; i < 30; i += 1) {
+  for (let i = 0; i < 120; i += 1) {
     const attempt = await call(base, '/api/login', {
       method: 'POST',
       headers: { 'X-Forwarded-For': '198.51.100.11' },
       json: { login: `spray.${i}`, password: 'wrong' },
     })
-    assert.equal(attempt.status, 401)
+    assert.equal(attempt.status, 401, `попытка ${i}`)
   }
   const ipBlocked = await call(base, '/api/login', {
     method: 'POST',
     headers: { 'X-Forwarded-For': '198.51.100.11' },
-    json: { login: 'spray.31', password: 'wrong' },
+    json: { login: 'spray.blocked', password: 'wrong' },
   })
   assert.equal(ipBlocked.status, 429)
+  const correct = await call(base, '/api/login', {
+    method: 'POST',
+    headers: { 'X-Forwarded-For': '198.51.100.11' },
+    json: { login: 'real.user', password: 'secret1' },
+  })
+  assert.equal(correct.status, 200)
+  const afterReset = await call(base, '/api/login', {
+    method: 'POST',
+    headers: { 'X-Forwarded-For': '198.51.100.11' },
+    json: { login: 'after.reset', password: 'wrong' },
+  })
+  assert.equal(afterReset.status, 401)
 })
