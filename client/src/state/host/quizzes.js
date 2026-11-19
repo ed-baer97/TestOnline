@@ -123,7 +123,7 @@ export function useQuizEditor(id, navigate, editorBase = '/host/quiz') {
       const data = await api.importQuestions(file)
       setQuestions(data.questions.map(padOptions))
       if (title.trim().length < 2) {
-        const name = file.name.replace(/\.xlsx$/i, '').trim().slice(0, 80)
+        const name = file.name.replace(/\.xlsx$/i, '').trim()
         if (name.length >= 2) setTitle(name)
       }
       setSaved(`Загружено вопросов: ${data.questions.length}. Время ответа — 20 секунд, его можно изменить.`)

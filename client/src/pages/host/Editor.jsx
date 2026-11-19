@@ -27,7 +27,7 @@ export default function Editor({ onLogout, embedded = false }) {
     <>
       <label className="title-field">
         Название квиза
-        <input value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} placeholder="География, 7 класс" />
+        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="География, 7 класс" />
       </label>
       <div className="import-row">
           <label className="excel file-button">

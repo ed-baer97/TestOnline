@@ -38,8 +38,8 @@ test('квизы ведущего: создание, правка, удален�
   assert.equal(demo.questionCount, 5)
 
   const invalid = [
-    [{}, 'Название от 2 до 80 символов'],
-    [{ title: 'x', questions: [] }, 'Название от 2 до 80 символов'],
+    [{}, 'Название короче 2 символов'],
+    [{ title: 'x', questions: [] }, 'Название короче 2 символов'],
     [{ title: 'Квиз', questions: [] }, 'Нужен хотя бы один вопрос, максимум 50'],
     [{ title: 'Квиз', questions: [{ text: 'a', timeLimit: 10, correctIndex: 0, options: [{ text: '1' }, { text: '2' }] }] }, 'Вопрос 1: текст от 2 до 200 символов'],
     [{ title: 'Квиз', questions: [{ text: 'Вопрос', timeLimit: 15, correctIndex: 0, options: [{ text: '1' }, { text: '2' }] }] }, 'Вопрос 1: время 10, 20, 30 или 60 секунд'],
@@ -52,7 +52,7 @@ test('квизы ведущего: создание, правка, удален�
   }
   const noBody = await call(base, '/api/quizzes', { method: 'POST', cookie })
   assert.equal(noBody.status, 400)
-  assert.deepEqual(noBody.body, { error: 'Название от 2 до 80 символов' })
+  assert.deepEqual(noBody.body, { error: 'Название короче 2 символов' })
 
   const created = await call(base, '/api/quizzes', { method: 'POST', cookie, json: geography })
   assert.equal(created.status, 201)
@@ -80,9 +80,10 @@ test('квизы ведущего: создание, правка, удален�
   const generated = await call(base, '/api/quizzes', {
     method: 'POST',
     cookie,
-    json: { title: 'Без id', questions: [{ text: 'Вопрос?', timeLimit: 60, correctIndex: 0, options: [{ text: 'А'.repeat(120) }, { text: 'Нет' }] }] },
+    json: { title: `Без id ${'А'.repeat(90)}`, questions: [{ text: 'Вопрос?', timeLimit: 60, correctIndex: 0, options: [{ text: 'А'.repeat(120) }, { text: 'Нет' }] }] },
   })
   assert.match(generated.body.questions[0].id, /^[0-9a-f-]{36}$/)
+  assert.equal(generated.body.title.length, 97)
   assert.equal(generated.body.questions[0].options[0].text.length, 120)
 
   await new Promise((resolve) => setTimeout(resolve, 5))
@@ -97,13 +98,15 @@ test('квизы ведущего: создание, правка, удален�
   assert.ok(updated.body.updatedAt > quiz.updatedAt)
   const badUpdate = await call(base, `/api/quizzes/${quiz.id}`, { method: 'PUT', cookie, json: { title: 'x' } })
   assert.equal(badUpdate.status, 400)
-  assert.deepEqual(badUpdate.body, { error: 'Название от 2 до 80 символов' })
+  assert.deepEqual(badUpdate.body, { error: 'Название короче 2 символов' })
   const missingUpdate = await call(base, '/api/quizzes/missing', { method: 'PUT', cookie, json: geography })
   assert.equal(missingUpdate.status, 404)
   assert.deepEqual(missingUpdate.body, { error: 'Квиз не найден' })
 
   const listed = await call(base, '/api/quizzes', { cookie })
-  assert.deepEqual(listed.body.quizzes.map((item) => item.title), ['География 2', 'Без id', 'Демо: общий кругозор'])
+  assert.equal(listed.body.quizzes[0].title, 'География 2')
+  assert.equal(listed.body.quizzes[1].title.length, 97)
+  assert.equal(listed.body.quizzes[2].title, 'Демо: общий кругозор')
 
   await createHost('other', 'secret2')
   const otherCookie = await login(base, 'other', 'secret2')

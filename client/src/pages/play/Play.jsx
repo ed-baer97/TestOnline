@@ -27,7 +27,7 @@ export default function Play() {
       <main className="auth">
         <form className="card" onSubmit={enter}>
           <Brand to="/" />
-          <h1>{info.title}</h1>
+          <h1 className="quiz-title">{info.title}</h1>
           {info.joinable ? <p className="muted">Напишите имя, которое увидит ведущий.</p> : <p className="form-error">Игра уже началась. Войти можно было до старта.</p>}
           <label>
             Ваше имя

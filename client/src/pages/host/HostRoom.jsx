@@ -56,7 +56,7 @@ export default function HostRoom() {
       {state.status === 'lobby' && (
         <section className="lobby">
           <div>
-            <h1>{state.title}</h1>
+            <h1 className="quiz-title">{state.title}</h1>
             <p className="lead">Покажите QR-код. Телефоны откроют игру сами, вводить код не нужно.</p>
             {joinUrl && <p className="join-url">{joinUrl}</p>}
             {joinUrl.includes('localhost') && <p className="form-error">Телефоны не откроют localhost. Зайдите на этот компьютер по адресу в локальной сети.</p>}

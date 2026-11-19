@@ -12,8 +12,8 @@ export function scorePoints(elapsedMs, timeLimitSec) {
 
 export function normalizeQuiz(input) {
   const title = cleanText(input?.title)
-  if (title.length < 2 || title.length > 80) {
-    throw new Error('Название от 2 до 80 символов')
+  if (title.length < 2) {
+    throw new Error('Название короче 2 символов')
   }
   if (!Array.isArray(input?.questions) || input.questions.length < 1 || input.questions.length > 50) {
     throw new Error('Нужен хотя бы один вопрос, максимум 50')
