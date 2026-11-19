@@ -23,7 +23,7 @@ export function uploadWithProgress(url, body, headers, onProgress) {
       onProgress?.(Math.min(100, Math.round((event.loaded / event.total) * 100)))
     }
     xhr.onload = () => {
-      let data = {}
+      let data
       try {
         data = JSON.parse(xhr.responseText || '{}')
       } catch {

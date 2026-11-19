@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { Brand } from '../components/Brand.jsx'
+import { EnvControls } from '../components/layout/topbar.jsx'
 import { useI18n } from '../state/i18n.jsx'
 import { useLogin } from '../state/session.js'
 
@@ -11,7 +12,10 @@ export default function Login() {
   return (
     <main className="auth">
       <form className="card" onSubmit={submit}>
-        <Brand to="/" />
+        <div className="auth-top">
+          <Brand to="/" />
+          <EnvControls />
+        </div>
         <h1>{t('Вход')}</h1>
         <p className="muted">{t('Логин и пароль выдаёт администратор.')}</p>
         <label>
@@ -32,7 +36,7 @@ export default function Login() {
             onChange={(event) => setPassword(event.target.value)}
           />
         </label>
-        {error && <p className="form-error">{error}</p>}
+        {error && <p className="form-error">{t(error)}</p>}
         <button className="primary" type="submit" disabled={pending}>{t('Войти')}</button>
         <Link className="text-link" to="/">{t('На главную')}</Link>
       </form>

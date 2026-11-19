@@ -36,14 +36,29 @@ export function registerLessonRoutes(app) {
       return
     }
     const total = media.size
+    if (total <= 0) {
+      res.status(404).json({ error: 'Видео не найдено' })
+      return
+    }
+    const etag = `W/"${total}-${Math.trunc(media.mtimeMs || 0)}"`
     res.setHeader('Accept-Ranges', 'bytes')
     res.setHeader('Content-Type', media.mime)
+    res.setHeader('Cache-Control', 'private, max-age=3600')
+    res.setHeader('ETag', etag)
+    if (!req.headers.range && req.headers['if-none-match'] === etag) {
+      res.status(304).end()
+      return
+    }
     const match = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ''))
     let start = 0
     let end = total - 1
     if (match) {
+      if (!match[1] && !match[2]) {
+        res.status(416).setHeader('Content-Range', `bytes */${total}`).end()
+        return
+      }
       const suffix = !match[1] && Boolean(match[2])
-      start = suffix ? Math.max(0, total - Number(match[2])) : match[1] ? Number(match[1]) : 0
+      start = suffix ? Math.max(0, total - Number(match[2])) : Number(match[1])
       end = match[2] && !suffix ? Number(match[2]) : total - 1
       if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= total) {
         res.status(416).setHeader('Content-Range', `bytes */${total}`).end()
@@ -59,6 +74,7 @@ export function registerLessonRoutes(app) {
       if (!res.headersSent) res.status(500).end()
       else res.destroy()
     })
+    res.on('close', () => stream.destroy())
     stream.pipe(res)
   }))
   app.get('/api/lessons/files/:fileId', guard, route(async (req, res) => {
@@ -83,14 +99,19 @@ export function registerLessonRoutes(app) {
   app.post('/api/lessons/:id/check', guard, route(async (req, res) => {
     res.json(await checkLesson(req.user, req.params.id, req.body?.answers))
   }))
-  app.put('/api/admin/lessons/:id/video', guard, express.raw({ type: () => true, limit: MAX_VIDEO }), route(async (req, res) => {
+  app.put('/api/admin/lessons/:id/video', guard, route(async (req, res) => {
+    const length = Number(req.headers['content-length'])
+    if (Number.isFinite(length) && length > MAX_VIDEO) {
+      res.status(413).json({ error: 'Видео больше 150 МБ' })
+      return
+    }
     let name
     try {
       name = decodeURIComponent(String(req.get('x-file-name') || ''))
     } catch {
       name = ''
     }
-    res.json(await saveLessonVideo(req.user, req.params.id, req.body, req.get('content-type'), name))
+    res.json(await saveLessonVideo(req.user, req.params.id, req, req.get('content-type'), name))
   }))
   app.post('/api/admin/lessons/pptx', guard, express.raw({ type: () => true, limit: '30mb' }), route(async (req, res) => {
     res.json(await importPptx(req.user, req.body))

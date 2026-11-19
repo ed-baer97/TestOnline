@@ -1,7 +1,21 @@
 import express from 'express'
+import { config } from '../../infrastructure/config.js'
 import { readSession } from '../../infrastructure/session.js'
-import { profile } from '../../services/accounts.js'
+import { sessionProfile } from '../../services/accounts.js'
 import { bootAdmin } from '../../services/bootstrap.js'
+
+export function securityHeaders() {
+  return (_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('X-Frame-Options', 'DENY')
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+    if (config.cookieSecure) {
+      res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    }
+    next()
+  }
+}
 
 // Запросы Socket.io, которые дошли до express (например, когда приложение — функция хостинга), отдаются движку io.
 export function socketBridge(io) {
@@ -13,9 +27,11 @@ export function socketBridge(io) {
 
 // Уроки с картинками слайдов приходят большим JSON, остальным запросам хватает 256 КБ.
 export function jsonBody() {
+  const largeJson = express.json({ limit: '8mb' })
+  const smallJson = express.json({ limit: '256kb' })
   return (req, res, next) => {
     const lessonWrite = (req.url || '').startsWith('/api/admin/lessons')
-    return express.json({ limit: lessonWrite ? '8mb' : '256kb' })(req, res, next)
+    return (lessonWrite ? largeJson : smallJson)(req, res, next)
   }
 }
 
@@ -32,11 +48,7 @@ export function bootstrap() {
 
 async function loadUser(req, res) {
   const session = readSession(req.cookies.session)
-  if (!session?.userId) {
-    res.status(401).json({ error: 'Нужен вход' })
-    return null
-  }
-  const user = await profile(session.userId)
+  const user = session?.userId ? await sessionProfile(session) : null
   if (!user) {
     res.status(401).json({ error: 'Нужен вход' })
     return null
@@ -79,7 +91,7 @@ export const requireQuizAuthor = guardRole(['host', 'super'])
 export function route(handler) {
   return (req, res) => {
     Promise.resolve(handler(req, res)).catch((error) => {
-      console.error(error)
+      if (!error.status || error.status >= 500) console.error(error)
       if (!res.headersSent) res.status(error.status || 500).json({ error: error.status ? error.message : 'Ошибка сервера' })
     })
   }

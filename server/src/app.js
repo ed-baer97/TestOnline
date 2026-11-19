@@ -3,19 +3,20 @@ import cookieParser from 'cookie-parser'
 import express from 'express'
 import { Server } from 'socket.io'
 import { config } from './infrastructure/config.js'
-import { bootstrap, jsonBody, socketBridge } from './transport/http/middleware.js'
+import { bootstrap, jsonBody, securityHeaders, socketBridge } from './transport/http/middleware.js'
 import { registerAdminRoutes } from './transport/http/routes/admin.js'
 import { registerAuthRoutes } from './transport/http/routes/auth.js'
 import { registerFallbacks } from './transport/http/routes/fallbacks.js'
 import { registerLessonRoutes } from './transport/http/routes/lessons.js'
 import { registerQuizRoutes } from './transport/http/routes/quizzes.js'
 import { registerRoomRoutes } from './transport/http/routes/rooms.js'
-import { registerSystemRoutes } from './transport/http/routes/system.js'
+import { closeServer, registerSystemRoutes } from './transport/http/routes/system.js'
 import { attachRealtime } from './transport/realtime/socket.js'
 
 // Сборка приложения: express, HTTP-сервер и Socket.io. Порядок middleware и маршрутов важен.
 export function createApp() {
   const app = express()
+  app.disable('x-powered-by')
   const httpServer = createServer(app)
   const io = new Server(httpServer, {
     pingInterval: 10000,
@@ -26,6 +27,7 @@ export function createApp() {
 
   if (config.trustProxy) app.set('trust proxy', 1)
 
+  app.use(securityHeaders())
   app.use(socketBridge(io))
   app.use(cookieParser())
   app.use(jsonBody())
@@ -40,5 +42,5 @@ export function createApp() {
   attachRealtime(io)
   registerFallbacks(app)
 
-  return { app, httpServer, io }
+  return { app, httpServer, io, shutdown: () => closeServer(httpServer, io) }
 }

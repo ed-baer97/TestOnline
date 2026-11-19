@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api/index.js'
+import { dropStatsCache } from './platformStats.js'
 
 const PAGE = 100
 
@@ -78,6 +79,7 @@ export function useLearners() {
     setNotice('')
     try {
       await api.createLearner(form)
+      dropStatsCache()
       setForm((current) => ({ ...current, displayName: '', login: '', password: '' }))
       setNotice('Тестируемый создан. Передайте логин и пароль.')
       await load()
@@ -91,6 +93,7 @@ export function useLearners() {
     setNotice('')
     try {
       await api.deleteLearner(person.id)
+      dropStatsCache()
       await load()
     } catch (err) {
       setError(err.message)
@@ -107,6 +110,7 @@ export function useLearners() {
     setImporting(true)
     try {
       const data = await api.importLearners(file)
+      dropStatsCache()
       setImported(data)
       if (data.created) setNotice(`Создано тестируемых: ${data.created}. Сохраните таблицу с паролями: повторно их увидеть нельзя.`)
       else if (!data.errors?.length) setNotice('В файле не нашлось новых тестируемых')
@@ -118,8 +122,10 @@ export function useLearners() {
     }
   }
 
-  function saveLearner(id, body) {
-    return api.updateLearner(id, body)
+  async function saveLearner(id, body) {
+    const saved = await api.updateLearner(id, body)
+    dropStatsCache()
+    return saved
   }
 
   return {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { evictRoom } from '../src/services/rooms/index.js'
 import { createHost, rawDb, useTestDatabase } from './helpers/db.js'
 import { call, login, startServer } from './helpers/http.js'
 
@@ -291,6 +292,7 @@ test('комната хранится в live_rooms: закрытие вопро
 
   await call(base, `/api/rooms/${code}/advance`, { method: 'POST', json: { hostToken } })
   await writePayload(code, { endsAt: Date.now() - 1000 })
+  evictRoom(code)
   const lazy = (await call(base, `/api/rooms/${code}/host?token=${hostToken}`)).body
   assert.equal(lazy.status, 'reveal')
   assert.equal(lazy.endsAt, null)
@@ -299,9 +301,11 @@ test('комната хранится в live_rooms: закрытие вопро
   assert.deepEqual(timedOut, { name: 'Аня', score: 0, answered: false, answerIndex: null, lastPoints: 0, lastCorrect: false, rank: 1 })
 
   await writePayload(code, { players: [{ ...withPlayer.players[0], name: 'Аня из базы' }] })
+  evictRoom(code)
   assert.equal((await call(base, `/api/rooms/${code}/host?token=${hostToken}`)).body.players[0].name, 'Аня из базы')
 
   await writePayload(code, { createdAt: Date.now() - 5 * 60 * 60 * 1000 })
+  evictRoom(code)
   const expired = await call(base, `/api/rooms/${code}`)
   assert.equal(expired.status, 404)
   assert.deepEqual(expired.body, { error: 'Комната не найдена' })
@@ -309,11 +313,13 @@ test('комната хранится в live_rooms: закрытие вопро
 
   const second = await setup(base, 'keeper2')
   await writePayload(second.room.code, { status: 'podium', podiumAt: Date.now() - 31 * 60 * 1000 })
+  evictRoom(second.room.code)
   assert.equal((await call(base, `/api/rooms/${second.room.code}/host?token=${second.room.hostToken}`)).status, 404)
   assert.equal(await readPayload(second.room.code), null)
 
   const third = await setup(base, 'keeper3')
   await writePayload(third.room.code, { status: 'podium', podiumAt: Date.now() - 29 * 60 * 1000 })
+  evictRoom(third.room.code)
   assert.equal((await call(base, `/api/rooms/${third.room.code}`)).body.status, 'podium')
 })
 
@@ -348,4 +354,55 @@ test('в комнате не больше 300 участников', async (t) =
   assert.equal(full.status, 400)
   assert.deepEqual(full.body, { error: 'Комната заполнена' })
   assert.equal((await call(base, `/api/rooms/${room.code}`)).body.playerCount, 300)
+})
+
+test('40 одновременных входов и ответов в комнате не теряются', async (t) => {
+  const server = await startServer()
+  t.after(() => server.close())
+  const { base } = server
+  const { room } = await setup(base, 'burst')
+  const joins = await Promise.all(
+    Array.from({ length: 40 }, (_, i) => call(base, `/api/rooms/${room.code}/join`, {
+      method: 'POST',
+      json: { name: `Участник ${i + 1}`, playerToken: token(i + 1) },
+    })),
+  )
+  assert.ok(joins.every((res) => res.status === 200))
+  assert.equal((await call(base, `/api/rooms/${room.code}`)).body.playerCount, 40)
+
+  await call(base, `/api/rooms/${room.code}/advance`, { method: 'POST', json: { hostToken: room.hostToken } })
+  const answers = await Promise.all(
+    Array.from({ length: 40 }, (_, i) => call(base, `/api/rooms/${room.code}/answer`, {
+      method: 'POST',
+      json: { playerToken: token(i + 1), optionIndex: i % 3 },
+    })),
+  )
+  assert.ok(answers.every((res) => res.status === 200 && res.body.ok))
+  const hostState = (await call(base, `/api/rooms/${room.code}/host?token=${room.hostToken}`)).body
+  assert.equal(hostState.playerCount, 40)
+  assert.equal(hostState.answeredCount, 40)
+})
+
+test('ограничение перебора кодов комнат возвращает 429 после 30 промахов с одного IP', async (t) => {
+  process.env.TRUST_PROXY = '1'
+  let server
+  try {
+    server = await startServer()
+  } finally {
+    delete process.env.TRUST_PROXY
+  }
+  t.after(() => server.close())
+  const { base } = server
+
+  for (let i = 0; i < 30; i += 1) {
+    const res = await call(base, `/api/rooms/${String(900000 + i)}`, {
+      headers: { 'X-Forwarded-For': '203.0.113.42' },
+    })
+    assert.equal(res.status, 404)
+  }
+  const blocked = await call(base, '/api/rooms/999999', {
+    headers: { 'X-Forwarded-For': '203.0.113.42' },
+  })
+  assert.equal(blocked.status, 429)
+  assert.deepEqual(blocked.body, { error: 'Слишком много запросов. Попробуйте через минуту' })
 })

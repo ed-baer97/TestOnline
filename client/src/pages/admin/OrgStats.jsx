@@ -5,7 +5,7 @@ import { Empty, KpiGrid, Rate, Segments, StatsSkeleton } from '../../components/
 import { DataTable } from '../../components/table.jsx'
 import { BANDS } from '../../lib/bands.js'
 import { useOrgStats } from '../../state/admin/platformStats.js'
-import { MIN_PERSON_SAMPLE, formatDate, formatNumber, rateOf } from '../../state/format.js'
+import { MIN_PERSON_SAMPLE, formatDate, formatNumber, rateOf } from '../../lib/format.js'
 import { pick, useI18n } from '../../state/i18n.jsx'
 import { MistakeTable, StatsHeader, rateColumn } from './statsParts.jsx'
 
@@ -65,13 +65,14 @@ function OrgStatsBody({ part, stats, error, loading, base, crumbs }) {
 }
 
 function OrgKpis({ stats }) {
+  const { lang } = useI18n()
   const totals = stats.totals
   return (
     <KpiGrid items={[
-      { label: 'Тестируемых', value: totals.learners, hint: 'проходили тест: {count}', vars: { count: formatNumber(totals.activeLearners) } },
+      { label: 'Тестируемых', value: totals.learners, hint: 'проходили тест: {count}', vars: { count: formatNumber(totals.activeLearners, lang) } },
       { label: 'Попыток', value: totals.attempts, hint: 'тесты уроков' },
       { label: 'Доля верных', node: <Rate correct={totals.correct} answered={totals.answered} />, hint: 'тесты уроков' },
-      { label: 'Запусков квизов', value: totals.quizRuns, hint: 'участников: {count}', vars: { count: formatNumber(totals.quizParticipants) } },
+      { label: 'Запусков квизов', value: totals.quizRuns, hint: 'участников: {count}', vars: { count: formatNumber(totals.quizParticipants, lang) } },
       { label: 'Доля верных в квизах', node: <Rate correct={totals.quizCorrect} answered={totals.quizAnswered} />, hint: 'приватные запуски' },
     ]} />
   )
@@ -88,7 +89,7 @@ function ClassLearners({ stats, classId }) {
 }
 
 function ClassesPart({ stats }) {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   if (!stats.classes.length) return <Empty text="Нет классов" hint="Классы создаются в разделе «Классы»." />
   const rows = stats.classes
   return (
@@ -103,7 +104,7 @@ function ClassesPart({ stats }) {
         <BarChart
           caption={t('Проходили тест, человек')}
           order="value"
-          items={rows.map((item) => ({ key: item.id, label: item.caption, value: item.active, hint: t('Всего в классе: {count}', { count: formatNumber(item.learners) }) }))}
+          items={rows.map((item) => ({ key: item.id, label: item.caption, value: item.active, hint: t('Всего в классе: {count}', { count: formatNumber(item.learners, lang) }) }))}
         />
       </div>
       <DataTable
@@ -128,7 +129,7 @@ function ClassesPart({ stats }) {
 }
 
 function LearnerTable({ rows, plain = false, compact = false, withClass = true }) {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   return (
     <DataTable
       plain={plain}
@@ -145,7 +146,7 @@ function LearnerTable({ rows, plain = false, compact = false, withClass = true }
           key: 'lastAt',
           label: 'Последняя попытка',
           value: (row) => row.lastAt || null,
-          render: (row) => (row.lastAt ? formatDate(row.lastAt, true) : <span className="muted">{t('не проходил')}</span>),
+          render: (row) => (row.lastAt ? formatDate(row.lastAt, true, lang) : <span className="muted">{t('не проходил')}</span>),
           exportValue: (row) => row.lastAt || '',
         },
       ]}
@@ -180,7 +181,7 @@ function distribution(rows, t) {
 }
 
 function LearnersPart({ stats }) {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const rows = stats.learners
   const spread = useMemo(() => distribution(rows, t), [rows, t])
   if (!rows.length) return <Empty text="нет тестируемых" hint="Тестируемые добавляются в разделе «Тестируемые», в том числе из Excel." />
@@ -196,7 +197,7 @@ function LearnersPart({ stats }) {
         <BarChart
           caption={t('Проходили тест по классам, человек')}
           order="value"
-          items={stats.classes.map((item) => ({ key: item.id, label: item.caption, value: item.active, hint: t('Всего в классе: {count}', { count: formatNumber(item.learners) }) }))}
+          items={stats.classes.map((item) => ({ key: item.id, label: item.caption, value: item.active, hint: t('Всего в классе: {count}', { count: formatNumber(item.learners, lang) }) }))}
         />
       </div>
       <LearnerTable rows={rows} />
@@ -246,7 +247,7 @@ function LessonsPart({ stats }) {
 }
 
 function QuizzesPart({ stats }) {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const rows = stats.quizzes
   const mistakes = (stats.mistakes || []).filter((item) => item.kind === 'Квиз')
   if (!rows.length) return <Empty text="Нет квизов" hint="Здесь появятся приватные запуски учебных квизов для классов этой организации." />
@@ -272,7 +273,7 @@ function QuizzesPart({ stats }) {
           { key: 'runs', label: 'Запусков', num: true },
           { key: 'participants', label: 'Участников', num: true },
           rateColumn(),
-          { key: 'lastAt', label: 'Последний запуск', value: (row) => row.lastAt || null, render: (row) => formatDate(row.lastAt, true), exportValue: (row) => row.lastAt || '' },
+          { key: 'lastAt', label: 'Последний запуск', value: (row) => row.lastAt || null, render: (row) => formatDate(row.lastAt, true, lang), exportValue: (row) => row.lastAt || '' },
         ]}
         rows={rows}
         defaultSort={{ key: 'lastAt', dir: 'desc' }}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Brand } from '../components/Brand.jsx'
+import { EnvControls } from '../components/layout/topbar.jsx'
 import { useI18n } from '../state/i18n.jsx'
 
 const FEATURES = [
@@ -39,7 +40,10 @@ export default function Home() {
     <div className="landing">
       <header className="landing-bar">
         <Brand />
-        <Link className="ghost" to="/login">{t('Войти')}</Link>
+        <div className="top-actions">
+          <EnvControls />
+          <Link className="ghost" to="/login">{t('Войти')}</Link>
+        </div>
       </header>
 
       <main>
@@ -53,7 +57,7 @@ export default function Home() {
             </div>
             <form className="join-form" onSubmit={joinByCode}>
               <label>
-                <span className="muted">Есть код квиза?</span>
+                <span className="muted">{t('Есть код квиза?')}</span>
                 <input
                   inputMode="numeric"
                   placeholder="000 000"
@@ -63,7 +67,7 @@ export default function Home() {
                 />
               </label>
               <button className="ghost" type="submit" disabled={pin.replace(/\D/g, '').length < 6}>
-                Войти в игру
+                {t('Войти в игру')}
               </button>
             </form>
           </div>

@@ -19,6 +19,7 @@ export const db = {
   get: async (...args) => (await ready()).get(...args),
   all: async (...args) => (await ready()).all(...args),
   run: async (...args) => (await ready()).run(...args),
+  tx: async (fn) => (await ready()).tx(fn),
 }
 
 export async function closeDb() {

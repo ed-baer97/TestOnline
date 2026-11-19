@@ -1,21 +1,11 @@
 import { useState } from 'react'
-import { Link, NavLink, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { GroupChecks, Notice } from '../../components/admin/ui.jsx'
 import { EMPTY_GROUPS, groupLabels } from '../../lib/bands.js'
 import { blankFrame, blankQuestion, useLessonEditor, useMaterialList } from '../../state/admin/materials.js'
 import { useQuizList } from '../../state/host/quizzes.js'
+import { useI18n } from '../../state/i18n.jsx'
 import Editor from '../host/Editor.jsx'
-
-function MaterialTabs() {
-  const { pathname } = useLocation()
-  const quizzes = pathname.startsWith('/admin/quizzes')
-  return (
-    <nav className="host-tabs" aria-label="Материалы">
-      <NavLink to="/admin/materials" className={() => (quizzes ? undefined : 'active')}>Уроки</NavLink>
-      <NavLink to="/admin/quizzes" className={() => (quizzes ? 'active' : undefined)}>Квизы</NavLink>
-    </nav>
-  )
-}
 
 const TONES = [
   { id: 'sun', label: 'Солнце' },
@@ -25,27 +15,33 @@ const TONES = [
 ]
 
 function LessonRow({ lesson, sections, onMove }) {
+  const { t } = useI18n()
   return (
     <article className="lesson-card">
       <div>
         <h2>{lesson.title}</h2>
-        <p className="muted">{lesson.format === 'video' ? `Видео · ${lesson.questionCount} вопр.` : `Презентация · ${lesson.slideCount} сл. · ${lesson.questionCount} вопр.`}</p>
+        <p className="muted">
+          {lesson.format === 'video'
+            ? t('Видео · {count} вопр.', { count: lesson.questionCount })
+            : t('Презентация · {slides} сл. · {count} вопр.', { slides: lesson.slideCount, count: lesson.questionCount })}
+        </p>
       </div>
       <div className="row-actions">
         <select value={lesson.section?.id || ''} onChange={(event) => event.target.value && onMove(lesson.id, event.target.value)}>
-          {!lesson.section && <option value="">В раздел…</option>}
+          {!lesson.section && <option value="">{t('В раздел…')}</option>}
           {sections.map((section) => (
             <option key={section.id} value={section.id}>{section.name}</option>
           ))}
         </select>
-        <Link className="primary" to={`/admin/materials/${lesson.id}/play`}>Открыть</Link>
-        <Link className="ghost" to={`/admin/materials/${lesson.id}`}>Изменить</Link>
+        <Link className="primary" to={`/admin/materials/${lesson.id}/play`}>{t('Открыть')}</Link>
+        <Link className="ghost" to={`/admin/materials/${lesson.id}`}>{t('Изменить')}</Link>
       </div>
     </article>
   )
 }
 
 export function MaterialList() {
+  const { t } = useI18n()
   const { lessons, sections, error, createSection, saveSection, removeSection, moveLesson } = useMaterialList()
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -58,7 +54,10 @@ export function MaterialList() {
   }
 
   function patchDraft(section, patch) {
-    setDrafts((current) => ({ ...current, [section.id]: { ...draftOf(section), ...patch } }))
+    setDrafts((current) => {
+      const base = current[section.id] || { name: section.name, groups: section.groups }
+      return { ...current, [section.id]: { ...base, ...patch } }
+    })
   }
 
   async function submitSection(event) {
@@ -89,7 +88,7 @@ export function MaterialList() {
   }
 
   function dropSection(section) {
-    if (!window.confirm(`Удалить раздел «${section.name}»? Уроки останутся без раздела.`)) return
+    if (!window.confirm(t('Удалить раздел «{name}»? Уроки останутся без раздела.', { name: section.name }))) return
     setFormError('')
     removeSection(section.id).catch((err) => setFormError(err.message))
   }
@@ -98,25 +97,24 @@ export function MaterialList() {
 
   return (
     <section className="stack">
-      <MaterialTabs />
       <div className="section-head">
-        <h1>Материалы</h1>
-        <button className="primary" type="button" onClick={() => setCreating((value) => !value)}>Новый раздел</button>
+        <h1>{t('Материалы')}</h1>
+        <button className="primary" type="button" onClick={() => setCreating((value) => !value)}>{t('Новый раздел')}</button>
       </div>
-      {error && <p className="form-error">{error}</p>}
-      {formError && <p className="form-error">{formError}</p>}
+      {error && <p className="form-error">{t(error)}</p>}
+      {formError && <p className="form-error">{t(formError)}</p>}
       {creating && (
         <form className="stack" onSubmit={submitSection}>
           <label>
-            Название раздела
-            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Солнечная система" />
+            {t('Название раздела')}
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Солнечная система')} />
           </label>
-          <p className="muted">Показывать в блоках</p>
+          <p className="muted">{t('Показывать в блоках')}</p>
           <GroupChecks groups={groups} onChange={setGroups} />
-          <button className="primary" type="submit">Создать раздел</button>
+          <button className="primary" type="submit">{t('Создать раздел')}</button>
         </form>
       )}
-      {lessons === null && !error && <p className="muted">Загрузка…</p>}
+      {lessons === null && !error && <p className="muted">{t('Загрузка…')}</p>}
       <div className="stack">
         {sections.map((section) => {
           const draft = draftOf(section)
@@ -125,17 +123,17 @@ export function MaterialList() {
             <section className="stack" key={section.id}>
               <div className="section-head">
                 <h2>{section.name}</h2>
-                <Link className="primary" to={`/admin/materials/new?section=${section.id}`}>+ Урок</Link>
+                <Link className="primary" to={`/admin/materials/new?section=${section.id}`}>{t('+ Урок')}</Link>
               </div>
               <label>
-                Название
+                {t('Название')}
                 <input value={draft.name} onChange={(event) => patchDraft(section, { name: event.target.value })} />
               </label>
               <GroupChecks groups={draft.groups} onChange={(next) => patchDraft(section, { groups: next })} />
-              <p className="muted">{groupLabels(draft.groups) || 'Блоки не выбраны'}</p>
+              <p className="muted">{groupLabels(draft.groups, t) || t('Блоки не выбраны')}</p>
               <div className="row-actions">
-                <button className="primary" type="button" onClick={() => keepSection(section)}>Сохранить раздел</button>
-                <button className="ghost" type="button" onClick={() => dropSection(section)}>Удалить раздел</button>
+                <button className="primary" type="button" onClick={() => keepSection(section)}>{t('Сохранить раздел')}</button>
+                <button className="ghost" type="button" onClick={() => dropSection(section)}>{t('Удалить раздел')}</button>
               </div>
               {inside.map((lesson) => <LessonRow lesson={lesson} sections={sections} onMove={moveLesson} key={lesson.id} />)}
             </section>
@@ -143,7 +141,7 @@ export function MaterialList() {
         })}
         {loose.length > 0 && (
           <section className="stack">
-            <h2>Без раздела</h2>
+            <h2>{t('Без раздела')}</h2>
             {loose.map((lesson) => <LessonRow lesson={lesson} sections={sections} onMove={moveLesson} key={lesson.id} />)}
           </section>
         )}
@@ -153,6 +151,7 @@ export function MaterialList() {
 }
 
 export function LessonEditor() {
+  const { t } = useI18n()
   const { id } = useParams()
   const navigate = useNavigate()
   const [params] = useSearchParams()
@@ -163,55 +162,53 @@ export function LessonEditor() {
   } = useLessonEditor(id, navigate, params.get('section') || '')
 
   function confirmRemove() {
-    if (window.confirm(`Удалить урок «${title}»?`)) remove()
+    if (window.confirm(t('Удалить урок «{name}»?', { name: title }))) remove()
   }
 
-  if (!ready && !error) return <p className="muted">Загрузка…</p>
+  if (!ready && !error) return <p className="muted">{t('Загрузка…')}</p>
 
   return (
-    <>
-    <MaterialTabs />
     <form className="stack" onSubmit={save}>
       <div className="section-head">
-        <h1>{isNew ? 'Новый урок' : 'Урок'}</h1>
+        <h1>{t(isNew ? 'Новый урок' : 'Урок')}</h1>
         <div className="row-actions">
-          {!isNew && <Link className="ghost" to={`/admin/materials/${id}/play`}>Открыть</Link>}
-          {!isNew && <button className="ghost" type="button" onClick={confirmRemove}>Удалить</button>}
+          {!isNew && <Link className="ghost" to={`/admin/materials/${id}/play`}>{t('Открыть')}</Link>}
+          {!isNew && <button className="ghost" type="button" onClick={confirmRemove}>{t('Удалить')}</button>}
         </div>
       </div>
       <Notice error={error} notice={notice} />
       <label>
-        Название
-        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Солнечная система" />
+        {t('Название')}
+        <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t('Солнечная система')} />
       </label>
       <label>
-        Раздел
+        {t('Раздел')}
         <select value={sectionId} onChange={(event) => setSectionId(event.target.value)}>
-          <option value="">Выберите раздел</option>
+          <option value="">{t('Выберите раздел')}</option>
           {sections.map((section) => (
             <option key={section.id} value={section.id}>{section.name}</option>
           ))}
         </select>
       </label>
-      {sectionId && <p className="muted">{groupLabels(sections.find((section) => section.id === sectionId)?.groups)}</p>}
+      {sectionId && <p className="muted">{groupLabels(sections.find((section) => section.id === sectionId)?.groups, t)}</p>}
       <div className="tone-row">
-        <button className={`ghost ${format === 'slides' ? 'on' : ''}`} type="button" onClick={() => setFormat('slides')}>Презентация</button>
-        <button className={`ghost ${format === 'video' ? 'on' : ''}`} type="button" onClick={() => setFormat('video')}>Видео</button>
+        <button className={`ghost ${format === 'slides' ? 'on' : ''}`} type="button" onClick={() => setFormat('slides')}>{t('Презентация')}</button>
+        <button className={`ghost ${format === 'video' ? 'on' : ''}`} type="button" onClick={() => setFormat('video')}>{t('Видео')}</button>
       </div>
       {format === 'video' ? (
         <section className="stack">
           <div className="section-head">
-            <h2>Видео</h2>
+            <h2>{t('Видео')}</h2>
             <label className="primary file-button">
-              {videoName ? 'Заменить ролик' : 'Загрузить ролик'}
+              {t(videoName ? 'Заменить ролик' : 'Загрузить ролик')}
               <input className="sr-only" type="file" accept="video/mp4,video/webm,video/quicktime,video/ogg" onChange={pickVideo} />
             </label>
           </div>
           {videoName && <p className="muted">{videoName}</p>}
           {uploadProgress != null && (
             <div className="upload-progress">
-              <p className="muted">Загрузка видео {uploadProgress}%</p>
-              <div className="upload-track" role="progressbar" aria-valuenow={uploadProgress} aria-valuemin={0} aria-valuemax={100} aria-label="Загрузка видео">
+              <p className="muted">{t('Загрузка видео {percent}%', { percent: uploadProgress })}</p>
+              <div className="upload-track" role="progressbar" aria-valuenow={uploadProgress} aria-valuemin={0} aria-valuemax={100} aria-label={t('Загрузка видео')}>
                 <div style={{ width: `${uploadProgress}%` }} />
               </div>
             </div>
@@ -221,11 +218,11 @@ export function LessonEditor() {
       ) : (
       <section className="stack">
         <div className="section-head">
-          <h2>Презентация</h2>
+          <h2>{t('Презентация')}</h2>
           <div className="row-actions">
-            <button className="ghost" type="button" onClick={() => setSlides((current) => [...current, blankFrame()])}>Текстовый слайд</button>
+            <button className="ghost" type="button" onClick={() => setSlides((current) => [...current, blankFrame()])}>{t('Текстовый слайд')}</button>
             <label className="primary file-button">
-              Загрузить презентацию
+              {t('Загрузить презентацию')}
               <input className="sr-only" type="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" onChange={upload} />
             </label>
           </div>
@@ -233,18 +230,18 @@ export function LessonEditor() {
         {slides.map((slide, index) => (
           <article className="question-card slide-editor" key={slide.id}>
             <header>
-              <strong>Слайд {index + 1}</strong>
+              <strong>{t('Слайд {n}', { n: index + 1 })}</strong>
               <div className="row-actions">
-                <button className="ghost" type="button" onClick={() => moveSlide(slide.id, -1)}>Выше</button>
-                <button className="ghost" type="button" onClick={() => moveSlide(slide.id, 1)}>Ниже</button>
-                <button className="ghost" type="button" onClick={() => setSlides((current) => current.filter((item) => item.id !== slide.id))}>Удалить</button>
+                <button className="ghost" type="button" onClick={() => moveSlide(slide.id, -1)}>{t('Выше')}</button>
+                <button className="ghost" type="button" onClick={() => moveSlide(slide.id, 1)}>{t('Ниже')}</button>
+                <button className="ghost" type="button" onClick={() => setSlides((current) => current.filter((item) => item.id !== slide.id))}>{t('Удалить')}</button>
               </div>
             </header>
             {slide.kind === 'image' ? (
               <>
                 {(slide.dataUrl || slide.imageUrl) && <img src={slide.dataUrl || slide.imageUrl} alt="" style={{ width: '100%', maxHeight: 220, objectFit: 'contain', borderRadius: 16 }} />}
                 <label>
-                  Подпись
+                  {t('Подпись')}
                   <input value={slide.caption || ''} onChange={(event) => patchSlide(slide.id, { caption: event.target.value })} />
                 </label>
               </>
@@ -258,20 +255,20 @@ export function LessonEditor() {
                       type="button"
                       onClick={() => patchSlide(slide.id, { tone: tone.id })}
                     >
-                      {tone.label}
+                      {t(tone.label)}
                     </button>
                   ))}
                 </div>
                 <label>
-                  Подпись
-                  <input value={slide.kicker || ''} onChange={(event) => patchSlide(slide.id, { kicker: event.target.value })} placeholder="Слайд 1" />
+                  {t('Подпись')}
+                  <input value={slide.kicker || ''} onChange={(event) => patchSlide(slide.id, { kicker: event.target.value })} placeholder={t('Слайд 1')} />
                 </label>
                 <label>
-                  Заголовок
+                  {t('Заголовок')}
                   <input value={slide.title} onChange={(event) => patchSlide(slide.id, { title: event.target.value })} />
                 </label>
                 <label>
-                  Текст, каждая строка отдельно
+                  {t('Текст, каждая строка отдельно')}
                   <textarea
                     value={slide.lines.join('\n')}
                     onChange={(event) => patchSlide(slide.id, { lines: event.target.value.split('\n') })}
@@ -286,17 +283,17 @@ export function LessonEditor() {
       )}
       <section className="stack">
         <div className="section-head">
-          <h2>Тест</h2>
-          <button className="ghost" type="button" onClick={() => setQuestions((current) => [...current, blankQuestion()])}>Вопрос</button>
+          <h2>{t('Тест')}</h2>
+          <button className="ghost" type="button" onClick={() => setQuestions((current) => [...current, blankQuestion()])}>{t('Вопрос')}</button>
         </div>
         {questions.map((question, questionIndex) => (
           <article className="question-card" key={question.id}>
             <header>
-              <strong>Вопрос {questionIndex + 1}</strong>
-              <button className="ghost" type="button" onClick={() => setQuestions((current) => current.filter((item) => item.id !== question.id))}>Удалить</button>
+              <strong>{t('Вопрос {n}', { n: questionIndex + 1 })}</strong>
+              <button className="ghost" type="button" onClick={() => setQuestions((current) => current.filter((item) => item.id !== question.id))}>{t('Удалить')}</button>
             </header>
             <label>
-              Текст
+              {t('Текст')}
               <textarea
                 rows={3}
                 value={question.text}
@@ -318,7 +315,7 @@ export function LessonEditor() {
                   />
                   <input
                     value={option.text}
-                    placeholder={`Вариант ${optionIndex + 1}`}
+                    placeholder={t('Вариант {n}', { n: optionIndex + 1 })}
                     onChange={(event) => setQuestions((current) => current.map((item) => {
                       if (item.id !== question.id) return item
                       const options = item.options.map((choice, index) => (
@@ -333,42 +330,41 @@ export function LessonEditor() {
           </article>
         ))}
       </section>
-      <button className="primary add" type="submit" disabled={saving}>{saving ? 'Сохранение…' : 'Сохранить урок'}</button>
+      <button className="primary add" type="submit" disabled={saving}>{t(saving ? 'Сохранение…' : 'Сохранить урок')}</button>
     </form>
-    </>
   )
 }
 
 export function MaterialQuizzes() {
+  const { t } = useI18n()
   const navigate = useNavigate()
   const { quizzes, error, start, remove } = useQuizList(navigate)
 
   function confirmRemove(quiz) {
-    if (window.confirm(`Удалить «${quiz.title}»?`)) remove(quiz)
+    if (window.confirm(t('Удалить «{name}»?', { name: quiz.title }))) remove(quiz)
   }
 
   return (
     <section className="stack">
-      <MaterialTabs />
       <div className="section-head">
-        <h1>Квизы</h1>
-        <Link className="primary" to="/admin/quizzes/new">Новый квиз</Link>
+        <h1>{t('Квизы')}</h1>
+        <Link className="primary" to="/admin/quizzes/new">{t('Новый квиз')}</Link>
       </div>
-      {error && <p className="form-error">{error}</p>}
-      {quizzes === null && !error && <p className="muted">Загрузка…</p>}
-      {quizzes?.length === 0 && <p className="muted">Пока нет квизов. Создайте первый.</p>}
+      {error && <p className="form-error">{t(error)}</p>}
+      {quizzes === null && !error && <p className="muted">{t('Загрузка…')}</p>}
+      {quizzes?.length === 0 && <p className="muted">{t('Пока нет квизов. Создайте первый.')}</p>}
       <div className="quiz-list">
         {quizzes?.map((quiz) => (
           <article className="card quiz-card" key={quiz.id}>
             <div>
               <h2>{quiz.title}</h2>
-              <p className="muted">{quiz.questionCount} вопр.</p>
+              <p className="muted">{t('{count} вопр.', { count: quiz.questionCount })}</p>
             </div>
             <div className="top-actions">
-              <button className="primary" type="button" onClick={() => start(quiz.id)}>Запустить</button>
-              <Link to={`/admin/quizzes/${quiz.id}/stats`}>Статистика</Link>
-              <Link to={`/admin/quizzes/${quiz.id}`}>Править</Link>
-              <button className="ghost" type="button" onClick={() => confirmRemove(quiz)}>Удалить</button>
+              <button className="primary" type="button" onClick={() => start(quiz.id)}>{t('Запустить')}</button>
+              <Link to={`/admin/quizzes/${quiz.id}/stats`}>{t('Статистика')}</Link>
+              <Link to={`/admin/quizzes/${quiz.id}`}>{t('Править')}</Link>
+              <button className="ghost" type="button" onClick={() => confirmRemove(quiz)}>{t('Удалить')}</button>
             </div>
           </article>
         ))}
@@ -380,7 +376,6 @@ export function MaterialQuizzes() {
 export function MaterialQuizEditor() {
   return (
     <section className="stack">
-      <MaterialTabs />
       <Editor embedded />
     </section>
   )

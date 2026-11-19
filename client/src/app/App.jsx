@@ -1,5 +1,4 @@
 import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
-import { ThemeToggle } from '../components/ThemeToggle.jsx'
 import Admin from '../pages/admin/Admin.jsx'
 import Dashboard from '../pages/host/Dashboard.jsx'
 import Editor from '../pages/host/Editor.jsx'
@@ -11,7 +10,7 @@ import Login from '../pages/Login.jsx'
 import Play from '../pages/play/Play.jsx'
 import Quizzes from '../pages/host/Quizzes.jsx'
 import Stats from '../pages/host/Stats.jsx'
-import { I18nProvider, LanguageToggle } from '../state/i18n.jsx'
+import { I18nProvider } from '../state/i18n.jsx'
 import { signOut } from '../state/session.js'
 import { RequireAuth } from './RequireAuth.jsx'
 
@@ -25,10 +24,6 @@ export default function App() {
 
   return (
     <I18nProvider>
-    <div className="env-controls">
-      <LanguageToggle />
-      <ThemeToggle />
-    </div>
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />

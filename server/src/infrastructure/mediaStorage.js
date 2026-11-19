@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { config } from './config.js'
@@ -34,10 +35,66 @@ export async function writeMediaFile(filePath, bytes) {
   await fs.promises.writeFile(filePath, bytes)
 }
 
+async function replaceFile(tmpPath, filePath) {
+  try {
+    await fs.promises.rename(tmpPath, filePath)
+  } catch {
+    await fs.promises.copyFile(tmpPath, filePath)
+    await fs.promises.rm(tmpPath, { force: true })
+  }
+}
+
+export async function writeVideoStreamOrBuffer(filePath, source, maxBytes, { onEmpty, onTooLarge }) {
+  const tmpPath = `${filePath}.${crypto.randomUUID()}.tmp`
+  try {
+    if (Buffer.isBuffer(source) || source instanceof Uint8Array) {
+      if (!source.length) throw onEmpty()
+      if (source.length > maxBytes) throw onTooLarge()
+      await fs.promises.writeFile(tmpPath, source)
+    } else if (source && typeof source.pipe === 'function') {
+      let total = 0
+      await new Promise((resolve, reject) => {
+        const out = fs.createWriteStream(tmpPath)
+        let settled = false
+        const stop = (error) => {
+          if (settled) return
+          settled = true
+          source.unpipe(out)
+          source.resume()
+          out.destroy()
+          reject(error)
+        }
+        source.on('data', (chunk) => {
+          total += chunk.length
+          if (total > maxBytes) stop(onTooLarge())
+        })
+        source.on('error', stop)
+        source.on('aborted', () => stop(onEmpty()))
+        out.on('error', stop)
+        out.on('finish', () => {
+          if (!settled) {
+            settled = true
+            resolve()
+          }
+        })
+        source.pipe(out)
+      })
+      if (!total) throw onEmpty()
+    } else {
+      throw onEmpty()
+    }
+    await replaceFile(tmpPath, filePath)
+  } catch (error) {
+    await fs.promises.rm(tmpPath, { force: true }).catch(() => {})
+    throw error
+  }
+}
+
 export async function removeMediaFile(filePath) {
   await fs.promises.rm(filePath, { force: true })
 }
 
-export async function mediaFileSize(filePath) {
-  return (await fs.promises.stat(filePath)).size
+export async function mediaFileStat(filePath) {
+  const stat = await fs.promises.stat(filePath)
+  return { size: stat.size, mtimeMs: stat.mtimeMs }
 }

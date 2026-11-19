@@ -1,15 +1,25 @@
 import crypto from 'node:crypto'
 import { deleteLiveRoom, readLiveRoom, saveLiveRoom } from '../../repositories/liveRooms.js'
+import { onRoomPersist } from './events.js'
 import { armTimer, clearTimer, closeQuestion } from './game.js'
 
 const rooms = new Map()
 const ROOM_TTL_MS = 4 * 60 * 60 * 1000
 const PODIUM_TTL_MS = 30 * 60 * 1000
+const REMEMBER_MS = 1500
+
+const rememberTimers = new Map()
+const saveTails = new Map()
+const opening = new Map()
+
+onRoomPersist((room) => {
+  void remember(room)
+})
 
 export async function createRoom(quiz) {
   let code
   do {
-    code = String(Math.floor(100000 + Math.random() * 900000))
+    code = String(crypto.randomInt(100000, 1000000))
   } while (rooms.has(code) || await readLiveRoom(code))
 
   const room = {
@@ -34,6 +44,7 @@ export async function createRoom(quiz) {
     timer: null,
     saved: false,
     players: new Map(),
+    byToken: new Map(),
     createdAt: Date.now(),
     podiumAt: null,
   }
@@ -60,15 +71,83 @@ function freeze(room) {
 }
 
 function thaw(data) {
+  const players = new Map((data.players || []).map((player) => [player.id, { ...player, socketId: null }]))
+  const byToken = new Map()
+  for (const player of players.values()) {
+    if (player.token) byToken.set(player.token, player.id)
+  }
   return {
     ...data,
     timer: null,
-    players: new Map((data.players || []).map((player) => [player.id, { ...player, socketId: null }])),
+    players,
+    byToken,
   }
 }
 
+function dropTimer(map, code) {
+  const timer = map.get(code)
+  if (!timer) return
+  clearTimeout(timer)
+  map.delete(code)
+}
+
+function enqueueSave(room) {
+  const code = room.code
+  const payload = JSON.stringify(freeze(room))
+  const updatedAt = new Date().toISOString()
+  const prev = saveTails.get(code) || Promise.resolve()
+  const next = prev
+    .then(() => saveLiveRoom(code, payload, updatedAt))
+    .catch((error) => {
+      console.error('Не удалось сохранить комнату', error)
+    })
+  saveTails.set(code, next)
+  return next
+}
+
+export function scheduleRemember(room) {
+  if (rememberTimers.has(room.code)) return
+  const timer = setTimeout(() => {
+    rememberTimers.delete(room.code)
+    const live = rooms.get(room.code)
+    if (live) void enqueueSave(live)
+  }, REMEMBER_MS)
+  timer.unref?.()
+  rememberTimers.set(room.code, timer)
+}
+
 export async function remember(room) {
-  await saveLiveRoom(room.code, JSON.stringify(freeze(room)), new Date().toISOString())
+  dropTimer(rememberTimers, room.code)
+  await enqueueSave(room)
+}
+
+function forgetRoom(code) {
+  dropTimer(rememberTimers, code)
+  const tail = saveTails.get(code) || Promise.resolve()
+  saveTails.delete(code)
+  opening.delete(code)
+  void tail.then(() => deleteLiveRoom(code)).catch((error) => {
+    console.error('Не удалось удалить комнату', error)
+  })
+}
+
+export function evictRoom(code) {
+  const key = String(code || '')
+  const room = rooms.get(key)
+  if (room) clearTimer(room)
+  dropTimer(rememberTimers, key)
+  rooms.delete(key)
+  opening.delete(key)
+}
+
+export async function flushRooms() {
+  for (const timer of rememberTimers.values()) clearTimeout(timer)
+  rememberTimers.clear()
+  for (const room of rooms.values()) clearTimer(room)
+  await Promise.allSettled([...saveTails.values()])
+  saveTails.clear()
+  rooms.clear()
+  opening.clear()
 }
 
 function expired(room, now = Date.now()) {
@@ -76,35 +155,60 @@ function expired(room, now = Date.now()) {
   return finished || now - room.createdAt > ROOM_TTL_MS
 }
 
-export async function openRoom(code) {
-  const key = String(code || '')
-  const payload = await readLiveRoom(key)
-  const room = payload ? thaw(JSON.parse(payload)) : rooms.get(key)
-  if (!room) return null
-  if (expired(room)) {
-    clearTimer(room)
-    rooms.delete(key)
-    await deleteLiveRoom(key)
-    return null
-  }
-  const previous = rooms.get(key)
-  if (previous && previous !== room) {
-    clearTimer(previous)
-    // Сокеты живут в памяти процесса, а отключение не пишет снимок: связь с игроком берётся из прежнего объекта.
-    for (const player of room.players.values()) {
-      const before = previous.players.get(player.id)
-      if (!before) continue
-      player.socketId = before.socketId
-      player.online = before.online
-    }
-  }
-  rooms.set(key, room)
+function fresh(room) {
+  if (!expired(room)) return room
+  clearTimer(room)
+  rooms.delete(room.code)
+  forgetRoom(room.code)
+  return null
+}
+
+async function settleQuestion(room) {
   if (room.status === 'question' && room.endsAt && Date.now() >= room.endsAt) {
-    closeQuestion(room)
-    await remember(room)
+    if (closeQuestion(room)) await remember(room)
   } else if (room.status === 'question' && room.endsAt && !room.timer) {
     armTimer(room)
   }
+}
+
+async function loadRoom(key) {
+  const cached = rooms.get(key)
+  if (cached) return fresh(cached)
+  const payload = await readLiveRoom(key)
+  const winner = rooms.get(key)
+  if (winner) return fresh(winner)
+  if (!payload) return null
+  let data
+  try {
+    data = JSON.parse(payload)
+  } catch {
+    return null
+  }
+  const room = thaw(data)
+  if (expired(room)) {
+    await deleteLiveRoom(key)
+    return null
+  }
+  rooms.set(key, room)
+  return room
+}
+
+export async function openRoom(code) {
+  const key = String(code || '')
+  const cached = rooms.get(key)
+  if (cached) {
+    const active = fresh(cached)
+    if (!active) return null
+    await settleQuestion(active)
+    return active
+  }
+  if (!opening.has(key)) {
+    const task = loadRoom(key).finally(() => opening.delete(key))
+    opening.set(key, task)
+  }
+  const room = await opening.get(key)
+  if (!room) return null
+  await settleQuestion(room)
   return room
 }
 
@@ -115,12 +219,10 @@ export function getRoom(code) {
 setInterval(() => {
   const now = Date.now()
   for (const [code, room] of rooms) {
-    const finished = room.status === 'podium' && room.podiumAt && now - room.podiumAt > PODIUM_TTL_MS
-    const expired = now - room.createdAt > ROOM_TTL_MS
-    if (finished || expired) {
+    if (expired(room, now)) {
       clearTimer(room)
       rooms.delete(code)
-      void deleteLiveRoom(code)
+      forgetRoom(code)
     }
   }
 }, 60 * 1000).unref?.()

@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { io } from 'socket.io-client'
 import { api } from '../api/index.js'
 import { newId } from '../lib/ids.js'
 import { forgetPlayerToken, readPlayerToken, savePlayerToken } from './roomTokens.js'
 
-// Телефон игрока: вход по имени, затем опрос комнаты раз в секунду по токену игрока.
+// Телефон игрока: вход по имени и подключение к комнате по Socket.io.
 // Токен живёт в sessionStorage, поэтому перезагрузка страницы возвращает игрока в ту же комнату.
 export function usePlayerRoom(code) {
   const [info, setInfo] = useState(null)
@@ -13,37 +14,67 @@ export function usePlayerRoom(code) {
   const [state, setState] = useState(null)
   const [online, setOnline] = useState(true)
   const [identity, setIdentity] = useState(() => readPlayerToken(code) || '')
+  const socketRef = useRef(null)
+  const nameRef = useRef(name)
+  nameRef.current = name
 
   useEffect(() => {
-    api.room(code).then(setInfo).catch(() => setMissing(true))
+    let alive = true
+    setInfo(null)
+    setMissing(false)
+    setError('')
+    setState(null)
+    setOnline(true)
+    setIdentity(readPlayerToken(code) || '')
+    api.room(code)
+      .then((data) => { if (alive) setInfo(data) })
+      .catch(() => { if (alive) setMissing(true) })
+    return () => { alive = false }
   }, [code])
 
   useEffect(() => {
     if (!identity) return undefined
+    const socket = io({ withCredentials: true })
+    socketRef.current = socket
     let stopped = false
-    api.joinRoom(code, { name, playerToken: identity }).catch((err) => {
-      if (stopped) return
-      forgetPlayerToken(code)
-      setIdentity('')
-      setError(err.message)
-    })
-    async function pull() {
-      try {
-        const next = await api.playRoom(code, identity)
+
+    const join = () => {
+      socket.timeout(8000).emit('player:join', { code, name: nameRef.current, playerToken: identity }, (err, res) => {
         if (stopped) return
-        setState(next)
+        if (err) {
+          setOnline(false)
+          return
+        }
+        if (res?.error) {
+          forgetPlayerToken(code)
+          setIdentity('')
+          setError(res.error)
+          return
+        }
         setOnline(true)
-      } catch {
-        if (!stopped) setOnline(false)
-      }
+        setError('')
+      })
     }
-    pull()
-    const timer = setInterval(pull, 1000)
+
+    socket.on('connect', () => {
+      setOnline(true)
+      join()
+    })
+    socket.on('disconnect', () => {
+      if (!stopped) setOnline(false)
+    })
+    socket.on('sync', (next) => {
+      if (stopped) return
+      setState(next)
+      setOnline(true)
+    })
+
     return () => {
       stopped = true
-      clearInterval(timer)
+      socket.disconnect()
+      if (socketRef.current === socket) socketRef.current = null
     }
-  }, [code, identity, name])
+  }, [code, identity])
 
   function enter(event) {
     event.preventDefault()
@@ -59,6 +90,15 @@ export function usePlayerRoom(code) {
   }
 
   function answer(optionIndex) {
+    const socket = socketRef.current
+    if (socket?.connected) {
+      return new Promise((resolve, reject) => {
+        socket.timeout(4000).emit('player:answer', { optionIndex }, (err, res) => {
+          if (err) reject(new Error('Связь пропала, подключаемся снова…'))
+          else resolve(res)
+        })
+      })
+    }
     return api.answerRoom(code, identity, optionIndex)
   }
 

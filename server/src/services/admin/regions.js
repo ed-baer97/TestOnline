@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import { assertRole } from '../../domain/access.js'
 import { readPassword } from '../../domain/accounts.js'
 import { fail } from '../../domain/errors.js'
-import { cleanLabel, sameText } from '../../domain/text.js'
+import { cleanLabel, optionalLabel, sameText } from '../../domain/text.js'
 import * as organizationsRepo from '../../repositories/organizations.js'
 import * as regionsRepo from '../../repositories/regions.js'
 import * as usersRepo from '../../repositories/users.js'
@@ -11,34 +11,49 @@ import { mustRegion } from './scope.js'
 
 export async function listRegions(actor) {
   assertRole(actor, 'super')
-  const regions = await regionsRepo.listRegions()
-  const result = []
-  for (const region of regions) {
-    const organizations = await organizationsRepo.countOrganizationsInRegion(region.id)
-    const admins = await usersRepo.countRegionalAdminsInRegion(region.id)
-    const learners = await usersRepo.countLearnersInRegion(region.id)
-    result.push({ id: region.id, name: region.name, createdAt: region.createdAt, organizations, admins, learners })
+  const [regions, orgCounts, adminCounts, learnerCounts] = await Promise.all([
+    regionsRepo.listRegions(),
+    organizationsRepo.organizationCountsByRegion(),
+    usersRepo.regionalAdminCountsByRegion(),
+    usersRepo.learnerCountsByRegion(),
+  ])
+  return regions
+    .map((region) => ({
+      id: region.id,
+      name: region.name,
+      nameKk: region.nameKk,
+      createdAt: region.createdAt,
+      organizations: orgCounts.get(region.id) || 0,
+      admins: adminCounts.get(region.id) || 0,
+      learners: learnerCounts.get(region.id) || 0,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+}
+
+async function assertUniqueRegion(name, nameKk, exceptId = '') {
+  const rows = await regionsRepo.listRegionNames()
+  if (rows.some((row) => row.id !== exceptId && (sameText(row.name, name) || (nameKk && row.name_kk && sameText(row.name_kk, nameKk))))) {
+    fail('Такой регион уже есть', 409)
   }
-  return result.sort((a, b) => a.name.localeCompare(b.name, 'ru'))
 }
 
 export async function createRegion(actor, input) {
   assertRole(actor, 'super')
   const name = cleanLabel(input?.name, 2, 80, 'Название региона')
-  const rows = await regionsRepo.listRegionNames()
-  if (rows.some((row) => sameText(row.name, name))) fail('Такой регион уже есть', 409)
+  const nameKk = optionalLabel(input?.nameKk, 80, 'Название региона')
+  await assertUniqueRegion(name, nameKk)
   const id = crypto.randomUUID()
-  await regionsRepo.insertRegion({ id, name, createdAt: new Date().toISOString() })
+  await regionsRepo.insertRegion({ id, name, nameKk, createdAt: new Date().toISOString() })
   return mustRegion(id)
 }
 
 export async function updateRegion(actor, id, input) {
   assertRole(actor, 'super')
-  await mustRegion(id)
+  const current = await mustRegion(id)
   const name = cleanLabel(input?.name, 2, 80, 'Название региона')
-  const rows = await regionsRepo.listRegionNames()
-  if (rows.some((row) => row.id !== id && sameText(row.name, name))) fail('Такой регион уже есть', 409)
-  await regionsRepo.renameRegion(id, name)
+  const nameKk = input?.nameKk == null ? current.nameKk : optionalLabel(input.nameKk, 80, 'Название региона')
+  await assertUniqueRegion(name, nameKk, id)
+  await regionsRepo.updateRegion(id, { name, nameKk })
   return mustRegion(id)
 }
 

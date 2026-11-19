@@ -42,6 +42,11 @@ export async function countOrganizationsInRegion(regionId) {
   return count('SELECT COUNT(*) AS n FROM organizations WHERE region_id = ?', regionId)
 }
 
+export async function organizationCountsByRegion() {
+  const rows = await db.all('SELECT region_id AS id, COUNT(*) AS n FROM organizations GROUP BY region_id')
+  return new Map(rows.map((row) => [row.id, Number(row.n)]))
+}
+
 export async function insertOrganization({ id, regionId, name, nameKk = '', districtId = null, groups, createdAt }) {
   await db.run(
     `INSERT INTO organizations (id, region_id, district_id, name, name_kk, grades_1_4, grades_5_9, grades_10_11, students, created_at)

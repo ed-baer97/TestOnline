@@ -113,7 +113,8 @@ function frameFromText(texts, index) {
 }
 
 export async function slidesFromPptx(buffer) {
-  const bytes = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer || [])
+  if (!Buffer.isBuffer(buffer) || !buffer.length) fail('Нужна презентация PowerPoint .pptx')
+  const bytes = buffer
   if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) fail('Нужна презентация PowerPoint .pptx')
   let zip
   try {

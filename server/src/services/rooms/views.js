@@ -40,10 +40,9 @@ function optionCounts(room) {
   return counts
 }
 
-export function viewFor(room, viewer) {
+export function viewFor(room, viewer, board = leaderboard(room)) {
   const question = room.questionIndex >= 0 ? room.quiz.questions[room.questionIndex] : null
   const reveal = room.status === 'reveal'
-  const board = leaderboard(room)
   const showQuestion = room.status === 'question' || room.status === 'reveal'
   const base = {
     code: room.code,

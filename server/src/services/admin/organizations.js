@@ -71,9 +71,7 @@ export async function updateOrganization(actor, id, input) {
   const name = cleanLabel(input?.name, 2, 120, 'Название организации')
   const nameKk = input?.nameKk == null ? current.nameKk : optionalLabel(input.nameKk, 120, 'Название организации')
   const groups = readGroups(input)
-  const districtId = input?.districtId == null
-    ? current.districtId
-    : await districtForOrganization(actor.regionId, input.districtId)
+  const districtId = await districtForOrganization(actor.regionId, input?.districtId ?? current.districtId)
   await assertUniqueOrg(actor.regionId, name, nameKk, id)
   await assertGroupsFree(id, groups)
   await organizationsRepo.updateOrganization(id, { name, nameKk, districtId, groups })

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api/index.js'
 import { EMPTY_GROUPS } from '../../lib/bands.js'
+import { dropStatsCache } from './platformStats.js'
 
 export function useOrganizations() {
   const [organizations, setOrganizations] = useState(null)
@@ -38,6 +39,7 @@ export function useOrganizations() {
         districtId: districts.length ? districtId : undefined,
         groups,
       })
+      dropStatsCache()
       setName('')
       setNameKk('')
       setGroups(EMPTY_GROUPS)
@@ -53,6 +55,7 @@ export function useOrganizations() {
     setNotice('')
     try {
       await api.deleteOrganization(org.id)
+      dropStatsCache()
       await load()
     } catch (err) {
       setError(err.message)
@@ -65,6 +68,7 @@ export function useOrganizations() {
     setNotice('')
     try {
       const created = await api.createDistrict({ name: districtName, nameKk: districtNameKk })
+      dropStatsCache()
       setDistrictName('')
       setDistrictNameKk('')
       setDistrictId(created.id)
@@ -80,6 +84,7 @@ export function useOrganizations() {
     setNotice('')
     try {
       await api.deleteDistrict(district.id)
+      dropStatsCache()
       if (districtId === district.id) setDistrictId('')
       await load()
     } catch (err) {
@@ -92,6 +97,7 @@ export function useOrganizations() {
     setNotice('')
     try {
       const result = await api.seedCatalog()
+      dropStatsCache()
       setNotice(result.already ? 'Каталог уже загружен' : `Загружено школ: ${result.schools}`)
       await load()
     } catch (err) {
@@ -99,8 +105,10 @@ export function useOrganizations() {
     }
   }
 
-  function saveOrganization(id, body) {
-    return api.updateOrganization(id, body)
+  async function saveOrganization(id, body) {
+    const saved = await api.updateOrganization(id, body)
+    dropStatsCache()
+    return saved
   }
 
   async function organizationSaved() {

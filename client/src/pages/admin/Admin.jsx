@@ -40,12 +40,13 @@ function tabsFor(role, t) {
 }
 
 function Overview() {
+  const { t } = useI18n()
   const { stats, error } = useDashboard()
 
   return (
     <section className="stack">
-      <div className="section-head"><h1>Обзор</h1></div>
-      {error && <p className="form-error">{error}</p>}
+      <div className="section-head"><h1>{t('Обзор')}</h1></div>
+      {error && <p className="form-error">{t(error)}</p>}
       <DashboardView stats={stats} />
     </section>
   )
@@ -55,8 +56,8 @@ export default function Admin({ onLogout }) {
   const { t } = useI18n()
   const { me, error } = useAdminProfile()
 
-  if (error) return <p className="center form-error">{error}</p>
-  if (!me) return <p className="center muted">Загрузка…</p>
+  if (error) return <p className="center form-error">{t(error)}</p>
+  if (!me) return <p className="center muted">{t('Загрузка…')}</p>
 
   return (
     <AdminFrame me={me} onLogout={onLogout} tabs={tabsFor(me.role, t)}>
@@ -71,9 +72,9 @@ export default function Admin({ onLogout }) {
             <Route path="materials/:id" element={<LessonEditor />} />
             <Route path="quizzes" element={<MaterialQuizzes />} />
             <Route path="quizzes/new" element={<MaterialQuizEditor />} />
-            <Route path="quizzes/:id/stats/:resultId/:player" element={<Stats onLogout={onLogout} base="/admin/quizzes" listTo="/admin/quizzes" />} />
-            <Route path="quizzes/:id/stats/:resultId" element={<Stats onLogout={onLogout} base="/admin/quizzes" listTo="/admin/quizzes" />} />
-            <Route path="quizzes/:id/stats" element={<Stats onLogout={onLogout} base="/admin/quizzes" listTo="/admin/quizzes" />} />
+            <Route path="quizzes/:id/stats/:resultId/:player" element={<Stats onLogout={onLogout} base="/admin/quizzes" listTo="/admin/quizzes" embedded />} />
+            <Route path="quizzes/:id/stats/:resultId" element={<Stats onLogout={onLogout} base="/admin/quizzes" listTo="/admin/quizzes" embedded />} />
+            <Route path="quizzes/:id/stats" element={<Stats onLogout={onLogout} base="/admin/quizzes" listTo="/admin/quizzes" embedded />} />
             <Route path="quizzes/:id" element={<MaterialQuizEditor />} />
             <Route path="regions" element={<Regions />} />
             <Route path="staff" element={<RegionalStaff />} />
@@ -81,7 +82,7 @@ export default function Admin({ onLogout }) {
         )}
         {me.role === 'regional' && (
           <>
-            <Route path="organizations" element={<Organizations />} />
+            <Route path="organizations" element={<Organizations me={me} />} />
             <Route path="staff" element={<OrgStaff />} />
           </>
         )}

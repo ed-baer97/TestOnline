@@ -13,6 +13,8 @@ export function useLessonView(id) {
   const [pending, setPending] = useState(false)
 
   useEffect(() => {
+    let alive = true
+    setError('')
     setLesson(null)
     setIndex(0)
     setSeen(new Set([0]))
@@ -20,6 +22,7 @@ export function useLessonView(id) {
     setAnswers({})
     setResult(null)
     api.lesson(id).then((data) => {
+      if (!alive) return
       setLesson(data)
       const last = data.attempts?.last
       if (data.attempts?.locked && last) {
@@ -30,7 +33,8 @@ export function useLessonView(id) {
           setAnswers(picked)
         }
       }
-    }).catch((err) => setError(err.message))
+    }).catch((err) => { if (alive) setError(err.message) })
+    return () => { alive = false }
   }, [id])
 
   function showSlide(nextIndex) {
@@ -87,6 +91,7 @@ export function useLessonView(id) {
     lesson,
     error,
     index,
+    seen,
     answers,
     setAnswers,
     result,

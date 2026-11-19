@@ -4,7 +4,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { createHost, useTestDatabase } from './helpers/db.js'
+import { sessionFingerprint } from '../src/infrastructure/session.js'
+import { createHost, rawDb, useTestDatabase } from './helpers/db.js'
 import { call, login, startServer } from './helpers/http.js'
 
 await useTestDatabase('api-auth')
@@ -18,7 +19,7 @@ function forgeSession(payload) {
   return `session=${data}.${sig}`
 }
 
-test('служебные адреса и неизвестные запросы', async (t) => {
+test('служебные адреса, защитные заголовки и неизвестные запросы', async (t) => {
   const server = await startServer()
   t.after(() => server.close())
   const { base } = server
@@ -26,8 +27,18 @@ test('служебные адреса и неизвестные запросы',
   const health = await call(base, '/api/health')
   assert.equal(health.status, 200)
   assert.deepEqual(health.body, { ok: true })
+  assert.equal(health.headers.get('x-powered-by'), null)
+  assert.equal(health.headers.get('x-content-type-options'), 'nosniff')
+  assert.equal(health.headers.get('x-frame-options'), 'DENY')
+  assert.equal(health.headers.get('referrer-policy'), 'strict-origin-when-cross-origin')
+  assert.equal(health.headers.get('permissions-policy'), 'camera=(), microphone=(), geolocation=()')
 
-  const network = await call(base, '/api/network')
+  const anonNetwork = await call(base, '/api/network')
+  assert.equal(anonNetwork.status, 401)
+  assert.deepEqual(anonNetwork.body, { error: 'Нужен вход' })
+
+  const rootCookie = await login(base, 'root', 'rootpass')
+  const network = await call(base, '/api/network', { cookie: rootCookie })
   assert.equal(network.status, 200)
   assert.deepEqual(Object.keys(network.body), ['addresses'])
   assert.ok(Array.isArray(network.body.addresses))
@@ -43,11 +54,14 @@ test('служебные адреса и неизвестные запросы',
   assert.match(handshake.text, /^0\{"sid":/)
 })
 
-test('вход, профиль, выход и cookie сессии', async (t) => {
+test('вход, профиль, выход, отзыв при смене пароля и cookie сессии', async (t) => {
   const server = await startServer()
   t.after(() => server.close())
   const { base } = server
   const host = await createHost('host', 'secret1')
+  const db = await rawDb()
+  const hostRow = await db.get('SELECT password_hash FROM users WHERE id = ?', host.id)
+  const hostVer = sessionFingerprint(hostRow.password_hash)
 
   assert.deepEqual((await call(base, '/api/me')).body, { ok: false })
 
@@ -62,7 +76,7 @@ test('вход, профиль, выход и cookie сессии', async (t) =>
   assert.equal(ok.status, 200)
   assert.deepEqual(ok.body, { ok: true, login: 'host', role: 'host', displayName: 'host' })
   const setCookie = ok.headers.get('set-cookie')
-  assert.match(setCookie, /^session=[\w-]+\.[\w-]+; Path=\/; HttpOnly; SameSite=Lax$/)
+  assert.match(setCookie, /^session=[\w-]+\.[\w-]+; Max-Age=1209600; Path=\/; Expires=.+; HttpOnly; SameSite=Lax$/)
   const cookie = setCookie.split(';')[0]
 
   const me = await call(base, '/api/me', { cookie })
@@ -87,22 +101,48 @@ test('вход, профиль, выход и cookie сессии', async (t) =>
   const flipped = `session=${data}.${sig.startsWith('A') ? 'B' : 'A'}${sig.slice(1)}`
   assert.deepEqual((await call(base, '/api/me', { cookie: flipped })).body, { ok: false })
   assert.deepEqual((await call(base, '/api/me', { cookie: 'session=garbage' })).body, { ok: false })
-  assert.deepEqual((await call(base, '/api/me', { cookie: forgeSession({ userId: host.id, exp: Date.now() - 1000 }) })).body, { ok: false })
-  assert.deepEqual((await call(base, '/api/me', { cookie: forgeSession({ userId: 'nobody', exp: Date.now() + 60000 }) })).body, { ok: false })
-  assert.equal((await call(base, '/api/me', { cookie: forgeSession({ userId: host.id, exp: Date.now() + 60000 }) })).body.login, 'host')
+  assert.deepEqual((await call(base, '/api/me', { cookie: forgeSession({ userId: host.id, exp: Date.now() - 1000, ver: hostVer }) })).body, { ok: false })
+  assert.deepEqual((await call(base, '/api/me', { cookie: forgeSession({ userId: host.id, exp: Date.now() + 60000 }) })).body, { ok: false })
+  assert.deepEqual((await call(base, '/api/me', { cookie: forgeSession({ userId: host.id, exp: Date.now() + 60000, ver: 'stale-version' }) })).body, { ok: false })
+  assert.deepEqual((await call(base, '/api/me', { cookie: forgeSession({ userId: 'nobody', exp: Date.now() + 60000, ver: hostVer }) })).body, { ok: false })
+  assert.equal((await call(base, '/api/me', { cookie: forgeSession({ userId: host.id, exp: Date.now() + 60000, ver: hostVer }) })).body.login, 'host')
 
   const logout = await call(base, '/api/logout', { method: 'POST', cookie })
   assert.equal(logout.status, 200)
   assert.deepEqual(logout.body, { ok: true })
-  assert.equal(logout.headers.get('set-cookie'), 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT')
+  assert.equal(logout.headers.get('set-cookie'), 'session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax')
 
   process.env.COOKIE_SECURE = '1'
   try {
     const secure = await call(base, '/api/login', { method: 'POST', json: { login: 'host', password: 'secret1' } })
-    assert.match(secure.headers.get('set-cookie'), /^session=[\w-]+\.[\w-]+; Path=\/; HttpOnly; Secure; SameSite=Lax$/)
+    assert.match(secure.headers.get('set-cookie'), /^session=[\w-]+\.[\w-]+; Max-Age=1209600; Path=\/; Expires=.+; HttpOnly; Secure; SameSite=Lax$/)
+    assert.equal(secure.headers.get('strict-transport-security'), 'max-age=31536000; includeSubDomains')
   } finally {
     delete process.env.COOKIE_SECURE
   }
+
+  // Смена пароля немедленно отзывает старые cookie-сессии.
+  const rootCookie = await login(base, 'root', 'rootpass')
+  const region = (await call(base, '/api/admin/regions', { method: 'POST', cookie: rootCookie, json: { name: 'Северный регион' } })).body
+  const admin = (await call(base, '/api/admin/regional-admins', {
+    method: 'POST',
+    cookie: rootCookie,
+    json: { login: 'reg.rotate', password: 'oldpass1', displayName: 'Смена Пароля', regionId: region.id },
+  })).body
+  const oldCookie = await login(base, 'reg.rotate', 'oldpass1')
+  assert.equal((await call(base, '/api/me', { cookie: oldCookie })).body.ok, true)
+  assert.equal((await call(base, '/api/admin/dashboard', { cookie: oldCookie })).status, 200)
+
+  const changed = await call(base, `/api/admin/regional-admins/${admin.id}`, {
+    method: 'PATCH',
+    cookie: rootCookie,
+    json: { displayName: 'Смена Пароля', regionId: region.id, password: 'newpass2' },
+  })
+  assert.equal(changed.status, 200)
+  assert.deepEqual((await call(base, '/api/me', { cookie: oldCookie })).body, { ok: false })
+  assert.equal((await call(base, '/api/admin/dashboard', { cookie: oldCookie })).status, 401)
+  const freshCookie = await login(base, 'reg.rotate', 'newpass2')
+  assert.equal((await call(base, '/api/admin/dashboard', { cookie: freshCookie })).status, 200)
 })
 
 test('права: без входа 401, чужая роль 403', async (t) => {
@@ -113,12 +153,12 @@ test('права: без входа 401, чужая роль 403', async (t) => 
   const hostCookie = await login(base, 'host2', 'secret1')
   const rootCookie = await login(base, 'root', 'rootpass')
 
-  for (const url of ['/api/quizzes', '/api/stats', '/api/results', '/api/template', '/api/admin/dashboard', '/api/lessons']) {
+  for (const url of ['/api/quizzes', '/api/stats', '/api/results', '/api/template', '/api/admin/dashboard', '/api/lessons', '/api/network']) {
     const anonymous = await call(base, url)
     assert.equal(anonymous.status, 401, url)
     assert.deepEqual(anonymous.body, { error: 'Нужен вход' })
   }
-  const ghost = await call(base, '/api/quizzes', { cookie: forgeSession({ userId: 'nobody', exp: Date.now() + 60000 }) })
+  const ghost = await call(base, '/api/quizzes', { cookie: forgeSession({ userId: 'nobody', exp: Date.now() + 60000, ver: 'x' }) })
   assert.equal(ghost.status, 401)
   assert.deepEqual(ghost.body, { error: 'Нужен вход' })
 
@@ -127,10 +167,12 @@ test('права: без входа 401, чужая роль 403', async (t) => 
     assert.equal(denied.status, 403, url)
     assert.deepEqual(denied.body, { error: 'Недостаточно прав' })
   }
-  for (const url of ['/api/quizzes', '/api/template']) {
+  for (const url of ['/api/quizzes', '/api/template', '/api/network']) {
     const allowed = await call(base, url, { cookie: rootCookie })
     assert.equal(allowed.status, 200, url)
   }
+  assert.equal((await call(base, '/api/network', { cookie: hostCookie })).status, 200)
+
   const hostAdmin = await call(base, '/api/admin/dashboard', { cookie: hostCookie })
   assert.equal(hostAdmin.status, 403)
   assert.deepEqual(hostAdmin.body, { error: 'Недостаточно прав' })
@@ -186,4 +228,46 @@ test('собранный клиент и запасной маршрут SPA', a
   const api = await call(base, '/api/host/quizzes')
   assert.equal(api.status, 404)
   assert.deepEqual(api.body, { error: 'Такого запроса нет' })
+})
+
+test('ограничение неудачных попыток входа: по логину и по IP', async (t) => {
+  process.env.TRUST_PROXY = '1'
+  let server
+  try {
+    server = await startServer()
+  } finally {
+    delete process.env.TRUST_PROXY
+  }
+  t.after(() => server.close())
+  const { base } = server
+
+  for (let i = 0; i < 10; i += 1) {
+    const attempt = await call(base, '/api/login', {
+      method: 'POST',
+      headers: { 'X-Forwarded-For': '198.51.100.10' },
+      json: { login: 'target.user', password: 'wrong' },
+    })
+    assert.equal(attempt.status, 401)
+  }
+  const accountBlocked = await call(base, '/api/login', {
+    method: 'POST',
+    headers: { 'X-Forwarded-For': '198.51.100.10' },
+    json: { login: 'target.user', password: 'wrong' },
+  })
+  assert.equal(accountBlocked.status, 429)
+
+  for (let i = 0; i < 30; i += 1) {
+    const attempt = await call(base, '/api/login', {
+      method: 'POST',
+      headers: { 'X-Forwarded-For': '198.51.100.11' },
+      json: { login: `spray.${i}`, password: 'wrong' },
+    })
+    assert.equal(attempt.status, 401)
+  }
+  const ipBlocked = await call(base, '/api/login', {
+    method: 'POST',
+    headers: { 'X-Forwarded-For': '198.51.100.11' },
+    json: { login: 'spray.31', password: 'wrong' },
+  })
+  assert.equal(ipBlocked.status, 429)
 })

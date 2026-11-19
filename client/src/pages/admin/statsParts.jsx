@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Crumbs, Empty, Rate } from '../../components/kit.jsx'
 import { DataTable } from '../../components/table.jsx'
-import { MIN_PERSON_SAMPLE, MIN_SAMPLE, formatNumber, rateOf } from '../../state/format.js'
+import { MIN_PERSON_SAMPLE, MIN_SAMPLE, formatNumber, rateOf } from '../../lib/format.js'
 import { pick, useI18n } from '../../state/i18n.jsx'
 
 export function StatsHeader({ crumbs, title, subtitle, aside }) {
@@ -101,13 +101,13 @@ export function MistakeTable({ items, caption = 'Чаще всего ошиба�
           key: 'wrongRate',
           label: 'Доля ошибок',
           num: true,
-          render: (row) => (row.wrongRate == null ? '—' : <span className={`rate ${row.wrongRate >= 50 ? 'rate-low' : row.wrongRate >= 25 ? 'rate-mid' : 'rate-high'}`} title={t('Ответов: {count}', { count: formatNumber(row.total) })}><b>{row.wrongRate} %</b></span>),
+          render: (row) => (row.wrongRate == null ? '—' : <span className={`rate ${row.wrongRate >= 50 ? 'rate-low' : row.wrongRate >= 25 ? 'rate-mid' : 'rate-high'}`} title={t('Ответов: {count}', { count: formatNumber(row.total, lang) })}><b>{row.wrongRate} %</b></span>),
           exportValue: (row) => (row.wrongRate == null ? '' : `${row.wrongRate}%`),
         },
       ]}
       rows={rows}
       defaultSort={{ key: 'wrong', dir: 'desc' }}
-      search={(row) => `${row.text} ${row.textKk || ''} ${row.source}`}
+      search={(row) => `${row.text} ${row.textKk || ''} ${row.source} ${row.sourceKk || ''}`}
       searchPlaceholder="Текст вопроса"
       pageSize={20}
       exportName="mistakes"

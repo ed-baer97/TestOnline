@@ -28,7 +28,7 @@ export async function findCredentials(login) {
 // Пользователь вместе с регионом, организацией, классом и курсом — для профиля и сессии.
 export async function findProfileRow(id) {
   return db.get(
-    `SELECT u.id, u.login, u.role, u.display_name, u.region_id, u.organization_id, u.class_id,
+    `SELECT u.id, u.login, u.role, u.password_hash, u.display_name, u.region_id, u.organization_id, u.class_id,
             r.name AS region_name, o.name AS organization_name,
             c.name AS class_name, c.grade, c.band, t.name AS track_name
      FROM users u
@@ -93,6 +93,11 @@ export async function countRegionalAdmins() {
 
 export async function countRegionalAdminsInRegion(regionId) {
   return count("SELECT COUNT(*) AS n FROM users WHERE role = 'regional' AND region_id = ?", regionId)
+}
+
+export async function regionalAdminCountsByRegion() {
+  const rows = await db.all("SELECT region_id AS id, COUNT(*) AS n FROM users WHERE role = 'regional' GROUP BY region_id")
+  return new Map(rows.map((row) => [row.id, Number(row.n)]))
 }
 
 export async function listRegionalAdmins() {
@@ -167,6 +172,17 @@ export async function countLearnersInRegion(regionId) {
   )
 }
 
+export async function learnerCountsByRegion() {
+  const rows = await db.all(
+    `SELECT o.region_id AS id, COUNT(*) AS n
+     FROM users u
+     JOIN organizations o ON o.id = u.organization_id
+     WHERE u.role = 'learner'
+     GROUP BY o.region_id`,
+  )
+  return new Map(rows.map((row) => [row.id, Number(row.n)]))
+}
+
 export async function countLearnersInOrganization(organizationId) {
   return count("SELECT COUNT(*) AS n FROM users WHERE role = 'learner' AND organization_id = ?", organizationId)
 }
@@ -234,12 +250,15 @@ export async function updateLearner(id, { displayName, classId }) {
 }
 
 export async function deleteLearner(id, organizationId) {
-  const result = await db.run(
-    "DELETE FROM users WHERE id = ? AND role = 'learner' AND organization_id = ?",
-    id,
-    organizationId,
-  )
-  return result.changes
+  return db.tx(async (tx) => {
+    const result = await tx.run(
+      "DELETE FROM users WHERE id = ? AND role = 'learner' AND organization_id = ?",
+      id,
+      organizationId,
+    )
+    if (result.changes) await tx.run('DELETE FROM lesson_attempts WHERE user_id = ?', id)
+    return result.changes
+  })
 }
 
 // Логины в нижнем регистре, которые уже заняты. Запрос идёт пачками по 500, чтобы не упереться в лимит параметров.

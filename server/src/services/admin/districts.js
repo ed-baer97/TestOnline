@@ -20,9 +20,10 @@ export async function districtForOrganization(regionId, districtId) {
   return row.id
 }
 
-export async function listDistricts(actor) {
-  assertRole(actor, 'regional')
-  const rows = await districtsRepo.listDistrictRows(actor.regionId)
+export async function listDistricts(actor, regionId = null) {
+  const id = regionIdFor(actor, regionId)
+  if (actor.role === 'super') await mustRegion(id)
+  const rows = await districtsRepo.listDistrictRows(id)
   return rows.map((row) => ({ id: row.id, name: row.name, nameKk: row.name_kk || '' }))
 }
 

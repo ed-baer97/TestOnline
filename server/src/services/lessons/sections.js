@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import { assertRole } from '../../domain/access.js'
 import { fail } from '../../domain/errors.js'
 import { groupsFromRow, readGroups } from '../../domain/structure.js'
-import { cleanLabel } from '../../domain/text.js'
+import { cleanLabel, sameText } from '../../domain/text.js'
 import * as lessonsRepo from '../../repositories/lessons.js'
 import * as repo from '../../repositories/lessonSections.js'
 
@@ -20,13 +20,9 @@ function brief(row) {
   return { id: row.section_id, name: row.name, sortOrder: row.sort_order }
 }
 
-function sameName(left, right) {
-  return left.localeCompare(right, 'ru', { sensitivity: 'accent' }) === 0
-}
-
 async function uniqueName(name, exceptId = '') {
   const rows = await repo.listSections()
-  if (rows.some((row) => row.id !== exceptId && sameName(row.name, name))) {
+  if (rows.some((row) => row.id !== exceptId && sameText(row.name, name))) {
     fail('Раздел с таким названием уже есть')
   }
 }

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api/index.js'
+import { dropStatsCache } from './platformStats.js'
 
 export function useRegions() {
   const [regions, setRegions] = useState(null)
   const [name, setName] = useState('')
+  const [nameKk, setNameKk] = useState('')
   const [drafts, setDrafts] = useState({})
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -11,7 +13,7 @@ export function useRegions() {
   function load() {
     return api.regions().then((data) => {
       setRegions(data.regions)
-      setDrafts(Object.fromEntries(data.regions.map((region) => [region.id, region.name])))
+      setDrafts(Object.fromEntries(data.regions.map((region) => [region.id, { name: region.name, nameKk: region.nameKk || '' }])))
     })
   }
 
@@ -24,8 +26,10 @@ export function useRegions() {
     setError('')
     setNotice('')
     try {
-      await api.createRegion({ name })
+      await api.createRegion({ name, nameKk })
+      dropStatsCache()
       setName('')
+      setNameKk('')
       setNotice('Регион создан')
       await load()
     } catch (err) {
@@ -38,7 +42,8 @@ export function useRegions() {
     setError('')
     setNotice('')
     try {
-      await api.updateRegion(id, { name: drafts[id] })
+      await api.updateRegion(id, drafts[id] || { name: '', nameKk: '' })
+      dropStatsCache()
       setNotice('Название сохранено')
       await load()
     } catch (err) {
@@ -51,6 +56,7 @@ export function useRegions() {
     setNotice('')
     try {
       const result = await api.seedCatalog(region.id)
+      dropStatsCache()
       setNotice(result.already ? 'Каталог уже загружен' : `Загружено школ: ${result.schools}`)
       await load()
     } catch (err) {
@@ -63,13 +69,14 @@ export function useRegions() {
     setNotice('')
     try {
       await api.deleteRegion(region.id)
+      dropStatsCache()
       await load()
     } catch (err) {
       setError(err.message)
     }
   }
 
-  return { regions, name, setName, drafts, setDrafts, error, notice, create, rename, seed, remove }
+  return { regions, name, setName, nameKk, setNameKk, drafts, setDrafts, error, notice, create, rename, seed, remove }
 }
 
 export function useRegionalStaff() {

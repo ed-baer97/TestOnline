@@ -40,8 +40,13 @@ export function useQuizList(navigate) {
   }
 
   async function remove(quiz) {
-    await api.deleteQuiz(quiz.id)
-    await load()
+    setError('')
+    try {
+      await api.deleteQuiz(quiz.id)
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
   }
 
   return { quizzes, account, error, start, remove }
@@ -138,9 +143,13 @@ export function useQuizEditor(id, navigate, editorBase = '/host/quiz') {
   async function saveAndStart() {
     const quiz = await save(false)
     if (!quiz) return
-    const room = await api.createRoom(quiz.id)
-    saveHostToken(room.code, room.hostToken)
-    navigate(`/host/room/${room.code}`)
+    try {
+      const room = await api.createRoom(quiz.id)
+      saveHostToken(room.code, room.hostToken)
+      navigate(`/host/room/${room.code}`)
+    } catch (err) {
+      setError(err.message)
+    }
   }
 
   return {

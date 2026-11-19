@@ -5,7 +5,7 @@ import { Empty, KpiGrid, Rate, Segments, StatsSkeleton } from '../../components/
 import { DataTable } from '../../components/table.jsx'
 import { BANDS } from '../../lib/bands.js'
 import { usePlatformStats } from '../../state/admin/platformStats.js'
-import { formatNumber } from '../../state/format.js'
+import { formatNumber } from '../../lib/format.js'
 import { pick, useI18n } from '../../state/i18n.jsx'
 import { OrgStatsView } from './OrgStats.jsx'
 import { MistakeTable, PeopleTable, StatsHeader, nameColumn, rateColumn } from './statsParts.jsx'
@@ -51,7 +51,7 @@ function RegionIndexPage() {
           <KpiGrid items={[
             { label: 'Областей', value: stats.totals.regions },
             { label: 'Организаций', value: stats.totals.organizations },
-            { label: 'Тестируемых', value: stats.totals.learners, hint: 'проходили тест: {count}', vars: { count: formatNumber(stats.totals.activeLearners) } },
+            { label: 'Тестируемых', value: stats.totals.learners, hint: 'проходили тест: {count}', vars: { count: formatNumber(stats.totals.activeLearners, lang) } },
             { label: 'Попыток', value: stats.totals.attempts, hint: 'тесты уроков' },
             { label: 'Доля верных', node: <Rate correct={stats.totals.correct} answered={stats.totals.answered} />, hint: 'тесты уроков' },
           ]} />
@@ -60,7 +60,7 @@ function RegionIndexPage() {
             <BarChart
               caption={t('Тестируемые по областям')}
               order="value"
-              items={stats.regions.map((item) => ({ key: item.id, label: pick(lang, item.name, item.nameKk), value: item.learners, hint: t('Проходили тест: {count}', { count: formatNumber(item.activeLearners) }) }))}
+              items={stats.regions.map((item) => ({ key: item.id, label: pick(lang, item.name, item.nameKk), value: item.learners, hint: t('Проходили тест: {count}', { count: formatNumber(item.activeLearners, lang) }) }))}
             />
           </div>
           <DataTable
@@ -95,10 +95,11 @@ function RegionIndexPage() {
 // ---------- Область: районы, организации, уроки, квизы ----------
 
 function RegionPage() {
+  const { t } = useI18n()
   const { regionId = '' } = useParams()
   const base = regionId ? `/admin/stats/region/${regionId}` : '/admin/stats'
   const { data, error, loading } = usePlatformStats(regionId)
-  const crumbs = regionId ? [{ to: '/admin/stats', label: 'Статистика' }] : []
+  const crumbs = regionId ? [{ to: '/admin/stats', label: t('Статистика') }] : []
   const shared = { stats: data, error, loading, base, regionId }
   return (
     <Routes>
@@ -163,14 +164,15 @@ function RegionBody({ part, stats, error, loading, base, crumbs }) {
 }
 
 function RegionKpis({ stats }) {
+  const { lang } = useI18n()
   const totals = stats.totals
   return (
     <KpiGrid items={[
-      { label: 'Тестируемых', value: totals.learners, hint: 'проходили тест: {count}', vars: { count: formatNumber(totals.activeLearners) } },
-      { label: 'Организаций', value: stats.organizations.length, hint: 'активных: {count}', vars: { count: formatNumber(totals.activeOrganizations) } },
+      { label: 'Тестируемых', value: totals.learners, hint: 'проходили тест: {count}', vars: { count: formatNumber(totals.activeLearners, lang) } },
+      { label: 'Организаций', value: stats.organizations.length, hint: 'активных: {count}', vars: { count: formatNumber(totals.activeOrganizations, lang) } },
       { label: 'Попыток', value: totals.attempts, hint: 'тесты уроков' },
       { label: 'Доля верных', node: <Rate correct={totals.correct} answered={totals.answered} />, hint: 'тесты уроков' },
-      { label: 'Запусков квизов', value: totals.quizRuns, hint: 'участников: {count}', vars: { count: formatNumber(totals.quizParticipants) } },
+      { label: 'Запусков квизов', value: totals.quizRuns, hint: 'участников: {count}', vars: { count: formatNumber(totals.quizParticipants, lang) } },
       { label: 'Доля верных в квизах', node: <Rate correct={totals.quizCorrect} answered={totals.quizAnswered} />, hint: 'приватные запуски' },
     ]} />
   )
@@ -219,7 +221,7 @@ function OrganizationStats({ stats, base }) {
         <BarChart
           caption={t('Тестируемые по организациям')}
           order="value"
-          items={rows.map((item) => ({ key: item.id, label: pick(lang, item.name, item.nameKk), value: item.learners, hint: t('Проходили тест: {count}', { count: formatNumber(item.activeLearners) }) }))}
+          items={rows.map((item) => ({ key: item.id, label: pick(lang, item.name, item.nameKk), value: item.learners, hint: t('Проходили тест: {count}', { count: formatNumber(item.activeLearners, lang) }) }))}
         />
       </div>
       <DataTable
@@ -316,7 +318,7 @@ function LessonStats({ stats }) {
         <BarChart
           caption={t('Доля верных по группам')}
           percent
-          items={byBand.map((item) => ({ key: item.key, label: item.label, value: item.value, text: item.value == null ? '—' : `${item.value}%`, empty: item.value == null, answered: item.answered, hint: t('Попыток: {count}', { count: formatNumber(item.attempts) }) }))}
+          items={byBand.map((item) => ({ key: item.key, label: item.label, value: item.value, text: item.value == null ? '—' : `${item.value}%`, empty: item.value == null, answered: item.answered, hint: t('Попыток: {count}', { count: formatNumber(item.attempts, lang) }) }))}
         />
       </div>
       <DataTable
@@ -365,7 +367,7 @@ function flattenQuizzes(stats) {
 }
 
 function QuizStats({ stats }) {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const hasDistricts = stats.districts.length > 0
   const privateRows = useMemo(() => flattenQuizzes(stats), [stats])
   const publicBand = (stats.quizBands || []).find((band) => band.key === 'public')
@@ -385,7 +387,7 @@ function QuizStats({ stats }) {
           <BarChart
             caption={t('Участники по квизам')}
             order="value"
-            items={privateRows.map((row) => ({ key: row.id, label: row.title, value: row.participants, hint: t('Запусков: {count}', { count: formatNumber(row.runs) }) }))}
+            items={privateRows.map((row) => ({ key: row.id, label: row.title, value: row.participants, hint: t('Запусков: {count}', { count: formatNumber(row.runs, lang) }) }))}
           />
         </div>
       )}

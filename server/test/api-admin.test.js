@@ -59,8 +59,8 @@ test('админка по HTTP: регионы, организации, клас
   expectError(await su('/api/admin/regions/missing', { method: 'PATCH', json: { name: 'Новое' } }), 404, 'Регион не найден')
   assert.deepEqual((await su('/api/admin/regions')).body, {
     regions: [
-      { id: other.id, name: 'Атырауская область', createdAt: other.createdAt, organizations: 0, admins: 0, learners: 0 },
-      { id: regionId, name: 'Мангыстау', createdAt: region.body.createdAt, organizations: 0, admins: 0, learners: 0 },
+      { id: other.id, name: 'Атырауская область', nameKk: '', createdAt: other.createdAt, organizations: 0, admins: 0, learners: 0 },
+      { id: regionId, name: 'Мангыстау', nameKk: '', createdAt: region.body.createdAt, organizations: 0, admins: 0, learners: 0 },
     ],
   })
 

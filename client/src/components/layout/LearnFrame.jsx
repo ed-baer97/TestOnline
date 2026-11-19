@@ -1,7 +1,9 @@
+import { useI18n } from '../../state/i18n.jsx'
 import { Brand } from '../Brand.jsx'
-import { TopbarSlot, TopbarSlots } from './topbar.jsx'
+import { EnvControls, TopbarSlot, TopbarSlots } from './topbar.jsx'
 
 export function LearnFrame({ onLogout, children }) {
+  const { t } = useI18n()
   return (
     <TopbarSlots>
       <main className="sheet admin-sheet">
@@ -9,7 +11,8 @@ export function LearnFrame({ onLogout, children }) {
           <Brand to="/learn" />
           <div className="top-actions">
             <TopbarSlot />
-            <button className="ghost" type="button" onClick={onLogout}>Выйти</button>
+            <EnvControls />
+            <button className="ghost" type="button" onClick={onLogout}>{t('Выйти')}</button>
           </div>
         </header>
         {children}

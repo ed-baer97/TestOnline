@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import { cleanName, scorePoints } from '../../domain/quiz.js'
 import { saveResult } from '../stats.js'
-import { publishRoom } from './events.js'
+import { persistRoom, publishRoom } from './events.js'
 import { leaderboard } from './views.js'
 
 export function clearTimer(room) {
@@ -17,6 +17,11 @@ export function playerByToken(room, token) {
 
 function findByToken(room, token) {
   if (!token) return null
+  const playerId = room.byToken?.get(token)
+  if (playerId) {
+    const cached = room.players.get(playerId)
+    if (cached) return cached
+  }
   for (const player of room.players.values()) {
     if (player.token === token) return player
   }
@@ -52,6 +57,7 @@ export function joinPlayer(room, { name, playerToken }) {
     joinedAt: Date.now(),
   }
   room.players.set(player.id, player)
+  room.byToken?.set(playerToken, player.id)
   return { player }
 }
 
@@ -61,6 +67,7 @@ export function armTimer(room) {
   room.timer = setTimeout(() => {
     room.timer = null
     if (!closeQuestion(room)) return
+    persistRoom(room)
     publishRoom(room)
   }, delay)
   room.timer.unref?.()

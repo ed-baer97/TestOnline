@@ -154,14 +154,36 @@ for (const spec of [server, client]) {
 }
 
 test('server/src: SQL только в репозиториях и схеме базы', () => {
-  assert.deepEqual(filesMatching(server, /['"`]\s*(SELECT|INSERT|UPDATE|DELETE)\s/, ['repositories/', 'infrastructure/db/']), [])
+  assert.deepEqual(filesMatching(server, /['"`]\s*(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP)\s/i, ['repositories/', 'infrastructure/db/']), [])
 })
 
 test('server/src: сервисы и HTTP не ходят в базу мимо репозиториев', () => {
   assert.deepEqual(filesMatching(server, /infrastructure\/db\//, ['repositories/', 'infrastructure/']), [])
 })
 
+test('server/src: сервисы не реэкспортируют репозитории напрямую', () => {
+  const { base, files } = graph(server)
+  const bad = files
+    .filter((file) => file.startsWith('services/'))
+    .filter((file) => /\bexport\s+[^'"]*?\s+from\s+['"][^'"]*repositories\//.test(fs.readFileSync(path.join(base, file), 'utf8')))
+    .map((file) => `${server.dir}/${file}`)
+  assert.deepEqual(bad, [])
+})
+
 test('client/src: fetch только в api/, sessionStorage и localStorage только в state/', () => {
   assert.deepEqual(filesMatching(client, /\bfetch\(/, ['api/']), [])
   assert.deepEqual(filesMatching(client, /\b(sessionStorage|localStorage)\b/, ['state/']), [])
+})
+
+test('client/src: state/ не экспортирует UI-компоненты кроме *Provider', () => {
+  const { base, files } = graph(client)
+  const bad = []
+  for (const file of files) {
+    if (!file.startsWith('state/')) continue
+    const code = fs.readFileSync(path.join(base, file), 'utf8')
+    for (const match of code.matchAll(/\bexport\s+(?:async\s+)?function\s+([A-Z]\w*)/g)) {
+      if (!match[1].endsWith('Provider')) bad.push(`${client.dir}/${file}: ${match[1]}`)
+    }
+  }
+  assert.deepEqual(bad, [])
 })

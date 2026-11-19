@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { flushRooms } from '../../src/services/rooms/index.js'
 
 export async function startServer() {
   const { createApp } = await import('../../src/index.js')
@@ -10,6 +11,7 @@ export async function startServer() {
     async close() {
       runtime.io.close()
       await new Promise((resolve) => runtime.httpServer.close(() => resolve()))
+      await flushRooms()
     },
   }
 }

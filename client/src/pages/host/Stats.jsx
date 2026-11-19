@@ -1,16 +1,18 @@
 import { Link, useParams } from 'react-router-dom'
 import { Brand } from '../../components/Brand.jsx'
-import { formatCode, formatWhen, shortWhen } from '../../lib/format.js'
 import { BarChart, RateList } from '../../components/charts.jsx'
+import { EnvControls } from '../../components/layout/topbar.jsx'
+import { formatCode, formatWhen, shortWhen } from '../../lib/format.js'
 import { useQuizStats } from '../../state/host/stats.js'
+import { useI18n } from '../../state/i18n.jsx'
 
 function launchWhen(session) {
   return session.startedAt || session.finishedAt
 }
 
-function launchLabel(session) {
+function launchLabel(session, lang, t) {
   const value = launchWhen(session)
-  return value ? `Запуск ${formatWhen(value)}` : 'Запуск'
+  return value ? t('Запуск {when}', { when: formatWhen(value, lang) }) : t('Запуск')
 }
 
 function questionsOf(players) {
@@ -33,6 +35,7 @@ function questionsOf(players) {
     return {
       text: item.text,
       rate: item.total ? Math.round((item.correct / item.total) * 100) : null,
+      answered: item.total,
     }
   })
 }
@@ -41,56 +44,80 @@ function scoreText(value) {
   return value == null ? '—' : String(value)
 }
 
-export default function Stats({ onLogout, base = '/host/quiz', listTo = '/host' }) {
+export default function Stats({ onLogout, base = '/host/quiz', listTo = '/host', embedded = false }) {
+  const { lang, t } = useI18n()
   const { id, resultId, player } = useParams()
   const { stats, error } = useQuizStats(id)
   const statsTo = (suffix = '') => `${base}/${id}/stats${suffix}`
 
   if (error) {
-    return (
-      <main className="sheet">
-        <p className="form-error">{error}</p>
-        <Link to={listTo}>К списку квизов</Link>
-      </main>
+    const errBody = (
+      <>
+        <p className="form-error">{t(error)}</p>
+        <Link to={listTo}>{t('К списку квизов')}</Link>
+      </>
     )
+    if (embedded) return <section className="stack">{errBody}</section>
+    return <main className="sheet">{errBody}</main>
   }
-  if (!stats) return <p className="center muted">Загрузка…</p>
+  if (!stats) return <p className="center muted">{t('Загрузка…')}</p>
 
   const session = resultId ? stats.sessions.find((item) => item.id === resultId) : null
   const playerIndex = player == null ? -1 : Number(player)
   const person = session && Number.isInteger(playerIndex) ? session.players[playerIndex] : null
+  const heading = person ? `${person.rank}. ${person.name}` : session ? launchLabel(session, lang, t) : stats.title
+
+  const body = (
+    <>
+      {person && session ? (
+        <PlayerReport session={session} person={person} statsTo={statsTo} />
+      ) : session ? (
+        <SessionReport session={session} statsTo={statsTo} />
+      ) : resultId ? (
+        <p className="form-error">{t('Такой запуск не найден.')} <Link to={statsTo()}>{t('Ко всем запускам')}</Link></p>
+      ) : (
+        <QuizReport stats={stats} statsTo={statsTo} />
+      )}
+    </>
+  )
+
+  if (embedded) {
+    return (
+      <section className="stack editor">
+        <p className="muted"><Link to={listTo}>{t('Квизы')}</Link> / {stats.title}</p>
+        <div className="section-head">
+          <h1>{heading}</h1>
+          <Link className="ghost" to={`${base}/${id}`}>{t('Править')}</Link>
+        </div>
+        {body}
+      </section>
+    )
+  }
 
   return (
     <main className="sheet editor">
       <header className="topbar">
         <Brand to={listTo.startsWith('/admin') ? '/admin' : '/host'} />
         <div className="top-actions">
-          <Link to={`${base}/${id}`}>Править</Link>
-          <button className="ghost" type="button" onClick={onLogout}>Выйти</button>
+          <Link to={`${base}/${id}`}>{t('Править')}</Link>
+          <EnvControls />
+          <button className="ghost" type="button" onClick={onLogout}>{t('Выйти')}</button>
         </div>
       </header>
-      <p className="muted"><Link to={listTo}>Квизы</Link> / {stats.title}</p>
-      <h1>{person ? `${person.rank}. ${person.name}` : session ? launchLabel(session) : stats.title}</h1>
-
-      {person && session ? (
-        <PlayerReport session={session} person={person} statsTo={statsTo} />
-      ) : session ? (
-        <SessionReport session={session} statsTo={statsTo} />
-      ) : resultId ? (
-        <p className="form-error">Такой запуск не найден. <Link to={statsTo()}>Ко всем запускам</Link></p>
-      ) : (
-        <QuizReport stats={stats} statsTo={statsTo} />
-      )}
+      <p className="muted"><Link to={listTo}>{t('Квизы')}</Link> / {stats.title}</p>
+      <h1>{heading}</h1>
+      {body}
     </main>
   )
 }
 
 function Tiles({ items }) {
+  const { t } = useI18n()
   return (
     <div className="stat-grid">
       {items.map((item) => (
         <article className="stat-card" key={item.label}>
-          <span>{item.label}</span>
+          <span>{t(item.label)}</span>
           <strong>{item.value}</strong>
         </article>
       ))}
@@ -99,6 +126,7 @@ function Tiles({ items }) {
 }
 
 function QuizReport({ stats, statsTo }) {
+  const { lang, t } = useI18n()
   const runs = [...stats.sessions].reverse()
   return (
     <>
@@ -109,32 +137,32 @@ function QuizReport({ stats, statsTo }) {
         { label: 'Вопросов', value: stats.questionCount },
       ]} />
       {stats.runs === 0 ? (
-        <p className="muted">Этот квиз ещё не запускали. После игры здесь появятся баллы и ошибки.</p>
+        <p className="muted">{t('Этот квиз ещё не запускали. После игры здесь появятся баллы и ошибки.')}</p>
       ) : (
         <div className="chart-grid">
           <BarChart
-            caption="Участники по запускам"
-            items={runs.map((session) => ({ key: session.id, label: shortWhen(launchWhen(session)), value: session.playerCount }))}
+            caption={t('Участники по запускам')}
+            items={runs.map((session) => ({ key: session.id, label: shortWhen(launchWhen(session), lang), value: session.playerCount }))}
           />
           <BarChart
-            caption="Средний балл по запускам"
-            items={runs.map((session) => ({ key: session.id, label: shortWhen(launchWhen(session)), value: session.averageScore ?? 0 }))}
+            caption={t('Средний балл по запускам')}
+            items={runs.map((session) => ({ key: session.id, label: shortWhen(launchWhen(session), lang), value: session.averageScore ?? 0 }))}
           />
         </div>
       )}
-      <RateList caption="Верные ответы по вопросам" items={stats.questions} />
+      <RateList caption={t('Верные ответы по вопросам')} items={stats.questions} />
       <section className="results">
-        <h2>Запуски</h2>
-        {stats.sessions.length === 0 && <p className="muted">Пока пусто.</p>}
+        <h2>{t('Запуски')}</h2>
+        {stats.sessions.length === 0 && <p className="muted">{t('Пока пусто.')}</p>}
         <ul className="session-list">
           {stats.sessions.map((session) => (
             <li key={session.id}>
               <Link to={statsTo(`/${session.id}`)}>
-                <strong>{launchLabel(session)}</strong>
-                <span>код {formatCode(session.code)}</span>
-                <span>{session.playerCount} участ.</span>
-                <span>средний {scoreText(session.averageScore)}</span>
-                <span>лучший {scoreText(session.topScore)}</span>
+                <strong>{launchLabel(session, lang, t)}</strong>
+                <span>{t('код {code}', { code: formatCode(session.code) })}</span>
+                <span>{t('{count} участ.', { count: session.playerCount })}</span>
+                <span>{t('средний {score}', { score: scoreText(session.averageScore) })}</span>
+                <span>{t('лучший {score}', { score: scoreText(session.topScore) })}</span>
               </Link>
             </li>
           ))}
@@ -145,36 +173,44 @@ function QuizReport({ stats, statsTo }) {
 }
 
 function SessionReport({ session, statsTo }) {
+  const { t } = useI18n()
   const questions = questionsOf(session.players)
   const answers = session.players.flatMap((person) => person.answers || [])
   const correctRate = answers.length ? Math.round((answers.filter((answer) => answer.ok).length / answers.length) * 100) : null
   return (
     <>
-      <p className="muted"><Link to={statsTo()}>Все запуски</Link> · код {formatCode(session.code)}</p>
+      <p className="muted"><Link to={statsTo()}>{t('Все запуски')}</Link> · {t('код {code}', { code: formatCode(session.code) })}</p>
       <Tiles items={[
         { label: 'Участников', value: session.playerCount },
         { label: 'Средний балл', value: scoreText(session.averageScore) },
         { label: 'Лучший балл', value: scoreText(session.topScore) },
         { label: 'Верных ответов', value: correctRate == null ? '—' : `${correctRate}%` },
       ]} />
-      {session.playerCount === 0 ? <p className="muted">В этой игре не было участников.</p> : (
+      {session.playerCount === 0 ? <p className="muted">{t('В этой игре не было участников.')}</p> : (
         <div className="chart-grid">
           <BarChart
-            caption="Баллы участников"
+            caption={t('Баллы участников')}
             items={session.players.map((person) => ({ key: `${person.rank}-${person.name}`, label: person.name, value: person.score }))}
           />
-          {questions.length > 0 && <RateList caption="Верные ответы в этом запуске" items={questions} />}
+          {questions.length > 0 && <RateList caption={t('Верные ответы в этом запуске')} items={questions} />}
         </div>
       )}
       <section className="results">
-        <h2>Участники</h2>
+        <h2>{t('Участники')}</h2>
         <ul className="session-list">
           {session.players.map((person, index) => (
             <li key={`${person.rank}-${person.name}`}>
               <Link to={statsTo(`/${session.id}/${index}`)}>
                 <strong>{person.rank}. {person.name}</strong>
-                <span>{person.score} очков</span>
-                <span>{person.answers ? `верных ${person.answers.filter((answer) => answer.ok).length} · ошибок ${person.answers.filter((answer) => !answer.ok).length}` : 'ответы не сохранены'}</span>
+                <span>{t('{score} очков', { score: person.score })}</span>
+                <span>
+                  {person.answers
+                    ? t('верных {right} · ошибок {wrong}', {
+                      right: person.answers.filter((answer) => answer.ok).length,
+                      wrong: person.answers.filter((answer) => !answer.ok).length,
+                    })
+                    : t('ответы не сохранены')}
+                </span>
               </Link>
             </li>
           ))}
@@ -185,26 +221,27 @@ function SessionReport({ session, statsTo }) {
 }
 
 function PlayerReport({ session, person, statsTo }) {
+  const { t } = useI18n()
   const answers = person.answers
   const wrong = answers ? answers.filter((answer) => !answer.ok) : []
   const right = answers ? answers.filter((answer) => answer.ok) : []
   return (
     <section className="results">
-      <p><Link to={statsTo(`/${session.id}`)}>К участникам запуска</Link></p>
+      <p><Link to={statsTo(`/${session.id}`)}>{t('К участникам запуска')}</Link></p>
       <Tiles items={[
         { label: 'Баллы', value: person.score },
         { label: 'Место', value: person.rank },
         { label: 'Верных', value: answers ? right.length : '—' },
         { label: 'Неверных', value: answers ? wrong.length : '—' },
       ]} />
-      {!answers && <p className="muted">Этот запуск сохранён до подробной статистики: видны только место и баллы.</p>}
+      {!answers && <p className="muted">{t('Этот запуск сохранён до подробной статистики: видны только место и баллы.')}</p>}
       {answers && (
         <>
-          <h2>Неправильные</h2>
-          {wrong.length === 0 && <p className="muted">Ошибок нет.</p>}
+          <h2>{t('Неправильные')}</h2>
+          {wrong.length === 0 && <p className="muted">{t('Ошибок нет.')}</p>}
           <AnswerList answers={wrong} />
-          <h2>Правильные</h2>
-          {right.length === 0 && <p className="muted">Верных ответов нет.</p>}
+          <h2>{t('Правильные')}</h2>
+          {right.length === 0 && <p className="muted">{t('Верных ответов нет.')}</p>}
           <AnswerList answers={right} />
         </>
       )}
@@ -213,15 +250,16 @@ function PlayerReport({ session, person, statsTo }) {
 }
 
 function AnswerList({ answers }) {
+  const { t } = useI18n()
   if (!answers.length) return null
   return (
     <div className="answer-review">
       {answers.map((answer, index) => (
         <article key={`${answer.question}-${index}`} className={answer.ok ? 'good' : 'bad'}>
           <h3>{answer.question}</h3>
-          <p>{answer.ok ? 'Верно' : 'Неверно'} · {answer.points} очков</p>
-          <p>Ответ участника: {answer.chosen || 'нет ответа'}</p>
-          <p>Правильный ответ: {answer.correct}</p>
+          <p>{t('{label} · {points} очков', { label: t(answer.ok ? 'Верно' : 'Неверно'), points: answer.points })}</p>
+          <p>{t('Ответ участника: {answer}', { answer: answer.chosen || t('нет ответа') })}</p>
+          <p>{t('Правильный ответ: {answer}', { answer: answer.correct })}</p>
         </article>
       ))}
     </div>

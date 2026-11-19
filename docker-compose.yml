@@ -32,7 +32,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-0}
       LESSON_MAX_ATTEMPTS: ${LESSON_MAX_ATTEMPTS:-1}
       SUPER_LOGIN: ${SUPER_LOGIN:-super}
-      SUPER_PASSWORD: ${SUPER_PASSWORD:-super12345}
+      SUPER_PASSWORD: ${SUPER_PASSWORD:?Задайте SUPER_PASSWORD в .env}
     volumes:
       - media:/data/media
     depends_on:

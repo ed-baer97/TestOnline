@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react'
-import { formatNumber } from '../state/format.js'
+import { formatNumber } from '../lib/format.js'
 import { useI18n } from '../state/i18n.jsx'
 import { SearchBox } from './kit.jsx'
 
@@ -17,17 +17,17 @@ function compare(a, b, lang) {
   return String(a).localeCompare(String(b), lang === 'kk' ? 'kk' : 'ru', { numeric: true, sensitivity: 'base' })
 }
 
-function exportText(column, row, t) {
+function exportText(column, row, lang, t) {
   if (column.exportValue) return column.exportValue(row)
   const value = cellValue(column, row)
   if (value == null) return ''
-  if (typeof value === 'object') return value.ru ?? ''
+  if (typeof value === 'object') return (lang === 'kk' && value.kk ? value.kk : value.ru) ?? ''
   return typeof value === 'string' ? t(value) : String(value)
 }
 
-function downloadCsv(name, columns, rows, t) {
+function downloadCsv(name, columns, rows, lang, t) {
   const header = columns.map((column) => `"${t(column.label).replace(/"/g, '""')}"`).join(';')
-  const lines = rows.map((row) => columns.map((column) => `"${String(exportText(column, row, t)).replace(/"/g, '""')}"`).join(';'))
+  const lines = rows.map((row) => columns.map((column) => `"${String(exportText(column, row, lang, t)).replace(/"/g, '""')}"`).join(';'))
   const blob = new Blob([`\uFEFF${[header, ...lines].join('\r\n')}`], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -117,7 +117,7 @@ export function DataTable({
               {toolbar}
               {search && <SearchBox value={query} onChange={(value) => { setQuery(value); setShown(pageSize) }} placeholder={searchPlaceholder} />}
               {exportName && rows.length > 0 && (
-                <button className="ghost small" type="button" onClick={() => downloadCsv(exportName, visibleColumns, sorted, t)}>
+                <button className="ghost small" type="button" onClick={() => downloadCsv(exportName, visibleColumns, sorted, lang, t)}>
                   {t('Скачать CSV')}
                 </button>
               )}
@@ -180,7 +180,7 @@ export function DataTable({
                         const raw = cellValue(column, row)
                         let content
                         if (column.render) content = column.render(row)
-                        else if (typeof raw === 'number') content = formatNumber(raw)
+                        else if (typeof raw === 'number') content = formatNumber(raw, lang)
                         else if (raw && typeof raw === 'object' && 'ru' in raw) content = lang === 'kk' && raw.kk ? raw.kk : raw.ru
                         else content = raw == null || raw === '' ? '—' : (typeof raw === 'string' ? t(raw) : raw)
                         return <td key={column.key} className={column.num ? 'num' : ''}>{content}</td>
@@ -200,7 +200,7 @@ export function DataTable({
       )}
       {sorted.length > pageSize && (
         <div className="table-foot">
-          <span className="muted">{t('Показано {shown} из {total}', { shown: formatNumber(Math.min(shown, sorted.length)), total: formatNumber(sorted.length) })}</span>
+          <span className="muted">{t('Показано {shown} из {total}', { shown: formatNumber(Math.min(shown, sorted.length), lang), total: formatNumber(sorted.length, lang) })}</span>
           {shown < sorted.length && (
             <button className="ghost small" type="button" onClick={() => setShown((value) => value + pageSize)}>{t('Показать ещё')}</button>
           )}

@@ -53,24 +53,16 @@ export function registerQuizRoutes(app) {
   })
 
   app.post('/api/quizzes', requireQuizAuthor, route(async (req, res) => {
-    try {
-      res.status(201).json(await createQuiz(req.userId, req.body))
-    } catch (error) {
-      res.status(400).json({ error: error.message })
-    }
+    res.status(201).json(await createQuiz(req.userId, req.body))
   }))
 
   app.put('/api/quizzes/:id', requireQuizAuthor, route(async (req, res) => {
-    try {
-      const quiz = await updateQuiz(req.params.id, req.userId, req.body)
-      if (!quiz) {
-        res.status(404).json({ error: 'Квиз не найден' })
-        return
-      }
-      res.json(quiz)
-    } catch (error) {
-      res.status(400).json({ error: error.message })
+    const quiz = await updateQuiz(req.params.id, req.userId, req.body)
+    if (!quiz) {
+      res.status(404).json({ error: 'Квиз не найден' })
+      return
     }
+    res.json(quiz)
   }))
 
   app.delete('/api/quizzes/:id', requireQuizAuthor, route(async (req, res) => {

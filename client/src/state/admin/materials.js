@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api/index.js'
 import { newId } from '../../lib/ids.js'
+import { dropStatsCache } from './platformStats.js'
 
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg']
 
@@ -37,22 +38,26 @@ export function useMaterialList() {
 
   async function createSection(body) {
     await api.createLessonSection(body)
+    dropStatsCache()
     await load()
   }
 
   async function saveSection(id, body) {
     await api.updateLessonSection(id, body)
+    dropStatsCache()
     await load()
   }
 
   async function removeSection(id) {
     await api.deleteLessonSection(id)
+    dropStatsCache()
     await load()
   }
 
   async function moveLesson(lessonId, sectionId) {
     try {
       await api.assignLessonSection(lessonId, sectionId)
+      dropStatsCache()
       await load()
     } catch (err) {
       setError(err.message)
@@ -82,9 +87,26 @@ export function useLessonEditor(id, navigate, initialSectionId = '') {
   const [uploadProgress, setUploadProgress] = useState(null)
 
   useEffect(() => {
-    api.lessonSections().then((data) => setSections(data.sections)).catch((err) => setError(err.message))
-    if (isNew) return undefined
+    savedId.current = id || null
+    let alive = true
+    setError('')
+    setNotice('')
+    api.lessonSections().then((data) => { if (alive) setSections(data.sections) }).catch((err) => { if (alive) setError(err.message) })
+    if (isNew) {
+      setTitle('')
+      setFormat('slides')
+      setSectionId(initialSectionId)
+      setSlides([blankFrame()])
+      setVideoFile(null)
+      setVideoName('')
+      setVideoUrl('')
+      setQuestions([blankQuestion()])
+      setReady(true)
+      return () => { alive = false }
+    }
+    setReady(false)
     api.lesson(id).then((lesson) => {
+      if (!alive) return
       setTitle(lesson.title)
       setFormat(lesson.format === 'video' ? 'video' : 'slides')
       if (lesson.section?.id) setSectionId(lesson.section.id)
@@ -99,9 +121,13 @@ export function useLessonEditor(id, navigate, initialSectionId = '') {
         options: [...question.options, { text: '' }, { text: '' }, { text: '' }, { text: '' }].slice(0, 4),
       })))
       setReady(true)
-    }).catch((err) => setError(err.message))
-    return undefined
-  }, [id, isNew])
+    }).catch((err) => { if (alive) setError(err.message) })
+    return () => { alive = false }
+  }, [id, isNew, initialSectionId])
+
+  useEffect(() => () => {
+    if (videoUrl.startsWith('blob:')) URL.revokeObjectURL(videoUrl)
+  }, [videoUrl])
 
   function patchSlide(slideId, patch) {
     setSlides((current) => current.map((slide) => (slide.id === slideId ? { ...slide, ...patch } : slide)))
@@ -201,6 +227,7 @@ export function useLessonEditor(id, navigate, initialSectionId = '') {
         setUploadProgress(0)
         await api.uploadLessonVideo(lesson.id, videoFile, setUploadProgress)
       }
+      dropStatsCache()
       setVideoFile(null)
       setNotice('Урок сохранён')
       if (isNew) navigate(`/admin/materials/${lesson.id}`, { replace: true })
@@ -215,6 +242,7 @@ export function useLessonEditor(id, navigate, initialSectionId = '') {
   async function remove() {
     try {
       await api.deleteLesson(id)
+      dropStatsCache()
       navigate('/admin/materials')
     } catch (err) {
       setError(err.message)

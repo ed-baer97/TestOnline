@@ -56,7 +56,8 @@ export function registerAdminRoutes(app) {
     res.json(await seedRegionCatalog(req.user, req.body?.regionId))
   }))
   app.get('/api/admin/districts', guard, route(async (req, res) => {
-    res.json({ districts: await listDistricts(req.user) })
+    const regionId = typeof req.query.regionId === 'string' ? req.query.regionId : null
+    res.json({ districts: await listDistricts(req.user, regionId || null) })
   }))
   app.post('/api/admin/districts', guard, route(async (req, res) => {
     res.status(201).json(await createDistrict(req.user, req.body || {}))

@@ -136,6 +136,10 @@ const SCHEMA = [
       started_at TEXT,
       finished_at TEXT NOT NULL
     )`,
+  `ALTER TABLE results ADD COLUMN IF NOT EXISTS access TEXT NOT NULL DEFAULT 'public'`,
+  'ALTER TABLE results ADD COLUMN IF NOT EXISTS organization_id TEXT',
+  'ALTER TABLE results ADD COLUMN IF NOT EXISTS class_id TEXT',
+  'ALTER TABLE results ADD COLUMN IF NOT EXISTS band TEXT',
   `CREATE TABLE IF NOT EXISTS live_rooms (
       code TEXT PRIMARY KEY,
       payload TEXT NOT NULL,
@@ -167,23 +171,42 @@ function toPg(sql) {
   return sql.replace(/\?/g, () => `$${++index}`)
 }
 
-function postgresConnectionString(url) {
-  if (/[?&]sslmode=/i.test(url)) return url.replace(/([?&])sslmode=[^&]*/gi, '$1sslmode=no-verify')
-  return `${url}${url.includes('?') ? '&' : '?'}sslmode=no-verify`
+function wrapQueryable(client) {
+  return {
+    get: async (sql, ...params) => (await client.query(toPg(sql), params)).rows[0],
+    all: async (sql, ...params) => (await client.query(toPg(sql), params)).rows,
+    run: async (sql, ...params) => ({ changes: (await client.query(toPg(sql), params)).rowCount }),
+  }
 }
 
 export async function openPostgres(postgresUrl) {
   const plain = config.pgSslDisabled || /localhost|127\.0\.0\.1/.test(postgresUrl)
+  const ssl = plain ? false : (process.env.PG_SSL_NO_VERIFY === '1' ? { rejectUnauthorized: false } : true)
   const pool = new pg.Pool({
-    connectionString: plain ? postgresUrl : postgresConnectionString(postgresUrl),
+    connectionString: postgresUrl,
     max: config.pgPoolMax,
-    ssl: plain ? false : { rejectUnauthorized: false },
+    ssl,
+  })
+  pool.on('error', (error) => {
+    console.error('Postgres pool error', error)
   })
   for (const statement of SCHEMA) await pool.query(statement)
   return {
-    get: async (sql, ...params) => (await pool.query(toPg(sql), params)).rows[0],
-    all: async (sql, ...params) => (await pool.query(toPg(sql), params)).rows,
-    run: async (sql, ...params) => ({ changes: (await pool.query(toPg(sql), params)).rowCount }),
+    ...wrapQueryable(pool),
+    tx: async (fn) => {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const result = await fn(wrapQueryable(client))
+        await client.query('COMMIT')
+        return result
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {})
+        throw error
+      } finally {
+        client.release()
+      }
+    },
     close: () => pool.end(),
   }
 }

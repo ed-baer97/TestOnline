@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api/index.js'
+import { dropStatsCache } from './platformStats.js'
 
 const actions = {
   createClass: (body) => api.createClass(body),
@@ -29,6 +30,7 @@ export function useClassTree() {
     setNotice('')
     try {
       await action()
+      dropStatsCache()
       await load()
     } catch (err) {
       setError(err.message)

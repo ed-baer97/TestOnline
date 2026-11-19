@@ -1,83 +1,117 @@
 import { useState } from 'react'
 import { Notice } from '../../components/admin/ui.jsx'
 import { useRegionalStaff, useRegions } from '../../state/admin/regions.js'
+import { pick, useI18n } from '../../state/i18n.jsx'
 
 export function Regions() {
-  const { regions, name, setName, drafts, setDrafts, error, notice, create, rename, seed, remove } = useRegions()
+  const { lang, t } = useI18n()
+  const { regions, name, setName, nameKk, setNameKk, drafts, setDrafts, error, notice, create, rename, seed, remove } = useRegions()
 
   function confirmRemove(region) {
-    if (window.confirm(`Удалить регион «${region.name}»?`)) remove(region)
+    if (window.confirm(t('Удалить регион «{name}»?', { name: pick(lang, region.name, region.nameKk) }))) remove(region)
   }
 
   return (
     <section className="stack">
-      <div className="section-head"><h1>Регионы</h1></div>
+      <div className="section-head"><h1>{t('Регионы')}</h1></div>
       <Notice error={error} notice={notice} />
       <form className="admin-form" onSubmit={create}>
         <label>
-          Новый регион
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Мангыстауская область" />
+          {t('Новый регион')}
+          <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Мангыстауская область')} />
         </label>
-        <button className="primary add" type="submit">Создать регион</button>
+        <label>
+          {t('Название, қазақша')}
+          <input value={nameKk} onChange={(event) => setNameKk(event.target.value)} placeholder="Маңғыстау облысы" />
+        </label>
+        <button className="primary add" type="submit">{t('Создать регион')}</button>
       </form>
-      {regions === null && !error && <p className="muted">Загрузка…</p>}
+      {regions === null && !error && <p className="muted">{t('Загрузка…')}</p>}
       <div className="stack">
-        {regions?.map((region) => (
-          <article className="person" key={region.id}>
-            <form onSubmit={(event) => rename(event, region.id)}>
-              <input
-                aria-label={`Название ${region.name}`}
-                value={drafts[region.id] || ''}
-                onChange={(event) => setDrafts((current) => ({ ...current, [region.id]: event.target.value }))}
-              />
-              <button className="ghost" type="submit">Сохранить</button>
-            </form>
-            <p className="muted">
-              {region.organizations} орг. · {region.admins} адм. · {region.learners} тест.
-            </p>
-            {/манг[ыи]стау/i.test(region.name) && (
-              <button className="ghost" type="button" onClick={() => seed(region)}>Загрузить школы</button>
-            )}
-            <button className="ghost" type="button" onClick={() => confirmRemove(region)}>Удалить</button>
-          </article>
-        ))}
+        {regions?.map((region) => {
+          const draft = drafts[region.id] || { name: region.name, nameKk: region.nameKk || '' }
+          const regionLabel = pick(lang, region.name, region.nameKk)
+          return (
+            <article className="person" key={region.id}>
+              <form onSubmit={(event) => rename(event, region.id)}>
+                <input
+                  aria-label={t('Название {name}', { name: regionLabel })}
+                  value={draft.name}
+                  onChange={(event) => setDrafts((current) => ({
+                    ...current,
+                    [region.id]: { ...(current[region.id] || draft), name: event.target.value },
+                  }))}
+                />
+                <input
+                  aria-label={t('Название, қазақша')}
+                  placeholder={t('Название, қазақша')}
+                  value={draft.nameKk}
+                  onChange={(event) => setDrafts((current) => ({
+                    ...current,
+                    [region.id]: { ...(current[region.id] || draft), nameKk: event.target.value },
+                  }))}
+                />
+                <button className="ghost" type="submit">{t('Сохранить')}</button>
+              </form>
+              <p className="muted">
+                {t('{organizations} орг. · {admins} адм. · {learners} тест.', {
+                  organizations: region.organizations,
+                  admins: region.admins,
+                  learners: region.learners,
+                })}
+              </p>
+              {/манг[ыи]стау|маңғыстау/i.test(`${region.name} ${region.nameKk || ''}`) && (
+                <button className="ghost" type="button" onClick={() => seed(region)}>{t('Загрузить школы')}</button>
+              )}
+              <button className="ghost" type="button" onClick={() => confirmRemove(region)}>{t('Удалить')}</button>
+            </article>
+          )
+        })}
       </div>
     </section>
   )
 }
 
 export function RegionalStaff() {
+  const { lang, t } = useI18n()
   const { admins, regions, form, error, setError, notice, load, patch, create, remove, saveAdmin } = useRegionalStaff()
 
   function confirmRemove(person) {
-    if (window.confirm(`Удалить администратора ${person.displayName}?`)) remove(person)
+    if (window.confirm(t('Удалить администратора {name}?', { name: person.displayName }))) remove(person)
   }
 
   return (
     <section className="stack">
-      <div className="section-head"><h1>Админы областей</h1></div>
+      <div className="section-head"><h1>{t('Админы областей')}</h1></div>
       <Notice error={error} notice={notice} />
       <form className="admin-form" onSubmit={create}>
         <label>
-          Имя
+          {t('Имя')}
           <input name="displayName" value={form.displayName} onChange={patch} />
         </label>
         <label>
-          Логин
-          <input name="login" autoComplete="off" placeholder="admin.region" title="3–32 символа латиницей: буквы, цифры, точка, _ или -" value={form.login} onChange={patch} />
+          {t('Логин')}
+          <input
+            name="login"
+            autoComplete="off"
+            placeholder="admin.region"
+            title={t('3–32 символа латиницей: буквы, цифры, точка, _ или -')}
+            value={form.login}
+            onChange={patch}
+          />
         </label>
         <label>
-          Пароль
+          {t('Пароль')}
           <input name="password" type="password" autoComplete="new-password" value={form.password} onChange={patch} />
         </label>
         <label>
-          Регион
+          {t('Регион')}
           <select name="regionId" value={form.regionId} onChange={patch}>
-            {regions.length === 0 && <option value="">Сначала создайте регион</option>}
-            {regions.map((region) => <option key={region.id} value={region.id}>{region.name}</option>)}
+            {regions.length === 0 && <option value="">{t('Сначала создайте регион')}</option>}
+            {regions.map((region) => <option key={region.id} value={region.id}>{pick(lang, region.name, region.nameKk)}</option>)}
           </select>
         </label>
-        <button className="primary add" type="submit" disabled={!regions.length}>Создать администратора</button>
+        <button className="primary add" type="submit" disabled={!regions.length}>{t('Создать администратора')}</button>
       </form>
       <div className="stack">
         {admins?.map((person) => (
@@ -89,6 +123,7 @@ export function RegionalStaff() {
 }
 
 function RegionAdminRow({ person, regions, onSave, onChanged, onDelete, onError }) {
+  const { lang, t } = useI18n()
   const [displayName, setDisplayName] = useState(person.displayName)
   const [regionId, setRegionId] = useState(person.regionId)
   const [password, setPassword] = useState('')
@@ -108,22 +143,22 @@ function RegionAdminRow({ person, regions, onSave, onChanged, onDelete, onError 
   return (
     <article className="person">
       <form onSubmit={save}>
-        <input aria-label="Имя" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-        <select aria-label="Регион" value={regionId} onChange={(event) => setRegionId(event.target.value)}>
-          {regions.map((region) => <option key={region.id} value={region.id}>{region.name}</option>)}
+        <input aria-label={t('Имя')} value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+        <select aria-label={t('Регион')} value={regionId} onChange={(event) => setRegionId(event.target.value)}>
+          {regions.map((region) => <option key={region.id} value={region.id}>{pick(lang, region.name, region.nameKk)}</option>)}
         </select>
         <input
-          aria-label="Новый пароль"
+          aria-label={t('Новый пароль')}
           type="password"
           autoComplete="new-password"
-          placeholder="Новый пароль"
+          placeholder={t('Новый пароль')}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
-        <button className="ghost" type="submit">Сохранить</button>
+        <button className="ghost" type="submit">{t('Сохранить')}</button>
       </form>
       <span className="muted">{person.login}</span>
-      <button className="ghost" type="button" onClick={onDelete}>Удалить</button>
+      <button className="ghost" type="button" onClick={onDelete}>{t('Удалить')}</button>
     </article>
   )
 }

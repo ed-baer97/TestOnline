@@ -38,8 +38,8 @@ function cellText(value) {
 
 export async function importLearners(actor, buffer) {
   assertRole(actor, 'org')
-  const bytes = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer || [])
-  if (!bytes.length) fail('Файл пустой')
+  if (!Buffer.isBuffer(buffer) || !buffer.length) fail('Файл пустой')
+  const bytes = buffer
   const ExcelJS = (await import('exceljs')).default
   const workbook = new ExcelJS.Workbook()
   try {

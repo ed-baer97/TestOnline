@@ -3,7 +3,6 @@
 # ---------- Сборка клиента ----------
 FROM node:22-bookworm-slim AS client-build
 WORKDIR /app
-COPY package.json package-lock.json ./
 COPY client/package.json client/package-lock.json ./client/
 RUN cd client && npm ci --no-audit --no-fund
 COPY client ./client
@@ -12,7 +11,6 @@ RUN cd client && npm run build
 # ---------- Зависимости сервера ----------
 FROM node:22-bookworm-slim AS server-deps
 WORKDIR /app
-COPY package.json package-lock.json ./
 COPY server/package.json server/package-lock.json ./server/
 RUN cd server && npm ci --omit=dev --no-audit --no-fund
 
@@ -23,7 +21,6 @@ ENV NODE_ENV=production \
     MEDIA_DIR=/data/media \
     NODE_OPTIONS=--no-warnings
 WORKDIR /app
-COPY --chown=node:node --from=server-deps /app/package.json ./package.json
 COPY --chown=node:node --from=server-deps /app/server/node_modules ./server/node_modules
 COPY --chown=node:node server/package.json ./server/
 COPY --chown=node:node server/src ./server/src

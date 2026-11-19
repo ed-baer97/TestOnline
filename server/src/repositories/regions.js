@@ -15,18 +15,21 @@ export async function listRegions() {
 }
 
 export async function listRegionNames() {
-  return db.all('SELECT id, name FROM regions')
+  return db.all('SELECT id, name, name_kk FROM regions')
 }
 
-export async function insertRegion({ id, name, createdAt }) {
-  await db.run('INSERT INTO regions (id, name, created_at) VALUES (?, ?, ?)', id, name, createdAt)
+export async function insertRegion({ id, name, nameKk = '', createdAt }) {
+  await db.run('INSERT INTO regions (id, name, name_kk, created_at) VALUES (?, ?, ?, ?)', id, name, nameKk, createdAt)
 }
 
-export async function renameRegion(id, name) {
-  await db.run('UPDATE regions SET name = ? WHERE id = ?', name, id)
+export async function updateRegion(id, { name, nameKk = '' }) {
+  await db.run('UPDATE regions SET name = ?, name_kk = ? WHERE id = ?', name, nameKk, id)
 }
 
 export async function deleteRegion(id) {
-  await db.run('DELETE FROM districts WHERE region_id = ?', id)
-  await db.run('DELETE FROM regions WHERE id = ?', id)
+  await db.tx(async (tx) => {
+    await tx.run('DELETE FROM districts WHERE region_id = ?', id)
+    await tx.run('DELETE FROM app_seeds WHERE key = ?', `mangystau-catalog-v1:${id}`)
+    await tx.run('DELETE FROM regions WHERE id = ?', id)
+  })
 }

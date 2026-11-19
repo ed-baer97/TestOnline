@@ -1,6 +1,5 @@
-import { useEffect, useRef } from 'react'
 import { NavLink } from 'react-router-dom'
-import { formatNumber, formatPercent, MIN_SAMPLE, rateOf, rateTone } from '../state/format.js'
+import { formatNumber, formatPercent, MIN_SAMPLE, rateOf, rateTone } from '../lib/format.js'
 import { useI18n } from '../state/i18n.jsx'
 
 export function Crumbs({ items }) {
@@ -23,42 +22,21 @@ export function Crumbs({ items }) {
 }
 
 export function Segments({ items, label }) {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   return (
     <nav className="segments" aria-label={label ? t(label) : undefined}>
       {items.map((item) => (
         <NavLink key={item.to} to={item.to} end={item.end !== false}>
           {t(item.label)}
-          {item.count != null && <em>{formatNumber(item.count)}</em>}
+          {item.count != null && <em>{formatNumber(item.count, lang)}</em>}
         </NavLink>
       ))}
     </nav>
   )
 }
 
-export function SegmentButtons({ items, value, onChange, label }) {
-  const { t } = useI18n()
-  return (
-    <div className="segments" role="tablist" aria-label={label ? t(label) : undefined}>
-      {items.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          role="tab"
-          aria-selected={value === item.id}
-          className={value === item.id ? 'active' : ''}
-          onClick={() => onChange(item.id)}
-        >
-          {t(item.label)}
-          {item.count != null && <em>{formatNumber(item.count)}</em>}
-        </button>
-      ))}
-    </div>
-  )
-}
-
 export function KpiGrid({ items }) {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const visible = (items || []).filter(Boolean)
   if (!visible.length) return null
   return (
@@ -66,7 +44,7 @@ export function KpiGrid({ items }) {
       {visible.map((item) => (
         <article className="stat-card" key={item.label}>
           <span>{t(item.label)}</span>
-          <strong>{item.node ?? (item.percent ? formatPercent(item.value) : formatNumber(item.value))}</strong>
+          <strong>{item.node ?? (item.percent ? formatPercent(item.value) : formatNumber(item.value, lang))}</strong>
           {item.hint && <small className="muted">{typeof item.hint === 'string' ? t(item.hint, item.vars) : item.hint}</small>}
         </article>
       ))}
@@ -76,13 +54,13 @@ export function KpiGrid({ items }) {
 
 // Доля верных ответов с учётом размера выборки.
 export function Rate({ correct, answered, rate: given, min = MIN_SAMPLE }) {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const rate = given ?? rateOf(correct, answered)
   const tone = rateTone(rate, answered ?? (rate == null ? 0 : min), min)
   if (tone === 'none') return <span className="rate rate-none">—</span>
   const title = tone === 'thin'
-    ? t('Мало данных: {count} ответов. Меньше {min} — оценка ненадёжна.', { count: formatNumber(answered), min })
-    : (answered != null ? t('Ответов: {count}', { count: formatNumber(answered) }) : undefined)
+    ? t('Мало данных: {count} ответов. Меньше {min} — оценка ненадёжна.', { count: formatNumber(answered, lang), min })
+    : (answered != null ? t('Ответов: {count}', { count: formatNumber(answered, lang) }) : undefined)
   return (
     <span className={`rate rate-${tone}`} title={title}>
       <b>{formatPercent(rate)}</b>
@@ -90,7 +68,7 @@ export function Rate({ correct, answered, rate: given, min = MIN_SAMPLE }) {
   )
 }
 
-export function Skeleton({ lines = 3, height }) {
+function Skeleton({ lines = 3, height }) {
   return (
     <div className="skeleton-block" aria-hidden="true" style={height ? { minHeight: height } : undefined}>
       {Array.from({ length: lines }, (_, index) => <span className="skeleton" key={index} />)}
@@ -123,52 +101,6 @@ export function Empty({ text, hint }) {
       <p>{t(text)}</p>
       {hint && <p className="muted">{t(hint)}</p>}
     </div>
-  )
-}
-
-export function Modal({ open, title, onClose, children, wide = false }) {
-  const { t } = useI18n()
-  const ref = useRef(null)
-
-  useEffect(() => {
-    const node = ref.current
-    if (!node) return undefined
-    if (open && !node.open) {
-      node.showModal()
-      // Фокус — в первое поле формы, а не на кнопку закрытия.
-      node.querySelector('.modal-body input, .modal-body select, .modal-body textarea')?.focus()
-    }
-    if (!open && node.open) node.close()
-    return undefined
-  }, [open])
-
-  useEffect(() => {
-    const node = ref.current
-    if (!node) return undefined
-    const onCancel = (event) => {
-      event.preventDefault()
-      onClose?.()
-    }
-    node.addEventListener('cancel', onCancel)
-    return () => node.removeEventListener('cancel', onCancel)
-  }, [onClose])
-
-  return (
-    <dialog
-      ref={ref}
-      className={`modal ${wide ? 'wide' : ''}`}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose?.()
-      }}
-    >
-      <div className="modal-body">
-        <header className="modal-head">
-          <h2>{title}</h2>
-          <button className="ghost" type="button" onClick={onClose} aria-label={t('Закрыть')}>✕</button>
-        </header>
-        {open ? children : null}
-      </div>
-    </dialog>
   )
 }
 

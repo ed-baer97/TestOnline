@@ -4,8 +4,8 @@ import { groupLabels } from '../../lib/bands.js'
 import { useOrganizations, useOrgStaff } from '../../state/admin/organizations.js'
 import { pick, useI18n } from '../../state/i18n.jsx'
 
-export function Organizations() {
-  const { lang } = useI18n()
+export function Organizations({ me }) {
+  const { lang, t } = useI18n()
   const {
     organizations,
     districts,
@@ -35,52 +35,59 @@ export function Organizations() {
     organizationSaved,
   } = useOrganizations()
 
+  const canSeedMangystau = /манг[ыи]стау|маңғыстау/i.test(me?.regionName || '')
+
   function confirmRemove(org) {
-    if (window.confirm(`Удалить организацию «${org.name}»?`)) remove(org)
+    if (window.confirm(t('Удалить организацию «{name}»?', { name: pick(lang, org.name, org.nameKk) }))) remove(org)
   }
 
   return (
     <section className="stack">
-      <div className="section-head"><h1>Организации</h1></div>
+      <div className="section-head"><h1>{t('Организации')}</h1></div>
       <Notice error={error} notice={notice} />
-      <div className="row-actions">
-        <button className="ghost" type="button" onClick={seedCatalog}>Загрузить районы и школы Мангистау</button>
-      </div>
+      {canSeedMangystau && (
+        <div className="row-actions">
+          <button className="ghost" type="button" onClick={seedCatalog}>{t('Загрузить районы и школы Мангистау')}</button>
+        </div>
+      )}
       <form className="admin-form" onSubmit={addDistrict}>
         <label>
-          Район
-          <input value={districtName} onChange={(event) => setDistrictName(event.target.value)} placeholder="Бейнеуский район" />
+          {t('Район')}
+          <input value={districtName} onChange={(event) => setDistrictName(event.target.value)} placeholder={t('Бейнеуский район')} />
         </label>
         <label>
-          Район, қазақша
+          {t('Район, қазақша')}
           <input value={districtNameKk} onChange={(event) => setDistrictNameKk(event.target.value)} placeholder="Бейнеу ауданы" />
         </label>
-        <button className="ghost add" type="submit">Добавить район</button>
+        <button className="ghost add" type="submit">{t('Добавить район')}</button>
       </form>
       {districts.length > 0 && (
         <div className="stack">
-          {districts.map((district) => (
-            <div className="class-line" key={district.id}>
-              <span>{pick(lang, district.name, district.nameKk)}</span>
-              <button className="ghost" type="button" onClick={() => { if (window.confirm(`Удалить район «${district.name}»?`)) removeDistrict(district) }}>Удалить</button>
-            </div>
-          ))}
+          {districts.map((district) => {
+            const label = pick(lang, district.name, district.nameKk)
+            return (
+              <div className="class-line" key={district.id}>
+                <span>{label}</span>
+                <button className="ghost" type="button" onClick={() => { if (window.confirm(t('Удалить район «{name}»?', { name: label }))) removeDistrict(district) }}>{t('Удалить')}</button>
+              </div>
+            )
+          })}
         </div>
       )}
       <form className="admin-form" onSubmit={create}>
         <label>
-          Название
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Школа №3" />
+          {t('Название')}
+          <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Школа №3')} />
         </label>
         <label>
-          Название, қазақша
+          {t('Название, қазақша')}
           <input value={nameKk} onChange={(event) => setNameKk(event.target.value)} placeholder="№3 мектеп" />
         </label>
         {districts.length > 0 && (
           <label>
-            Район
+            {t('Район')}
             <select value={districtId} onChange={(event) => setDistrictId(event.target.value)}>
-              <option value="">Выберите район</option>
+              <option value="">{t('Выберите район')}</option>
               {districts.map((district) => (
                 <option key={district.id} value={district.id}>{pick(lang, district.name, district.nameKk)}</option>
               ))}
@@ -88,9 +95,9 @@ export function Organizations() {
           </label>
         )}
         <GroupChecks groups={groups} onChange={setGroups} />
-        <button className="primary add" type="submit" disabled={districts.length > 0 && !districtId}>Создать организацию</button>
+        <button className="primary add" type="submit" disabled={districts.length > 0 && !districtId}>{t('Создать организацию')}</button>
       </form>
-      {organizations === null && !error && <p className="muted">Загрузка…</p>}
+      {organizations === null && !error && <p className="muted">{t('Загрузка…')}</p>}
       <div className="stack">
         {organizations?.map((org) => (
           <article className="question-card" key={org.id}>
@@ -98,14 +105,20 @@ export function Organizations() {
               <div>
                 <h2>{pick(lang, org.name, org.nameKk)}</h2>
                 {org.districtName && <p className="muted">{pick(lang, org.districtName, org.districtNameKk)}</p>}
-                <p className="muted">{groupLabels(org.groups) || 'Группы не отмечены'}</p>
-                <p className="muted">{org.classes} кл. · {org.learners} тест. · {org.admins} адм.</p>
+                <p className="muted">{groupLabels(org.groups, t) || t('Группы не отмечены')}</p>
+                <p className="muted">
+                  {t('{orgClasses} кл. · {learners} тест. · {admins} адм.', {
+                    orgClasses: org.classes,
+                    learners: org.learners,
+                    admins: org.admins,
+                  })}
+                </p>
               </div>
               <div className="row-actions">
                 <button className="ghost" type="button" onClick={() => setEditing(editing === org.id ? null : org.id)}>
-                  {editing === org.id ? 'Закрыть' : 'Изменить'}
+                  {t(editing === org.id ? 'Закрыть' : 'Изменить')}
                 </button>
-                <button className="ghost" type="button" onClick={() => confirmRemove(org)}>Удалить</button>
+                <button className="ghost" type="button" onClick={() => confirmRemove(org)}>{t('Удалить')}</button>
               </div>
             </header>
             {editing === org.id && (
@@ -125,7 +138,7 @@ export function Organizations() {
 }
 
 function OrgEditor({ org, districts, onSave, onSaved, onError }) {
-  const { lang } = useI18n()
+  const { lang, t } = useI18n()
   const [name, setName] = useState(org.name)
   const [nameKk, setNameKk] = useState(org.nameKk || '')
   const [districtId, setDistrictId] = useState(org.districtId || '')
@@ -150,18 +163,18 @@ function OrgEditor({ org, districts, onSave, onSaved, onError }) {
   return (
     <form className="stack" onSubmit={save}>
       <label>
-        Название
+        {t('Название')}
         <input value={name} onChange={(event) => setName(event.target.value)} />
       </label>
       <label>
-        Название, қазақша
+        {t('Название, қазақша')}
         <input value={nameKk} onChange={(event) => setNameKk(event.target.value)} />
       </label>
       {districts.length > 0 && (
         <label>
-          Район
+          {t('Район')}
           <select value={districtId} onChange={(event) => setDistrictId(event.target.value)}>
-            <option value="">Выберите район</option>
+            <option value="">{t('Выберите район')}</option>
             {districts.map((district) => (
               <option key={district.id} value={district.id}>{pick(lang, district.name, district.nameKk)}</option>
             ))}
@@ -169,43 +182,51 @@ function OrgEditor({ org, districts, onSave, onSaved, onError }) {
         </label>
       )}
       <GroupChecks groups={groups} onChange={setGroups} />
-      <button className="primary add" type="submit">Сохранить</button>
+      <button className="primary add" type="submit">{t('Сохранить')}</button>
     </form>
   )
 }
 
 export function OrgStaff() {
+  const { lang, t } = useI18n()
   const { admins, organizations, form, error, setError, notice, load, patch, create, remove, saveAdmin } = useOrgStaff()
 
   function confirmRemove(person) {
-    if (window.confirm(`Удалить администратора ${person.displayName}?`)) remove(person)
+    if (window.confirm(t('Удалить администратора {name}?', { name: person.displayName }))) remove(person)
   }
 
   return (
     <section className="stack">
-      <div className="section-head"><h1>Админы организаций</h1></div>
+      <div className="section-head"><h1>{t('Админы организаций')}</h1></div>
       <Notice error={error} notice={notice} />
       <form className="admin-form" onSubmit={create}>
         <label>
-          Имя
+          {t('Имя')}
           <input name="displayName" value={form.displayName} onChange={patch} />
         </label>
         <label>
-          Логин
-          <input name="login" autoComplete="off" placeholder="school.admin" title="3–32 символа латиницей: буквы, цифры, точка, _ или -" value={form.login} onChange={patch} />
+          {t('Логин')}
+          <input
+            name="login"
+            autoComplete="off"
+            placeholder="school.admin"
+            title={t('3–32 символа латиницей: буквы, цифры, точка, _ или -')}
+            value={form.login}
+            onChange={patch}
+          />
         </label>
         <label>
-          Пароль
+          {t('Пароль')}
           <input name="password" type="password" autoComplete="new-password" value={form.password} onChange={patch} />
         </label>
         <label>
-          Организация
+          {t('Организация')}
           <select name="organizationId" value={form.organizationId} onChange={patch}>
-            {organizations.length === 0 && <option value="">Сначала создайте организацию</option>}
-            {organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+            {organizations.length === 0 && <option value="">{t('Сначала создайте организацию')}</option>}
+            {organizations.map((org) => <option key={org.id} value={org.id}>{pick(lang, org.name, org.nameKk)}</option>)}
           </select>
         </label>
-        <button className="primary add" type="submit" disabled={!organizations.length}>Создать администратора</button>
+        <button className="primary add" type="submit" disabled={!organizations.length}>{t('Создать администратора')}</button>
       </form>
       <div className="stack">
         {admins?.map((person) => (
@@ -225,6 +246,7 @@ export function OrgStaff() {
 }
 
 function OrgAdminRow({ person, organizations, onSave, onChanged, onDelete, onError }) {
+  const { lang, t } = useI18n()
   const [displayName, setDisplayName] = useState(person.displayName)
   const [organizationId, setOrganizationId] = useState(person.organizationId)
   const [password, setPassword] = useState('')
@@ -244,22 +266,22 @@ function OrgAdminRow({ person, organizations, onSave, onChanged, onDelete, onErr
   return (
     <article className="person">
       <form onSubmit={save}>
-        <input aria-label="Имя" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-        <select aria-label="Организация" value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}>
-          {organizations.map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+        <input aria-label={t('Имя')} value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+        <select aria-label={t('Организация')} value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}>
+          {organizations.map((org) => <option key={org.id} value={org.id}>{pick(lang, org.name, org.nameKk)}</option>)}
         </select>
         <input
-          aria-label="Новый пароль"
+          aria-label={t('Новый пароль')}
           type="password"
           autoComplete="new-password"
-          placeholder="Новый пароль"
+          placeholder={t('Новый пароль')}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
-        <button className="ghost" type="submit">Сохранить</button>
+        <button className="ghost" type="submit">{t('Сохранить')}</button>
       </form>
       <span className="muted">{person.login}</span>
-      <button className="ghost" type="button" onClick={onDelete}>Удалить</button>
+      <button className="ghost" type="button" onClick={onDelete}>{t('Удалить')}</button>
     </article>
   )
 }

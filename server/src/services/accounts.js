@@ -4,6 +4,7 @@ import { fail } from '../domain/errors.js'
 import { classCaption } from '../domain/structure.js'
 import { config } from '../infrastructure/config.js'
 import { hashPassword, verifyPassword } from '../infrastructure/passwords.js'
+import { sessionMatchesPassword } from '../infrastructure/session.js'
 import * as quizzesRepo from '../repositories/quizzes.js'
 import * as resultsRepo from '../repositories/results.js'
 import * as usersRepo from '../repositories/users.js'
@@ -32,11 +33,10 @@ export async function registerUser({ login, password }) {
 export async function authenticate(login, password) {
   const row = await usersRepo.findCredentials(String(login || '').trim())
   if (!row || !(await verifyPassword(password, row.password_hash))) return null
-  return { id: row.id, login: row.login, role: row.role || 'host' }
+  return { id: row.id, login: row.login, role: row.role || 'host', passwordHash: row.password_hash }
 }
 
-export async function profile(id) {
-  const row = await usersRepo.findProfileRow(id)
+function presentProfile(row) {
   if (!row) return null
   const klass = row.class_id && row.class_name ? row : null
   return {
@@ -53,6 +53,17 @@ export async function profile(id) {
     classLabel: classCaption(klass),
     band: klass?.band || null,
   }
+}
+
+export async function profile(id) {
+  return presentProfile(await usersRepo.findProfileRow(id))
+}
+
+export async function sessionProfile(session) {
+  if (!session?.userId) return null
+  const row = await usersRepo.findProfileRow(session.userId)
+  if (!row || !sessionMatchesPassword(session, row.password_hash)) return null
+  return presentProfile(row)
 }
 
 export async function ensureSuperAdmin() {

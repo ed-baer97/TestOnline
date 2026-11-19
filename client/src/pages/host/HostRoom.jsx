@@ -1,40 +1,49 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Brand } from '../../components/Brand.jsx'
 import { FitText } from '../../components/FitText.jsx'
+import { EnvControls } from '../../components/layout/topbar.jsx'
+import { COLOR_NAMES, SHAPES, Shape } from '../../components/shapes.jsx'
 import { formatCode } from '../../lib/format.js'
 import { useCountdown } from '../../state/countdown.js'
 import { useHostRoom, useJoinLink } from '../../state/hostRoom.js'
-import { COLOR_NAMES, SHAPES, Shape } from '../../components/shapes.jsx'
+import { useI18n } from '../../state/i18n.jsx'
+import { useSession } from '../../state/session.js'
 
 export default function HostRoom() {
+  const { t } = useI18n()
   const { code } = useParams()
+  const me = useSession()
+  const backTo = me?.role === 'super' ? '/admin/quizzes' : '/host'
   const { state, error, online, advance } = useHostRoom(code)
   const { joinUrl, qr } = useJoinLink(code)
   const seconds = useCountdown(state?.endsAt, state?.serverNow)
+  const advanceRef = useRef(advance)
+  advanceRef.current = advance
 
   useEffect(() => {
     const onKey = (event) => {
       if (event.target.closest('input, textarea, button, a')) return
       if (event.code === 'Space' || event.key === 'ArrowRight') {
         event.preventDefault()
-        advance()
+        advanceRef.current()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  })
+  }, [])
 
   if (error && !state) {
     return (
       <main className="center">
-        <p>{error}</p>
-        <Link to="/host">К квизам</Link>
+        <EnvControls />
+        <p>{t(error)}</p>
+        <Link to={backTo}>{t('К квизам')}</Link>
       </main>
     )
   }
 
-  if (!state) return <p className="center muted">Подключаем комнату…</p>
+  if (!state) return <p className="center muted">{t('Подключаем комнату…')}</p>
 
   const lastReveal = state.status === 'reveal' && state.questionIndex === state.questionCount - 1
   const actionLabel = state.status === 'lobby'
@@ -48,26 +57,29 @@ export default function HostRoom() {
   return (
     <main className="stage">
       <header className="stage-bar">
-        <Brand to="/host" />
+        <Brand to={backTo} />
         <strong data-testid="pin">{formatCode(state.code)}</strong>
-        <span>{state.status === 'lobby' ? 'Лобби' : state.status === 'podium' ? 'Итог' : `${state.questionIndex + 1} / ${state.questionCount}`}</span>
+        <div className="top-actions">
+          <span>{state.status === 'lobby' ? t('Лобби') : state.status === 'podium' ? t('Итог') : `${state.questionIndex + 1} / ${state.questionCount}`}</span>
+          <EnvControls />
+        </div>
       </header>
-      {!online && <p className="banner">Связь пропала, подключаемся снова…</p>}
+      {!online && <p className="banner">{t('Связь пропала, подключаемся снова…')}</p>}
       {state.status === 'lobby' && (
         <section className="lobby">
           <div>
             <h1 className="quiz-title">{state.title}</h1>
-            <p className="lead">Покажите QR-код. Телефоны откроют игру сами, вводить код не нужно.</p>
+            <p className="lead">{t('Покажите QR-код. Телефоны откроют игру сами, вводить код не нужно.')}</p>
             {joinUrl && <p className="join-url">{joinUrl}</p>}
-            {joinUrl.includes('localhost') && <p className="form-error">Телефоны не откроют localhost. Зайдите на этот компьютер по адресу в локальной сети.</p>}
-            <p className="count">{state.playerCount} в лобби</p>
+            {joinUrl.includes('localhost') && <p className="form-error">{t('Телефоны не откроют localhost. Зайдите на этот компьютер по адресу в локальной сети.')}</p>}
+            <p className="count">{t('{count} в лобби', { count: state.playerCount })}</p>
             <div className="chips">
               {state.players.map((player) => (
                 <span key={player.id} className={player.online ? '' : 'off'}>{player.name}</span>
               ))}
             </div>
           </div>
-          {qr && <img className="qr" src={qr} alt="QR-код для входа в игру" />}
+          {qr && <img className="qr" src={qr} alt={t('QR-код для входа в игру')} />}
         </section>
       )}
       {(state.status === 'question' || state.status === 'reveal') && state.question && (
@@ -75,7 +87,7 @@ export default function HostRoom() {
           <div className="question-head">
             <h1>{state.question.text}</h1>
             {state.status === 'question' && <p className={`timer ${seconds != null && seconds <= 5 ? 'danger' : ''}`}>{seconds ?? state.question.timeLimit}</p>}
-            <p className="muted">Ответили {state.answeredCount} из {state.playerCount}</p>
+            <p className="muted">{t('Ответили {answered} из {total}', { answered: state.answeredCount, total: state.playerCount })}</p>
           </div>
           <div className="answer-grid host-grid">
             {state.question.options.map((option) => {
@@ -96,7 +108,7 @@ export default function HostRoom() {
       )}
       {state.status === 'podium' && (
         <section className="podium">
-          <h1>Итог</h1>
+          <h1>{t('Итог')}</h1>
           <ol>
             {state.leaderboard.slice(0, 10).map((player) => (
               <li key={player.rank}>
@@ -106,14 +118,14 @@ export default function HostRoom() {
               </li>
             ))}
           </ol>
-          {state.leaderboard.length === 0 && <p className="muted">В этой игре не было участников.</p>}
+          {state.leaderboard.length === 0 && <p className="muted">{t('В этой игре не было участников.')}</p>}
         </section>
       )}
       {state.status !== 'podium' && (
-        <button className="primary advance" type="button" onClick={advance}>{actionLabel}</button>
+        <button className="primary advance" type="button" onClick={advance}>{t(actionLabel)}</button>
       )}
-      {state.status === 'podium' && <Link className="primary advance" to="/host">К квизам</Link>}
-      {error && <p className="form-error center-error">{error}</p>}
+      {state.status === 'podium' && <Link className="primary advance" to={backTo}>{t('К квизам')}</Link>}
+      {error && <p className="form-error center-error">{t(error)}</p>}
     </main>
   )
 }
