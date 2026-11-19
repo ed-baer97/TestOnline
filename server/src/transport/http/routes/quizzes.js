@@ -2,7 +2,7 @@ import express from 'express'
 import { createQuiz, deleteQuiz, getQuiz, listQuizzes, updateQuiz } from '../../../services/quizzes.js'
 import { questionsFromXlsx, templateWorkbook } from '../../../services/quizExcel.js'
 import { listResults, quizStats, statsOverview } from '../../../services/stats.js'
-import { requireHost, route } from '../middleware.js'
+import { requireHost, requireQuizAuthor, route } from '../middleware.js'
 
 export function registerQuizRoutes(app) {
   app.get('/api/stats', requireHost, route(async (req, res) => {
@@ -18,18 +18,18 @@ export function registerQuizRoutes(app) {
     res.json(stats)
   }))
 
-  app.get('/api/template', requireHost, route(async (_req, res) => {
+  app.get('/api/template', requireQuizAuthor, route(async (_req, res) => {
     const buffer = await templateWorkbook()
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     res.setHeader('Content-Disposition', 'attachment; filename="testonline-shablon.xlsx"')
     res.send(Buffer.from(buffer))
   }))
 
-  app.get('/api/quizzes', requireHost, route(async (req, res) => {
+  app.get('/api/quizzes', requireQuizAuthor, route(async (req, res) => {
     res.json({ quizzes: await listQuizzes(req.userId) })
   }))
 
-  app.get('/api/quizzes/:id', requireHost, route(async (req, res) => {
+  app.get('/api/quizzes/:id', requireQuizAuthor, route(async (req, res) => {
     const quiz = await getQuiz(req.params.id, req.userId)
     if (!quiz) {
       res.status(404).json({ error: 'Квиз не найден' })
@@ -38,7 +38,7 @@ export function registerQuizRoutes(app) {
     res.json(quiz)
   }))
 
-  app.post('/api/import', requireHost, express.raw({ type: 'application/octet-stream', limit: '2mb' }), async (req, res) => {
+  app.post('/api/import', requireQuizAuthor, express.raw({ type: 'application/octet-stream', limit: '2mb' }), async (req, res) => {
     try {
       if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
         res.status(400).json({ error: 'Файл пустой' })
@@ -52,7 +52,7 @@ export function registerQuizRoutes(app) {
     }
   })
 
-  app.post('/api/quizzes', requireHost, route(async (req, res) => {
+  app.post('/api/quizzes', requireQuizAuthor, route(async (req, res) => {
     try {
       res.status(201).json(await createQuiz(req.userId, req.body))
     } catch (error) {
@@ -60,7 +60,7 @@ export function registerQuizRoutes(app) {
     }
   }))
 
-  app.put('/api/quizzes/:id', requireHost, route(async (req, res) => {
+  app.put('/api/quizzes/:id', requireQuizAuthor, route(async (req, res) => {
     try {
       const quiz = await updateQuiz(req.params.id, req.userId, req.body)
       if (!quiz) {
@@ -73,7 +73,7 @@ export function registerQuizRoutes(app) {
     }
   }))
 
-  app.delete('/api/quizzes/:id', requireHost, route(async (req, res) => {
+  app.delete('/api/quizzes/:id', requireQuizAuthor, route(async (req, res) => {
     if (!(await deleteQuiz(req.params.id, req.userId))) {
       res.status(404).json({ error: 'Квиз не найден' })
       return

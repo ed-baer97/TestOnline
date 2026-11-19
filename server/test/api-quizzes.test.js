@@ -6,6 +6,8 @@ import { call, login, startServer } from './helpers/http.js'
 
 await useTestDatabase('api-quizzes')
 process.env.SESSION_SECRET = 'test-secret'
+process.env.SUPER_LOGIN = 'root'
+process.env.SUPER_PASSWORD = 'rootpass'
 
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
@@ -215,4 +217,26 @@ test('сводка и итоги ведущего без игр', async (t) => {
   const missing = await call(base, '/api/quizzes/missing/stats', { cookie })
   assert.equal(missing.status, 404)
   assert.deepEqual(missing.body, { error: 'Квиз не найден' })
+})
+
+test('администратор платформы создаёт и запускает свой квиз', async (t) => {
+  const server = await startServer()
+  t.after(() => server.close())
+  const { base } = server
+  const cookie = await login(base, 'root', 'rootpass')
+
+  const created = await call(base, '/api/quizzes', { method: 'POST', cookie, json: geography })
+  assert.equal(created.status, 201)
+  assert.equal(created.body.title, 'География')
+
+  const listed = await call(base, '/api/quizzes', { cookie })
+  assert.deepEqual(listed.body.quizzes.map((item) => item.title), ['География'])
+
+  const room = await call(base, '/api/rooms', { method: 'POST', cookie, json: { quizId: created.body.id } })
+  assert.equal(room.status, 201)
+  assert.equal(room.body.title, 'География')
+
+  const stats = await call(base, '/api/stats', { cookie })
+  assert.equal(stats.status, 403)
+  assert.deepEqual(stats.body, { error: 'Недостаточно прав' })
 })

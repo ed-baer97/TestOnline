@@ -12,11 +12,11 @@ import {
   remember,
   submitAnswer,
 } from '../../../services/rooms/index.js'
-import { requireHost, route } from '../middleware.js'
+import { requireQuizAuthor, route } from '../middleware.js'
 
 // Комнатой управляют по hostToken и playerToken, а не по cookie: экран ведущего и телефоны входят без логина.
 export function registerRoomRoutes(app) {
-  app.post('/api/rooms', requireHost, route(async (req, res) => {
+  app.post('/api/rooms', requireQuizAuthor, route(async (req, res) => {
     const quiz = await getQuiz(req.body?.quizId, req.userId)
     if (!quiz) {
       res.status(404).json({ error: 'Квиз не найден' })

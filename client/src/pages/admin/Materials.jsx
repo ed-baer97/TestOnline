@@ -1,8 +1,21 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { GroupChecks, Notice } from '../../components/admin/ui.jsx'
 import { EMPTY_GROUPS, groupLabels } from '../../lib/bands.js'
 import { blankFrame, blankQuestion, useLessonEditor, useMaterialList } from '../../state/admin/materials.js'
-import { GroupChecks, Notice } from '../../components/admin/ui.jsx'
+import { useQuizList } from '../../state/host/quizzes.js'
+import Editor from '../host/Editor.jsx'
+
+function MaterialTabs() {
+  const { pathname } = useLocation()
+  const quizzes = pathname.startsWith('/admin/quizzes')
+  return (
+    <nav className="host-tabs" aria-label="Материалы">
+      <NavLink to="/admin/materials" className={() => (quizzes ? undefined : 'active')}>Уроки</NavLink>
+      <NavLink to="/admin/quizzes" className={() => (quizzes ? 'active' : undefined)}>Квизы</NavLink>
+    </nav>
+  )
+}
 
 const TONES = [
   { id: 'sun', label: 'Солнце' },
@@ -85,6 +98,7 @@ export function MaterialList() {
 
   return (
     <section className="stack">
+      <MaterialTabs />
       <div className="section-head">
         <h1>Материалы</h1>
         <button className="primary" type="button" onClick={() => setCreating((value) => !value)}>Новый раздел</button>
@@ -144,6 +158,7 @@ export function LessonEditor() {
   const [params] = useSearchParams()
   const {
     isNew, title, setTitle, format, setFormat, sections, sectionId, setSectionId, slides, setSlides, videoName, videoUrl,
+    saving, uploadProgress,
     questions, setQuestions, error, notice, ready, patchSlide, moveSlide, upload, pickVideo, save, remove,
   } = useLessonEditor(id, navigate, params.get('section') || '')
 
@@ -154,6 +169,8 @@ export function LessonEditor() {
   if (!ready && !error) return <p className="muted">Загрузка…</p>
 
   return (
+    <>
+    <MaterialTabs />
     <form className="stack" onSubmit={save}>
       <div className="section-head">
         <h1>{isNew ? 'Новый урок' : 'Урок'}</h1>
@@ -191,6 +208,14 @@ export function LessonEditor() {
             </label>
           </div>
           {videoName && <p className="muted">{videoName}</p>}
+          {uploadProgress != null && (
+            <div className="upload-progress">
+              <p className="muted">Загрузка видео {uploadProgress}%</p>
+              <div className="upload-track" role="progressbar" aria-valuenow={uploadProgress} aria-valuemin={0} aria-valuemax={100} aria-label="Загрузка видео">
+                <div style={{ width: `${uploadProgress}%` }} />
+              </div>
+            </div>
+          )}
           {videoUrl && <video className="lesson-video" src={videoUrl} controls playsInline />}
         </section>
       ) : (
@@ -308,7 +333,54 @@ export function LessonEditor() {
           </article>
         ))}
       </section>
-      <button className="primary add" type="submit">Сохранить урок</button>
+      <button className="primary add" type="submit" disabled={saving}>{saving ? 'Сохранение…' : 'Сохранить урок'}</button>
     </form>
+    </>
+  )
+}
+
+export function MaterialQuizzes() {
+  const navigate = useNavigate()
+  const { quizzes, error, start, remove } = useQuizList(navigate)
+
+  function confirmRemove(quiz) {
+    if (window.confirm(`Удалить «${quiz.title}»?`)) remove(quiz)
+  }
+
+  return (
+    <section className="stack">
+      <MaterialTabs />
+      <div className="section-head">
+        <h1>Квизы</h1>
+        <Link className="primary" to="/admin/quizzes/new">Новый квиз</Link>
+      </div>
+      {error && <p className="form-error">{error}</p>}
+      {quizzes === null && !error && <p className="muted">Загрузка…</p>}
+      {quizzes?.length === 0 && <p className="muted">Пока нет квизов. Создайте первый.</p>}
+      <div className="quiz-list">
+        {quizzes?.map((quiz) => (
+          <article className="card quiz-card" key={quiz.id}>
+            <div>
+              <h2>{quiz.title}</h2>
+              <p className="muted">{quiz.questionCount} вопр.</p>
+            </div>
+            <div className="top-actions">
+              <button className="primary" type="button" onClick={() => start(quiz.id)}>Запустить</button>
+              <Link to={`/admin/quizzes/${quiz.id}`}>Править</Link>
+              <button className="ghost" type="button" onClick={() => confirmRemove(quiz)}>Удалить</button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+export function MaterialQuizEditor() {
+  return (
+    <section className="stack">
+      <MaterialTabs />
+      <Editor embedded />
+    </section>
   )
 }

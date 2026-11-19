@@ -122,10 +122,14 @@ test('права: без входа 401, чужая роль 403', async (t) => 
   assert.equal(ghost.status, 401)
   assert.deepEqual(ghost.body, { error: 'Нужен вход' })
 
-  for (const url of ['/api/quizzes', '/api/stats', '/api/template']) {
+  for (const url of ['/api/stats', '/api/results']) {
     const denied = await call(base, url, { cookie: rootCookie })
     assert.equal(denied.status, 403, url)
     assert.deepEqual(denied.body, { error: 'Недостаточно прав' })
+  }
+  for (const url of ['/api/quizzes', '/api/template']) {
+    const allowed = await call(base, url, { cookie: rootCookie })
+    assert.equal(allowed.status, 200, url)
   }
   const hostAdmin = await call(base, '/api/admin/dashboard', { cookie: hostCookie })
   assert.equal(hostAdmin.status, 403)

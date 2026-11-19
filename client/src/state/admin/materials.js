@@ -78,6 +78,8 @@ export function useLessonEditor(id, navigate, initialSectionId = '') {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [ready, setReady] = useState(isNew)
+  const [saving, setSaving] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(null)
 
   useEffect(() => {
     api.lessonSections().then((data) => setSections(data.sections)).catch((err) => setError(err.message))
@@ -189,17 +191,24 @@ export function useLessonEditor(id, navigate, initialSectionId = '') {
         return { id: slide.id, kind: 'image', caption: slide.caption, fileId: slide.fileId }
       })
     }
+    setSaving(true)
     try {
       const lesson = savedId.current
         ? await api.updateLesson(savedId.current, body)
         : await api.createLesson(body)
       savedId.current = lesson.id
-      if (format === 'video' && videoFile) await api.uploadLessonVideo(lesson.id, videoFile)
+      if (format === 'video' && videoFile) {
+        setUploadProgress(0)
+        await api.uploadLessonVideo(lesson.id, videoFile, setUploadProgress)
+      }
       setVideoFile(null)
       setNotice('Урок сохранён')
       if (isNew) navigate(`/admin/materials/${lesson.id}`, { replace: true })
     } catch (err) {
       setError(err.message)
+    } finally {
+      setSaving(false)
+      setUploadProgress(null)
     }
   }
 
@@ -225,6 +234,8 @@ export function useLessonEditor(id, navigate, initialSectionId = '') {
     setSlides,
     videoName,
     videoUrl,
+    saving,
+    uploadProgress,
     questions,
     setQuestions,
     error,

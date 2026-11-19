@@ -504,6 +504,10 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .deck-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .deck-note { margin: 0; text-align: center; }
 .lesson-video { width: 100%; max-height: 70dvh; border-radius: 28px; background: #2a2a2a; }
+.upload-progress { display: grid; gap: 6px; }
+.upload-progress p { margin: 0; }
+.upload-track { height: 10px; border-radius: 999px; background: var(--bg-2); overflow: hidden; }
+.upload-track div { height: 100%; border-radius: inherit; background: var(--accent); }
 .deck-dots { display: flex; gap: 6px; }
 .deck-dots button {
   width: 10px;

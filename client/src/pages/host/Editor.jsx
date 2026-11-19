@@ -1,28 +1,30 @@
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Brand } from '../../components/Brand.jsx'
 import { COLOR_NAMES } from '../../components/shapes.jsx'
 import { blankQuestion, useQuizEditor } from '../../state/host/quizzes.js'
 
-export default function Editor({ onLogout }) {
+function QuizActions({ save, saveAndStart }) {
+  return (
+    <>
+      <button className="ghost" type="button" onClick={save}>Сохранить</button>
+      <button className="primary" type="button" onClick={saveAndStart}>Запустить</button>
+    </>
+  )
+}
+
+export default function Editor({ onLogout, embedded = false }) {
   const { id } = useParams()
   const navigate = useNavigate()
+  const editorBase = embedded ? '/admin/quizzes' : '/host/quiz'
   const {
     title, setTitle, questions, setQuestions, error, saved, ready, importing,
     updateQuestion, updateOption, move, save, loadExcel, saveAndStart,
-  } = useQuizEditor(id, navigate)
+  } = useQuizEditor(id, navigate, editorBase)
 
   if (!ready && !error) return <p className="center muted">Загрузка…</p>
 
-  return (
-    <main className="sheet editor">
-      <header className="topbar">
-        <Brand to="/host" />
-        <div className="top-actions">
-          <button className="ghost" type="button" onClick={save}>Сохранить</button>
-          <button className="primary" type="button" onClick={saveAndStart}>Запустить</button>
-          <button className="ghost" type="button" onClick={onLogout}>Выйти</button>
-        </div>
-      </header>
+  const fields = (
+    <>
       <label className="title-field">
         Название квиза
         <input value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} placeholder="География, 7 класс" />
@@ -79,6 +81,34 @@ export default function Editor({ onLogout }) {
         </section>
       ))}
       <button className="ghost add" type="button" onClick={() => setQuestions((current) => [...current, blankQuestion()])}>Добавить вопрос</button>
+    </>
+  )
+
+  if (embedded) {
+    return (
+      <section className="stack editor">
+        <div className="section-head">
+          <h1>{id === 'new' ? 'Новый квиз' : 'Квиз'}</h1>
+          <div className="row-actions">
+            <Link className="ghost" to="/admin/quizzes">К списку</Link>
+            <QuizActions save={save} saveAndStart={saveAndStart} />
+          </div>
+        </div>
+        {fields}
+      </section>
+    )
+  }
+
+  return (
+    <main className="sheet editor">
+      <header className="topbar">
+        <Brand to="/host" />
+        <div className="top-actions">
+          <QuizActions save={save} saveAndStart={saveAndStart} />
+          <button className="ghost" type="button" onClick={onLogout}>Выйти</button>
+        </div>
+      </header>
+      {fields}
     </main>
   )
 }

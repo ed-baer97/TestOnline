@@ -55,19 +55,26 @@ export function requireUser(req, res, next) {
   })
 }
 
-export function requireHost(req, res, next) {
-  loadUser(req, res).then((user) => {
-    if (!user) return
-    if (user.role !== 'host') {
-      res.status(403).json({ error: 'Недостаточно прав' })
-      return
-    }
-    next()
-  }).catch((error) => {
-    console.error(error)
-    if (!res.headersSent) res.status(500).json({ error: 'Ошибка сервера' })
-  })
+function guardRole(allowed) {
+  return (req, res, next) => {
+    loadUser(req, res).then((user) => {
+      if (!user) return
+      if (!allowed.includes(user.role)) {
+        res.status(403).json({ error: 'Недостаточно прав' })
+        return
+      }
+      next()
+    }).catch((error) => {
+      console.error(error)
+      if (!res.headersSent) res.status(500).json({ error: 'Ошибка сервера' })
+    })
+  }
 }
+
+export const requireHost = guardRole(['host'])
+
+// Квизы платформы создаёт администратор платформы. Ведущий по-прежнему ведёт свои.
+export const requireQuizAuthor = guardRole(['host', 'super'])
 
 export function route(handler) {
   return (req, res) => {

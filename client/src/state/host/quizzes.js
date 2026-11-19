@@ -48,7 +48,7 @@ export function useQuizList(navigate) {
 }
 
 // Редактор квиза по адресу /host/quiz/new создаёт квиз при первом сохранении и подменяет адрес на /host/quiz/:id.
-export function useQuizEditor(id, navigate) {
+export function useQuizEditor(id, navigate, editorBase = '/host/quiz') {
   const isNew = id === 'new'
   const [title, setTitle] = useState('')
   const [questions, setQuestions] = useState([blankQuestion()])
@@ -97,7 +97,7 @@ export function useQuizEditor(id, navigate) {
     try {
       const quiz = isNew ? await api.createQuiz(body) : await api.updateQuiz(id, body)
       setSaved('Сохранено')
-      if (isNew && stay) navigate(`/host/quiz/${quiz.id}`, { replace: true })
+      if (isNew && stay) navigate(`${editorBase}/${quiz.id}`, { replace: true })
       return quiz
     } catch (err) {
       setError(err.message)
