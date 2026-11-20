@@ -15,15 +15,20 @@ const TONES = [
 ]
 
 function LessonRow({ lesson, sections, onMove }) {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
+  const countLang = lesson.languages?.[lang] ? lang : (lesson.languages?.ru ? 'ru' : 'kk')
+  const slides = countLang === 'kk' ? (lesson.slideCountKk ?? lesson.slideCount) : lesson.slideCount
+  const questions = countLang === 'kk' ? (lesson.questionCountKk ?? lesson.questionCount) : lesson.questionCount
+  const badges = [lesson.languages?.ru && 'Рус', lesson.languages?.kk && 'Қаз'].filter(Boolean).join(' · ')
   return (
     <article className="lesson-card">
       <div>
-        <h2>{lesson.title}</h2>
+        <h2>{pick(lang, lesson.title, lesson.titleKk)}</h2>
         <p className="muted">
           {lesson.format === 'video'
-            ? t('Видео · {count} вопр.', { count: lesson.questionCount })
-            : t('Презентация · {slides} сл. · {count} вопр.', { slides: lesson.slideCount, count: lesson.questionCount })}
+            ? t('Видео · {count} вопр.', { count: questions })
+            : t('Презентация · {slides} сл. · {count} вопр.', { slides, count: questions })}
+          {badges ? ` · ${badges}` : ''}
         </p>
       </div>
       <div className="row-actions">
@@ -151,18 +156,18 @@ export function MaterialList() {
 }
 
 export function LessonEditor() {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const { id } = useParams()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const {
-    isNew, title, setTitle, format, setFormat, sections, sectionId, setSectionId, slides, setSlides, videoName, videoUrl,
-    saving, uploadProgress,
-    questions, setQuestions, error, notice, ready, patchSlide, moveSlide, upload, pickVideo, save, remove,
+    isNew, title, setTitle, titleKk, setTitleKk, contentLang, setContentLang, format, setFormat, sections, sectionId, setSectionId,
+    slides, setSlides, videoName, videoUrl, saving, uploadProgress, uploadingLang, statuses, hasContent,
+    questions, setQuestions, error, notice, ready, patchSlide, moveSlide, upload, pickVideo, removeVideo, clearVersion, save, remove,
   } = useLessonEditor(id, navigate, params.get('section') || '')
 
   function confirmRemove() {
-    if (window.confirm(t('Удалить урок «{name}»?', { name: title }))) remove()
+    if (window.confirm(t('Удалить урок «{name}»?', { name: pick(lang, title, titleKk) }))) remove()
   }
 
   if (!ready && !error) return <p className="muted">{t('Загрузка…')}</p>
@@ -178,8 +183,12 @@ export function LessonEditor() {
       </div>
       <Notice error={error} notice={notice} />
       <label>
-        {t('Название')}
+        {t('Название, русский')}
         <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t('Солнечная система')} />
+      </label>
+      <label>
+        {t('Название, қазақша')}
+        <input value={titleKk} onChange={(event) => setTitleKk(event.target.value)} placeholder="Күн жүйесі" />
       </label>
       <label>
         {t('Раздел')}
@@ -195,25 +204,55 @@ export function LessonEditor() {
         <button className={`ghost ${format === 'slides' ? 'on' : ''}`} type="button" onClick={() => setFormat('slides')}>{t('Презентация')}</button>
         <button className={`ghost ${format === 'video' ? 'on' : ''}`} type="button" onClick={() => setFormat('video')}>{t('Видео')}</button>
       </div>
+      <div className="tone-row" role="group" aria-label={t('Язык версии')}>
+        {[
+          { code: 'ru', label: 'Русская версия' },
+          { code: 'kk', label: 'Казахская версия' },
+        ].map((item) => {
+          const status = statuses[item.code]
+          const stateText = status === 'ready' ? t('Загружено') : status === 'partial' ? t('Не завершено') : t('Не загружено')
+          return (
+            <button
+              key={item.code}
+              className={`ghost ${contentLang === item.code ? 'on' : ''}`}
+              type="button"
+              onClick={() => setContentLang(item.code)}
+            >
+              {t(item.label)} ({stateText})
+            </button>
+          )
+        })}
+        {hasContent && (
+          <button className="ghost" type="button" onClick={clearVersion}>{t('Очистить версию')}</button>
+        )}
+      </div>
       {format === 'video' ? (
         <section className="stack">
           <div className="section-head">
             <h2>{t('Видео')}</h2>
-            <label className="primary file-button">
-              {t(videoName ? 'Заменить ролик' : 'Загрузить ролик')}
-              <input className="sr-only" type="file" accept="video/mp4,video/webm,video/quicktime,video/ogg" onChange={pickVideo} />
-            </label>
+            <div className="row-actions">
+              {videoName && (
+                <button className="ghost" type="button" onClick={removeVideo}>{t('Удалить ролик')}</button>
+              )}
+              <label className="primary file-button">
+                {t(videoName ? 'Заменить ролик' : 'Загрузить ролик')}
+                <input className="sr-only" type="file" accept="video/mp4,video/webm,video/quicktime,video/ogg" onChange={pickVideo} />
+              </label>
+            </div>
           </div>
           {videoName && <p className="muted">{videoName}</p>}
           {uploadProgress != null && (
             <div className="upload-progress">
-              <p className="muted">{t('Загрузка видео {percent}%', { percent: uploadProgress })}</p>
+              <p className="muted">
+                {t('Загрузка видео {percent}%', { percent: uploadProgress })}
+                {uploadingLang ? ` · ${t(uploadingLang === 'kk' ? 'Казахская версия' : 'Русская версия')}` : ''}
+              </p>
               <div className="upload-track" role="progressbar" aria-valuenow={uploadProgress} aria-valuemin={0} aria-valuemax={100} aria-label={t('Загрузка видео')}>
                 <div style={{ width: `${uploadProgress}%` }} />
               </div>
             </div>
           )}
-          {videoUrl && <video className="lesson-video" src={videoUrl} controls playsInline />}
+          {videoUrl && <video key={`${contentLang}-${videoUrl}`} className="lesson-video" src={videoUrl} controls playsInline />}
         </section>
       ) : (
       <section className="stack">
@@ -307,7 +346,7 @@ export function LessonEditor() {
                 <label className="option-line" key={`${question.id}-${optionIndex}`}>
                   <input
                     type="radio"
-                    name={`correct-${question.id}`}
+                    name={`correct-${contentLang}-${question.id}`}
                     checked={question.correctIndex === optionIndex}
                     onChange={() => setQuestions((current) => current.map((item) => (
                       item.id === question.id ? { ...item, correctIndex: optionIndex } : item

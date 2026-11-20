@@ -23,6 +23,49 @@ export function readFormat(input) {
   fail('Неизвестный вид урока')
 }
 
+export function readLang(value) {
+  return value === 'kk' ? 'kk' : 'ru'
+}
+
+export function parseLessonList(value) {
+  try {
+    const parsed = JSON.parse(value || '[]')
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+export function isBlankSlides(slides) {
+  if (!Array.isArray(slides) || slides.length === 0) return true
+  return slides.every((slide) => {
+    if (slide?.kind === 'image') return !slide.fileId && !slide.dataUrl && !cleanText(slide.caption)
+    return !cleanText(slide?.title)
+      && !(Array.isArray(slide?.lines) && slide.lines.some((line) => cleanText(line)))
+      && !slide?.dataUrl
+      && !slide?.imageFileId
+  })
+}
+
+export function isBlankQuestions(questions) {
+  if (!Array.isArray(questions) || questions.length === 0) return true
+  return questions.every((question) => {
+    if (cleanText(question?.text)) return false
+    const options = Array.isArray(question?.options) ? question.options : []
+    return options.every((option) => !cleanText(option?.text))
+  })
+}
+
+export function packAvailable(row, lang) {
+  const chosen = readLang(lang)
+  const questions = parseLessonList(chosen === 'kk' ? row.questions_kk : row.questions)
+  if (!questions.length) return false
+  if (lessonFormat(row) === 'video') {
+    return Boolean(chosen === 'kk' ? row.video_mime_kk : row.video_mime)
+  }
+  return parseLessonList(chosen === 'kk' ? row.slides_kk : row.slides).length > 0
+}
+
 export function normalizeFrame(slide) {
   const title = cleanLabel(slide?.title, 2, 80, 'Заголовок слайда')
   const kicker = cleanText(slide?.kicker)

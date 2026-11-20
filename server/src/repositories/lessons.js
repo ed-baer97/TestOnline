@@ -13,18 +13,33 @@ export async function countLessons() {
 }
 
 // Демо-урок всегда для 5–9 классов.
-export async function insertSeedLesson({ id, title, seedKey, slides, questions, createdAt, updatedAt }) {
+export async function insertSeedLesson({ id, title, titleKk = '', seedKey, slides, questions, slidesKk = [], questionsKk = [], createdAt, updatedAt }) {
   await db.run(
     `INSERT INTO lessons (
-      id, title, seed_key, grades_1_4, grades_5_9, grades_10_11, students, slides, questions, created_at, updated_at
-    ) VALUES (?, ?, ?, 0, 1, 0, 0, ?, ?, ?, ?)`,
+      id, title, title_kk, seed_key, grades_1_4, grades_5_9, grades_10_11, students, slides, questions, slides_kk, questions_kk, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, 0, 1, 0, 0, ?, ?, ?, ?, ?, ?)`,
     id,
     title,
+    titleKk,
     seedKey,
     JSON.stringify(slides),
     JSON.stringify(questions),
+    JSON.stringify(slidesKk),
+    JSON.stringify(questionsKk),
     createdAt,
     updatedAt,
+  )
+}
+
+export async function fillSeedLessonKazakh(id, { titleKk, slidesKk, questionsKk }) {
+  await db.run(
+    `UPDATE lessons
+     SET title_kk = ?, slides_kk = ?, questions_kk = ?
+     WHERE id = ? AND (slides_kk IS NULL OR slides_kk = '' OR slides_kk = '[]')`,
+    titleKk,
+    JSON.stringify(slidesKk),
+    JSON.stringify(questionsKk),
+    id,
   )
 }
 
@@ -50,49 +65,85 @@ export async function lessonExists(id) {
   return db.get('SELECT id FROM lessons WHERE id = ?', id)
 }
 
-export async function insertLesson({ id, title, seedKey, groups, format, slides, questions, createdAt, updatedAt }) {
+export async function insertLesson({ id, title, titleKk = '', seedKey, groups, format, slides, questions, slidesKk = [], questionsKk = [], createdAt, updatedAt }) {
   await db.run(
     `INSERT INTO lessons (
-      id, title, seed_key, grades_1_4, grades_5_9, grades_10_11, students, format, slides, questions, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, title, title_kk, seed_key, grades_1_4, grades_5_9, grades_10_11, students, format, slides, questions, slides_kk, questions_kk, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     title,
+    titleKk,
     seedKey,
     ...groupNumbers(groups),
     format,
     JSON.stringify(slides),
     JSON.stringify(questions),
+    JSON.stringify(slidesKk),
+    JSON.stringify(questionsKk),
     createdAt,
     updatedAt,
   )
 }
 
 // Переход на презентацию стирает данные о видео; у видеоурока они сохраняются.
-export async function updateLesson(id, { title, groups, format, slides, questions, updatedAt }) {
+export async function updateLesson(id, { title, titleKk = '', groups, format, slides, questions, slidesKk = [], questionsKk = [], updatedAt }) {
   await db.run(
     `UPDATE lessons
-     SET title = ?, grades_1_4 = ?, grades_5_9 = ?, grades_10_11 = ?, students = ?, format = ?,
+     SET title = ?, title_kk = ?, grades_1_4 = ?, grades_5_9 = ?, grades_10_11 = ?, students = ?, format = ?,
          video_mime = CASE WHEN ? = 'slides' THEN NULL ELSE video_mime END,
          video_name = CASE WHEN ? = 'slides' THEN NULL ELSE video_name END,
-         slides = ?, questions = ?, updated_at = ?
+         video_mime_kk = CASE WHEN ? = 'slides' THEN NULL ELSE video_mime_kk END,
+         video_name_kk = CASE WHEN ? = 'slides' THEN NULL ELSE video_name_kk END,
+         slides = ?, questions = ?, slides_kk = ?, questions_kk = ?, updated_at = ?
      WHERE id = ?`,
     title,
+    titleKk,
     ...groupNumbers(groups),
+    format,
+    format,
     format,
     format,
     format,
     JSON.stringify(slides),
     JSON.stringify(questions),
+    JSON.stringify(slidesKk),
+    JSON.stringify(questionsKk),
     updatedAt,
     id,
   )
 }
 
-export async function setLessonVideo(id, { mime, name, updatedAt }) {
+export async function setLessonVideo(id, lang, { mime, name, updatedAt }) {
+  if (lang === 'kk') {
+    await db.run(
+      'UPDATE lessons SET video_mime_kk = ?, video_name_kk = ?, updated_at = ? WHERE id = ?',
+      mime,
+      name,
+      updatedAt,
+      id,
+    )
+    return
+  }
   await db.run(
     'UPDATE lessons SET video_mime = ?, video_name = ?, updated_at = ? WHERE id = ?',
     mime,
     name,
+    updatedAt,
+    id,
+  )
+}
+
+export async function clearLessonVideo(id, lang, updatedAt) {
+  if (lang === 'kk') {
+    await db.run(
+      'UPDATE lessons SET video_mime_kk = NULL, video_name_kk = NULL, updated_at = ? WHERE id = ?',
+      updatedAt,
+      id,
+    )
+    return
+  }
+  await db.run(
+    'UPDATE lessons SET video_mime = NULL, video_name = NULL, updated_at = ? WHERE id = ?',
     updatedAt,
     id,
   )

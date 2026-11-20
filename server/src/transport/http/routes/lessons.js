@@ -9,6 +9,7 @@ import {
   createLessonSection,
   deleteLesson,
   deleteLessonSection,
+  deleteLessonVideo,
   getLesson,
   importPptx,
   listLessonSections,
@@ -21,7 +22,7 @@ import {
 } from '../../../services/lessons/index.js'
 import { requireUser, route } from '../middleware.js'
 
-const largeLessonJson = express.json({ limit: '8mb' })
+const largeLessonJson = express.json({ limit: '16mb' })
 
 export function registerLessonRoutes(app) {
   const guard = requireUser
@@ -30,10 +31,10 @@ export function registerLessonRoutes(app) {
   }))
   const accel = config.mediaAccel
   app.get('/api/lessons/:id/media', guard, route(async (req, res) => {
-    const media = await openLessonMedia(req.user, req.params.id)
+    const media = await openLessonMedia(req.user, req.params.id, req.query.lang)
     if (accel) {
       res.setHeader('Content-Type', media.mime)
-      res.setHeader('X-Accel-Redirect', `/media-internal/${req.params.id}`)
+      res.setHeader('X-Accel-Redirect', `/media-internal/${media.fileName}`)
       res.end()
       return
     }
@@ -96,10 +97,10 @@ export function registerLessonRoutes(app) {
     })
   }))
   app.get('/api/lessons/:id', guard, route(async (req, res) => {
-    res.json(await getLesson(req.user, req.params.id))
+    res.json(await getLesson(req.user, req.params.id, req.query.lang))
   }))
   app.post('/api/lessons/:id/check', guard, route(async (req, res) => {
-    res.json(await checkLesson(req.user, req.params.id, req.body?.answers))
+    res.json(await checkLesson(req.user, req.params.id, req.body?.answers, req.body?.lang))
   }))
   app.put('/api/admin/lessons/:id/video', guard, route(async (req, res) => {
     const length = Number(req.headers['content-length'])
@@ -113,10 +114,13 @@ export function registerLessonRoutes(app) {
     } catch {
       name = ''
     }
-    res.json(await saveLessonVideo(req.user, req.params.id, req, req.get('content-type'), name))
+    res.json(await saveLessonVideo(req.user, req.params.id, req, req.get('content-type'), name, req.query.lang || req.get('x-lang')))
+  }))
+  app.delete('/api/admin/lessons/:id/video', guard, route(async (req, res) => {
+    res.json(await deleteLessonVideo(req.user, req.params.id, req.query.lang || req.get('x-lang')))
   }))
   app.post('/api/admin/lessons/pptx', guard, express.raw({ type: () => true, limit: '30mb' }), route(async (req, res) => {
-    res.json(await importPptx(req.user, req.body))
+    res.json(await importPptx(req.user, req.body, req.query.lang || req.get('x-lang')))
   }))
   app.post('/api/admin/lessons', guard, largeLessonJson, route(async (req, res) => {
     res.status(201).json(await createLesson(req.user, req.body || {}))

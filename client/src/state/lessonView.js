@@ -1,8 +1,17 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/index.js'
 
+// Проверяет, на каком языке заблокирован пройденный тест относительно выбранного языка просмотра.
+export function lessonLockState(result, viewLang) {
+  const locked = Boolean(result?.attempts?.locked)
+  const lockedLang = locked && result?.lang ? result.lang : null
+  const lockedOtherLang = Boolean(locked && lockedLang && lockedLang !== viewLang)
+  const sameLangResult = Boolean(result && (!result.lang || result.lang === viewLang))
+  return { locked, lockedLang, lockedOtherLang, sameLangResult }
+}
+
 // Тест открывается после всех слайдов или всего ролика; когда попытки исчерпаны, сразу виден последний результат.
-export function useLessonView(id) {
+export function useLessonView(id, viewLang = 'ru') {
   const [lesson, setLesson] = useState(null)
   const [error, setError] = useState('')
   const [index, setIndex] = useState(0)
@@ -21,13 +30,13 @@ export function useLessonView(id) {
     setVideoWatched(false)
     setAnswers({})
     setResult(null)
-    api.lesson(id).then((data) => {
+    api.lesson(id, viewLang).then((data) => {
       if (!alive) return
       setLesson(data)
       const last = data.attempts?.last
       if (data.attempts?.locked && last) {
         setResult({ ...last, attempts: data.attempts })
-        if (last.results) {
+        if (last.results && (!last.lang || last.lang === viewLang)) {
           const picked = {}
           for (const item of last.results) if (item.chosen >= 0) picked[item.questionId] = item.chosen
           setAnswers(picked)
@@ -35,7 +44,7 @@ export function useLessonView(id) {
       }
     }).catch((err) => { if (alive) setError(err.message) })
     return () => { alive = false }
-  }, [id])
+  }, [id, viewLang])
 
   function showSlide(nextIndex) {
     setIndex(nextIndex)
@@ -49,7 +58,7 @@ export function useLessonView(id) {
 
   useEffect(() => {
     function onKey(event) {
-      if (!lesson || lesson.format === 'video' || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
+      if (!lesson || !lesson.available || lesson.format === 'video' || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
       if (event.key === 'ArrowRight') showSlide(Math.min(lesson.slides.length - 1, index + 1))
       if (event.key === 'ArrowLeft') showSlide(Math.max(0, index - 1))
     }
@@ -59,7 +68,7 @@ export function useLessonView(id) {
 
   async function submit(event) {
     event.preventDefault()
-    if (!lesson || pending || locked) return
+    if (!lesson || !lesson.available || pending || locked) return
     if (lesson.questions.some((question) => answers[question.id] == null)) {
       setError('Ответьте на все вопросы')
       return
@@ -70,7 +79,7 @@ export function useLessonView(id) {
       const data = await api.checkLesson(id, lesson.questions.map((question) => ({
         questionId: question.id,
         optionIndex: answers[question.id],
-      })))
+      })), viewLang)
       setResult(data)
     } catch (err) {
       setError(err.message)
@@ -79,16 +88,20 @@ export function useLessonView(id) {
     }
   }
 
+  const available = Boolean(lesson?.available)
+  const languages = lesson?.languages || { ru: false, kk: false }
   const isVideo = lesson?.format === 'video'
   const slide = !isVideo ? lesson?.slides[index] : null
   const last = lesson?.slides?.length ? lesson.slides.length - 1 : 0
-  const locked = Boolean(result?.attempts?.locked)
-  const watched = locked || (isVideo ? videoWatched : Boolean(lesson?.slides?.length) && seen.size > last)
-  const byQuestion = new Map((result?.results || []).map((item) => [item.questionId, item]))
+  const { locked, lockedLang, lockedOtherLang, sameLangResult } = lessonLockState(result, viewLang)
+  const watched = (locked && !lockedOtherLang) || (isVideo ? videoWatched : Boolean(lesson?.slides?.length) && seen.size > last)
+  const byQuestion = new Map((sameLangResult ? result?.results || [] : []).map((item) => [item.questionId, item]))
   const attemptsLeft = result?.attempts ? result.attempts.max - result.attempts.used : lesson?.attempts ? lesson.attempts.max - lesson.attempts.used : null
 
   return {
     lesson,
+    available,
+    languages,
     error,
     index,
     seen,
@@ -104,6 +117,8 @@ export function useLessonView(id) {
     slide,
     last,
     locked,
+    lockedLang,
+    lockedOtherLang,
     watched,
     byQuestion,
     attemptsLeft,

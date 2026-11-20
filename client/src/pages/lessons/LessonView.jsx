@@ -7,18 +7,26 @@ import { useI18n } from '../../state/i18n.jsx'
 import { useLessonView } from '../../state/lessonView.js'
 
 export default function LessonView({ backTo }) {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const { id } = useParams()
+  const [viewLang, setViewLang] = useState(lang)
   const {
-    lesson, error, index, seen, answers, setAnswers, result, setResult, pending, setVideoWatched, showSlide, submit,
-    isVideo, slide, last, locked, watched, byQuestion, attemptsLeft,
-  } = useLessonView(id)
+    lesson, available, languages, error, index, seen, answers, setAnswers, result, setResult, pending, setVideoWatched, showSlide, submit,
+    isVideo, slide, last, locked, lockedLang, lockedOtherLang, watched, byQuestion, attemptsLeft,
+  } = useLessonView(id, viewLang)
   const testRef = useRef(null)
   const [videoError, setVideoError] = useState(false)
 
   useEffect(() => {
+    setViewLang(lang)
+  }, [lang])
+
+  useEffect(() => {
     setVideoError(false)
-  }, [lesson?.id, lesson?.video?.name])
+  }, [lesson?.id, viewLang, lesson?.video?.name])
+
+  const otherLang = viewLang === 'kk' ? 'ru' : 'kk'
+  const otherAvailable = Boolean(languages[otherLang])
 
   return (
     <section className="lesson">
@@ -27,10 +35,40 @@ export default function LessonView({ backTo }) {
       </TopbarExtra>
       <div className="section-head">
         <h1>{lesson?.title || t('Урок')}</h1>
+        <div className="tone-row" role="group" aria-label={t('Язык просмотра')}>
+          <button
+            className={`ghost ${viewLang === 'ru' ? 'on' : ''}`}
+            type="button"
+            aria-pressed={viewLang === 'ru'}
+            onClick={() => setViewLang('ru')}
+          >
+            {t('Русский')}
+          </button>
+          <button
+            className={`ghost ${viewLang === 'kk' ? 'on' : ''}`}
+            type="button"
+            aria-pressed={viewLang === 'kk'}
+            onClick={() => setViewLang('kk')}
+          >
+            Қазақша
+          </button>
+        </div>
       </div>
       {error && <p className="form-error">{t(error)}</p>}
       {!lesson && !error && <p className="muted">{t('Загрузка…')}</p>}
-      {slide && (
+      {lesson && !available && (
+        <div className="question-card">
+          <p className="form-error">{t('Данный материал не загружен')}</p>
+          {otherAvailable && (
+            <div className="row-actions">
+              <button className="primary" type="button" onClick={() => setViewLang(otherLang)}>
+                {t(otherLang === 'kk' ? 'Открыть на казахском' : 'Открыть на русском')}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {available && slide && (
         <div className="deck">
           <Slide slide={slide} />
           <div className="deck-bar">
@@ -57,7 +95,7 @@ export default function LessonView({ backTo }) {
               <button className="ghost" type="button" onClick={() => showSlide(index + 1)}>
                 {t('Дальше')}
               </button>
-            ) : (
+            ) : !lockedOtherLang ? (
               <button
                 className="primary"
                 type="button"
@@ -66,18 +104,19 @@ export default function LessonView({ backTo }) {
               >
                 {t('К тесту')}
               </button>
-            )}
+            ) : <span />}
           </div>
-          {!watched && <p className="muted deck-note">{t('Тест откроется после просмотра всех слайдов.')}</p>}
+          {!watched && !lockedOtherLang && <p className="muted deck-note">{t('Тест откроется после просмотра всех слайдов.')}</p>}
         </div>
       )}
-      {isVideo && (
+      {available && isVideo && (
         <div className="deck">
           {lesson.video ? (
             <>
               <video
+                key={`${lesson.id}-${viewLang}`}
                 className="lesson-video"
-                src={`/api/lessons/${lesson.id}/media`}
+                src={`/api/lessons/${lesson.id}/media?lang=${viewLang}`}
                 controls
                 playsInline
                 onError={() => setVideoError(true)}
@@ -93,16 +132,35 @@ export default function LessonView({ backTo }) {
           ) : (
             <p className="muted">{t('Ролик ещё не загружен.')}</p>
           )}
-          {watched ? (
+          {!lockedOtherLang && (watched ? (
             <button className="primary add" type="button" onClick={() => testRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
               {t('К тесту')}
             </button>
           ) : (
             <p className="muted deck-note">{t('Тест откроется после просмотра ролика.')}</p>
+          ))}
+        </div>
+      )}
+      {lesson && available && lockedOtherLang && (
+        <div className="question-card">
+          <p className="saved">
+            {t('Результат: {score} из {total}', { score: result.score, total: result.total })}
+          </p>
+          <p className="muted">
+            {t(lockedLang === 'kk'
+              ? 'Тест уже пройден на казахском языке. Повторная отправка не предусмотрена.'
+              : 'Тест уже пройден на русском языке. Повторная отправка не предусмотрена.')}
+          </p>
+          {languages[lockedLang] && (
+            <div className="row-actions">
+              <button className="ghost" type="button" onClick={() => setViewLang(lockedLang)}>
+                {t(lockedLang === 'kk' ? 'Открыть результат на казахском' : 'Открыть результат на русском')}
+              </button>
+            </div>
           )}
         </div>
       )}
-      {lesson && watched && (
+      {lesson && available && watched && !lockedOtherLang && (
         <form className="lesson-test" ref={testRef} onSubmit={submit}>
           <h2>{t('Тест')}</h2>
           {lesson.questions.map((question, questionIndex) => {

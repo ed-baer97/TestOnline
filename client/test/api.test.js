@@ -3,6 +3,7 @@ import test from 'node:test'
 import { api } from '../src/api/index.js'
 import { formatCode } from '../src/lib/format.js'
 import { newId } from '../src/lib/ids.js'
+import { lessonLockState } from '../src/state/lessonView.js'
 import { forgetPlayerToken, readHostToken, readPlayerToken, saveHostToken, savePlayerToken } from '../src/state/roomTokens.js'
 
 const calls = []
@@ -71,12 +72,17 @@ const cases = [
   [() => api.deleteLearner('l1'), send('/api/admin/learners/l1', 'DELETE')],
   [() => api.lessons(), get('/api/lessons')],
   [() => api.lesson('s1'), get('/api/lessons/s1')],
+  [() => api.lesson('s1', 'kk'), get('/api/lessons/s1?lang=kk')],
   [() => api.checkLesson('s1', [{ questionId: 'q', optionIndex: 1 }]), send('/api/lessons/s1/check', 'POST', { answers: [{ questionId: 'q', optionIndex: 1 }] })],
+  [() => api.checkLesson('s1', [{ questionId: 'q', optionIndex: 1 }], 'kk'), send('/api/lessons/s1/check', 'POST', { answers: [{ questionId: 'q', optionIndex: 1 }], lang: 'kk' })],
   [() => api.createLesson({ title: 'У' }), send('/api/admin/lessons', 'POST', { title: 'У' })],
   [() => api.updateLesson('s1', { title: 'У' }), send('/api/admin/lessons/s1', 'PATCH', { title: 'У' })],
-  [() => api.uploadLessonVideo('s1', video), upload('/api/admin/lessons/s1/video', 'PUT', video, { 'Content-Type': 'video/mp4', 'X-File-Name': encodeURIComponent('Ролик о планетах.mp4') })],
-  [() => api.uploadLessonVideo('s1', bare), upload('/api/admin/lessons/s1/video', 'PUT', bare, { 'Content-Type': 'application/octet-stream', 'X-File-Name': 'video' })],
-  [() => api.importPptx(pptx), upload('/api/admin/lessons/pptx', 'POST', pptx, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' })],
+  [() => api.uploadLessonVideo('s1', video), upload('/api/admin/lessons/s1/video?lang=ru', 'PUT', video, { 'Content-Type': 'video/mp4', 'X-File-Name': encodeURIComponent('Ролик о планетах.mp4'), 'X-Lang': 'ru' })],
+  [() => api.uploadLessonVideo('s1', bare), upload('/api/admin/lessons/s1/video?lang=ru', 'PUT', bare, { 'Content-Type': 'application/octet-stream', 'X-File-Name': 'video', 'X-Lang': 'ru' })],
+  [() => api.uploadLessonVideo('s1', video, null, 'kk'), upload('/api/admin/lessons/s1/video?lang=kk', 'PUT', video, { 'Content-Type': 'video/mp4', 'X-File-Name': encodeURIComponent('Ролик о планетах.mp4'), 'X-Lang': 'kk' })],
+  [() => api.deleteLessonVideo('s1', 'kk'), send('/api/admin/lessons/s1/video?lang=kk', 'DELETE')],
+  [() => api.importPptx(pptx), upload('/api/admin/lessons/pptx?lang=ru', 'POST', pptx, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'X-Lang': 'ru' })],
+  [() => api.importPptx(pptx, 'kk'), upload('/api/admin/lessons/pptx?lang=kk', 'POST', pptx, { 'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'X-Lang': 'kk' })],
   [() => api.deleteLesson('s1'), send('/api/admin/lessons/s1', 'DELETE')],
   [() => api.lessonSections(), get('/api/admin/lesson-sections')],
   [() => api.createLessonSection({ name: 'Б' }), send('/api/admin/lesson-sections', 'POST', { name: 'Б' })],
@@ -105,7 +111,7 @@ const cases = [
 ]
 
 test('каждый метод api отправляет тот же запрос', async () => {
-  assert.equal(cases.length, Object.keys(api).length + 3)
+  assert.equal(cases.length, Object.keys(api).length + 7)
   for (const [run, expected] of cases) {
     calls.length = 0
     assert.deepEqual(await run(), { ok: true })
@@ -166,4 +172,43 @@ test('код комнаты, ключи хранилища и id', () => {
   const id = newId()
   assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
   assert.notEqual(newId(), id)
+})
+
+test('lessonLockState различает блокировку на текущем и другом языке', () => {
+  assert.deepEqual(lessonLockState(null, 'ru'), {
+    locked: false,
+    lockedLang: null,
+    lockedOtherLang: false,
+    sameLangResult: false,
+  })
+  assert.deepEqual(lessonLockState({ attempts: { locked: false }, lang: 'ru' }, 'kk'), {
+    locked: false,
+    lockedLang: null,
+    lockedOtherLang: false,
+    sameLangResult: false,
+  })
+  assert.deepEqual(lessonLockState({ attempts: { locked: true }, lang: 'ru' }, 'ru'), {
+    locked: true,
+    lockedLang: 'ru',
+    lockedOtherLang: false,
+    sameLangResult: true,
+  })
+  assert.deepEqual(lessonLockState({ attempts: { locked: true }, lang: 'ru' }, 'kk'), {
+    locked: true,
+    lockedLang: 'ru',
+    lockedOtherLang: true,
+    sameLangResult: false,
+  })
+  assert.deepEqual(lessonLockState({ attempts: { locked: true }, lang: 'kk' }, 'ru'), {
+    locked: true,
+    lockedLang: 'kk',
+    lockedOtherLang: true,
+    sameLangResult: false,
+  })
+  assert.deepEqual(lessonLockState({ attempts: { locked: true } }, 'kk'), {
+    locked: true,
+    lockedLang: null,
+    lockedOtherLang: false,
+    sameLangResult: true,
+  })
 })

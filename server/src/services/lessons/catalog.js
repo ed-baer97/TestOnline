@@ -3,16 +3,21 @@ import { assertRole } from '../../domain/access.js'
 import { fail } from '../../domain/errors.js'
 import {
   attemptState,
+  isBlankQuestions,
+  isBlankSlides,
   lessonFormat,
   normalizeFrame,
   normalizeQuestions,
+  packAvailable,
+  parseLessonList,
   presentQuestions,
   readDataUrl,
   readFormat,
+  readLang,
   readLessonGroups,
 } from '../../domain/lesson.js'
 import { groupsFromRow } from '../../domain/structure.js'
-import { cleanLabel, cleanText } from '../../domain/text.js'
+import { cleanText, optionalLabel } from '../../domain/text.js'
 import * as lessonAttemptsRepo from '../../repositories/lessonAttempts.js'
 import * as lessonFilesRepo from '../../repositories/lessonFiles.js'
 import * as lessonsRepo from '../../repositories/lessons.js'
@@ -24,12 +29,21 @@ import { detachLesson, placeLesson, requireSection, sectionBrief, sectionBriefs 
 function summary(row, best, section = null) {
   return {
     id: row.id,
-    title: row.title,
+    title: row.title || '',
+    titleKk: row.title_kk || '',
     format: lessonFormat(row),
     groups: groupsFromRow(row),
     section,
-    slideCount: JSON.parse(row.slides).length,
-    questionCount: JSON.parse(row.questions).length,
+    slideCount: parseLessonList(row.slides).length,
+    slideCountKk: parseLessonList(row.slides_kk).length,
+    questionCount: parseLessonList(row.questions).length,
+    questionCountKk: parseLessonList(row.questions_kk).length,
+    hasVideo: Boolean(row.video_mime),
+    hasVideoKk: Boolean(row.video_mime_kk),
+    languages: {
+      ru: packAvailable(row, 'ru'),
+      kk: packAvailable(row, 'kk'),
+    },
     best: best ? { score: Number(best.score), total: Number(best.total) } : null,
   }
 }
@@ -67,36 +81,67 @@ function presentSlides(slides) {
   })
 }
 
-export async function getLesson(actor, id) {
+function videoInfo(row, chosen) {
+  if (lessonFormat(row) !== 'video') return null
+  if (chosen === 'kk') return row.video_mime_kk ? { name: row.video_name_kk || 'video', mime: row.video_mime_kk } : null
+  return row.video_mime ? { name: row.video_name || 'video', mime: row.video_mime } : null
+}
+
+function packData(row, chosen, withKey) {
+  const format = lessonFormat(row)
+  const rawSlides = parseLessonList(chosen === 'kk' ? row.slides_kk : row.slides)
+  const rawQuestions = parseLessonList(chosen === 'kk' ? row.questions_kk : row.questions)
+  return {
+    title: chosen === 'kk' ? (row.title_kk || '') : (row.title || ''),
+    slides: format === 'video' ? [] : presentSlides(rawSlides),
+    video: videoInfo(row, chosen),
+    questions: presentQuestions(rawQuestions, withKey),
+    available: packAvailable(row, chosen),
+  }
+}
+
+export async function getLesson(actor, id, lang = 'ru') {
   assertRole(actor, 'super', 'learner')
   const row = await mustLesson(id)
   if (!(await canSee(actor, row))) fail('Урок не найден', 404)
-  const slides = JSON.parse(row.slides)
-  const questions = JSON.parse(row.questions)
-  const format = lessonFormat(row)
+  const chosen = readLang(lang)
+  const pack = packData(row, chosen, actor.role === 'super')
+  const displayTitle = chosen === 'kk' ? (row.title_kk || row.title || '') : (row.title || row.title_kk || '')
   let best = null
   let attempts = null
   if (actor.role === 'learner') {
     const rows = await attemptsOf(id, actor.id)
     best = rows.reduce((top, item) => (!top || Number(item.score) > Number(top.score) ? item : top), null)
-    attempts = { ...attemptState(rows, attemptLimit()), last: presentAttempt(rows[rows.length - 1], questions) }
+    const last = rows[rows.length - 1]
+    const lastQuestions = last
+      ? parseLessonList(readLang(last.lang) === 'kk' ? row.questions_kk : row.questions)
+      : parseLessonList(chosen === 'kk' ? row.questions_kk : row.questions)
+    attempts = { ...attemptState(rows, attemptLimit()), last: presentAttempt(last, lastQuestions) }
   }
-  return {
+  const lesson = {
     ...summary(row, best, await sectionBrief(id)),
-    slides: format === 'video' ? [] : presentSlides(slides),
-    video: format === 'video' && row.video_mime ? { name: row.video_name || 'video', mime: row.video_mime } : null,
-    questions: presentQuestions(questions, actor.role === 'super'),
+    title: displayTitle,
+    lang: chosen,
+    available: pack.available,
+    slides: pack.slides,
+    video: pack.video,
+    questions: pack.questions,
     attempts,
+  }
+  if (actor.role !== 'super') return lesson
+  return {
+    ...lesson,
+    packs: {
+      ru: packData(row, 'ru', true),
+      kk: packData(row, 'kk', true),
+    },
   }
 }
 
-async function normalizeSlides(slides, lessonId) {
+async function normalizeSlides(slides, lessonId, owned, used) {
   if (!Array.isArray(slides) || slides.length < 1 || slides.length > 20) {
     fail('Нужен хотя бы один слайд, максимум 20')
   }
-  const ownedRows = await lessonFilesRepo.listLessonFileIds(lessonId)
-  const owned = new Set(ownedRows.map((row) => row.id))
-  const used = new Set()
   const result = []
   for (const [index, slide] of slides.entries()) {
     const label = `Слайд ${index + 1}`
@@ -131,7 +176,6 @@ async function normalizeSlides(slides, lessonId) {
     const id = typeof slide?.id === 'string' && slide.id ? slide.id : crypto.randomUUID()
     result.push({ id, kind: 'image', fileId, caption })
   }
-  await dropFiles(ownedRows.map((row) => row.id).filter((id) => !used.has(id)))
   return result
 }
 
@@ -143,19 +187,73 @@ async function groupsForSave(input) {
 }
 
 async function saveLesson(id, input, seedKey) {
-  const title = cleanLabel(input?.title, 2, 80, 'Название урока')
+  const title = optionalLabel(input?.title, 80, 'Название урока')
+  const titleKk = optionalLabel(input?.titleKk, 80, 'Название урока')
+  if (!title && !titleKk) fail('Название урока: от 2 до 80 символов')
   const { groups, sectionId } = await groupsForSave(input)
   const format = readFormat(input)
-  const questions = normalizeQuestions(input?.questions)
-  const slides = format === 'video' ? [] : await normalizeSlides(input?.slides, id)
-  if (format === 'video') await dropLessonFiles(id)
-  else await removeVideoFile(id)
+  const hasRuQ = !isBlankQuestions(input?.questions)
+  const hasKkQ = !isBlankQuestions(input?.questionsKk)
+  let slides = []
+  let slidesKk = []
+  let questions = []
+  let questionsKk = []
+
+  if (format === 'video') {
+    if (!hasRuQ && !hasKkQ) fail('Нужен хотя бы один вопрос, максимум 20')
+    questions = hasRuQ ? normalizeQuestions(input?.questions) : []
+    questionsKk = hasKkQ ? normalizeQuestions(input?.questionsKk) : []
+    await dropLessonFiles(id)
+  } else {
+    const hasRuS = !isBlankSlides(input?.slides)
+    const hasKkS = !isBlankSlides(input?.slidesKk)
+    const ruActive = hasRuS || hasRuQ
+    const kkActive = hasKkS || hasKkQ
+    if (!ruActive && !kkActive) fail('Нужен хотя бы один вопрос, максимум 20')
+    const ownedRows = await lessonFilesRepo.listLessonFileIds(id)
+    const owned = new Set(ownedRows.map((row) => row.id))
+    const used = new Set()
+    if (ruActive) {
+      questions = normalizeQuestions(input?.questions)
+      slides = await normalizeSlides(input?.slides, id, owned, used)
+    }
+    if (kkActive) {
+      questionsKk = normalizeQuestions(input?.questionsKk)
+      slidesKk = await normalizeSlides(input?.slidesKk, id, owned, used)
+    }
+    await dropFiles(ownedRows.map((row) => row.id).filter((fileId) => !used.has(fileId)))
+    await removeVideoFile(id)
+  }
+
   const now = new Date().toISOString()
   const existing = await lessonsRepo.lessonExists(id)
   if (!existing) {
-    await lessonsRepo.insertLesson({ id, title, seedKey: seedKey || null, groups, format, slides, questions, createdAt: now, updatedAt: now })
+    await lessonsRepo.insertLesson({
+      id,
+      title,
+      titleKk,
+      seedKey: seedKey || null,
+      groups,
+      format,
+      slides,
+      questions,
+      slidesKk,
+      questionsKk,
+      createdAt: now,
+      updatedAt: now,
+    })
   } else {
-    await lessonsRepo.updateLesson(id, { title, groups, format, slides, questions, updatedAt: now })
+    await lessonsRepo.updateLesson(id, {
+      title,
+      titleKk,
+      groups,
+      format,
+      slides,
+      questions,
+      slidesKk,
+      questionsKk,
+      updatedAt: now,
+    })
   }
   if (sectionId) await placeLesson(id, sectionId)
   return getLesson({ role: 'super' }, id)

@@ -5,6 +5,7 @@ import {
   isMediaId,
   removeMediaFile,
   slideFilePath,
+  videoFileName,
   videoFilePath,
   writeMediaFile,
 } from '../../infrastructure/mediaStorage.js'
@@ -68,11 +69,21 @@ export async function claimImportedFile(fileId, lessonId, owned) {
   return fileId
 }
 
-export function mediaPath(lessonId) {
+export function mediaFileName(lessonId, lang = 'ru') {
   if (!isMediaId(lessonId)) fail('Урок не найден', 404)
-  return videoFilePath(lessonId)
+  return videoFileName(lessonId, lang)
 }
 
-export async function removeVideoFile(lessonId) {
-  await removeMediaFile(mediaPath(lessonId))
+export function mediaPath(lessonId, lang = 'ru') {
+  if (!isMediaId(lessonId)) fail('Урок не найден', 404)
+  return videoFilePath(lessonId, lang)
+}
+
+export async function removeVideoFile(lessonId, lang = null) {
+  if (lang === 'ru' || lang === 'kk') {
+    await removeMediaFile(mediaPath(lessonId, lang))
+    return
+  }
+  await removeMediaFile(mediaPath(lessonId, 'ru'))
+  await removeMediaFile(mediaPath(lessonId, 'kk'))
 }

@@ -10,17 +10,17 @@ export async function listUserAttempts(userId) {
 
 export async function listAttempts(lessonId, userId) {
   return db.all(
-    `SELECT id, score, total, answers, finished_at FROM lesson_attempts
+    `SELECT id, score, total, answers, finished_at, lang FROM lesson_attempts
      WHERE lesson_id = ? AND user_id = ? ORDER BY finished_at ASC, id ASC`,
     lessonId,
     userId,
   )
 }
 
-export async function insertAttempt({ id, lessonId, userId, score, total, finishedAt, answers }) {
+export async function insertAttempt({ id, lessonId, userId, score, total, finishedAt, answers, lang = 'ru' }) {
   await db.run(
-    `INSERT INTO lesson_attempts (id, lesson_id, user_id, score, total, finished_at, answers)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO lesson_attempts (id, lesson_id, user_id, score, total, finished_at, answers, lang)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     lessonId,
     userId,
@@ -28,6 +28,7 @@ export async function insertAttempt({ id, lessonId, userId, score, total, finish
     total,
     finishedAt,
     JSON.stringify(answers),
+    lang,
   )
 }
 

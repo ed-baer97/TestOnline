@@ -19,8 +19,12 @@ export function slideFilePath(fileId) {
   return path.join(slidesDir(), fileId)
 }
 
-export function videoFilePath(lessonId) {
-  return path.join(config.mediaDir, lessonId)
+export function videoFileName(lessonId, lang = 'ru') {
+  return lang === 'kk' ? `${lessonId}.kk` : lessonId
+}
+
+export function videoFilePath(lessonId, lang = 'ru') {
+  return path.join(config.mediaDir, videoFileName(lessonId, lang))
 }
 
 export async function ensureSlidesDir() {

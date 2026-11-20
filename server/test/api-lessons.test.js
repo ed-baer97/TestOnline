@@ -68,11 +68,17 @@ test('уроки по HTTP: список, правка, тест, картинк
   assert.equal(list.status, 200)
   assert.deepEqual(list.body.lessons.map(({ id, ...lesson }) => lesson), [{
     title: 'Солнечная система',
+    titleKk: 'Күн жүйесі',
     format: 'slides',
     groups: { grades_1_4: false, grades_5_9: true, grades_10_11: false, students: false },
     section: null,
     slideCount: 4,
+    slideCountKk: 4,
     questionCount: 4,
+    questionCountKk: 4,
+    hasVideo: false,
+    hasVideoKk: false,
+    languages: { ru: true, kk: true },
     best: null,
   }])
   const demoId = list.body.lessons[0].id
@@ -80,7 +86,12 @@ test('уроки по HTTP: список, правка, тест, картинк
   assert.equal((await call(base, '/api/lessons', { cookie: who.student })).body.lessons.length, 0)
 
   const demo = (await call(base, `/api/lessons/${demoId}`, { cookie: who.pupil })).body
-  assert.deepEqual(Object.keys(demo), ['id', 'title', 'format', 'groups', 'section', 'slideCount', 'questionCount', 'best', 'slides', 'video', 'questions', 'attempts'])
+  assert.deepEqual(Object.keys(demo), [
+    'id', 'title', 'titleKk', 'format', 'groups', 'section',
+    'slideCount', 'slideCountKk', 'questionCount', 'questionCountKk',
+    'hasVideo', 'hasVideoKk', 'languages', 'best',
+    'lang', 'available', 'slides', 'video', 'questions', 'attempts',
+  ])
   assert.deepEqual(demo.slides[0], {
     id: 'sun',
     kind: 'frame',
@@ -113,7 +124,8 @@ test('уроки по HTTP: список, правка, тест, картинк
   const repeated = (await call(base, `/api/lessons/${demoId}/check`, { method: 'POST', cookie: who.pupil, json: { answers: [] } })).body
   assert.equal(repeated.repeated, true)
   assert.equal(repeated.score, 3)
-  assert.deepEqual(Object.keys(repeated), ['score', 'total', 'finishedAt', 'results', 'repeated', 'attempts'])
+  assert.deepEqual(Object.keys(repeated), ['score', 'total', 'finishedAt', 'lang', 'results', 'repeated', 'attempts'])
+  assert.equal(repeated.lang, 'ru')
   assert.deepEqual(repeated.results, checked.body.results)
   const rootCheck = (await call(base, `/api/lessons/${demoId}/check`, { method: 'POST', cookie: who.root })).body
   assert.deepEqual(rootCheck, {
@@ -313,4 +325,204 @@ test('MEDIA_ACCEL=1: файлы отдаёт Nginx через X-Accel-Redirect',
   assert.equal(media.headers.get('content-type'), 'video/ogg')
   assert.equal(media.headers.get('accept-ranges'), null)
   assert.equal(media.buffer.length, 0)
+
+  await call(base, `/api/admin/lessons/${clip.id}/video?lang=kk`, { method: 'PUT', cookie: root, body: Buffer.from('kk01234567'), headers: { 'Content-Type': 'video/mp4' } })
+  const mediaKk = await call(base, `/api/lessons/${clip.id}/media?lang=kk`, { cookie: root })
+  assert.equal(mediaKk.status, 200)
+  assert.equal(mediaKk.headers.get('x-accel-redirect'), `/media-internal/${clip.id}.kk`)
+  assert.equal(mediaKk.headers.get('content-type'), 'video/mp4')
+  assert.equal(mediaKk.buffer.length, 0)
+})
+
+test('двуязычные уроки: отдельная загрузка RU/KK и ответ об отсутствии материала', async (t) => {
+  const server = await startServer()
+  t.after(() => server.close())
+  const { base } = server
+  const root = await login(base, 'root', 'rootpass')
+  const region = (await call(base, '/api/admin/regions', { method: 'POST', cookie: root, json: { name: 'Регион двуязычия' } })).body
+  await call(base, '/api/admin/regional-admins', { method: 'POST', cookie: root, json: { login: 'regbi', password: 'secret1', displayName: 'Регион', regionId: region.id } })
+  const regional = await login(base, 'regbi', 'secret1')
+  const org = (await call(base, '/api/admin/organizations', { method: 'POST', cookie: regional, json: { name: 'Школа 2', groups: { grades_5_9: true } } })).body
+  await call(base, '/api/admin/org-admins', { method: 'POST', cookie: regional, json: { login: 'orgbi', password: 'secret1', displayName: 'Школа 2', organizationId: org.id } })
+  const orgCookie = await login(base, 'orgbi', 'secret1')
+  const klass = (await call(base, '/api/admin/classes', { method: 'POST', cookie: orgCookie, json: { grade: 6, name: '6а' } })).body
+  await call(base, '/api/admin/learners', { method: 'POST', cookie: orgCookie, json: { login: 'pupilbi', password: 'secret1', displayName: 'Ученик', classId: klass.id } })
+  const learner = await login(base, 'pupilbi', 'secret1')
+
+  const listed = (await call(base, '/api/lessons', { cookie: learner })).body.lessons
+  const demoSummary = listed.find((item) => item.titleKk === 'Күн жүйесі')
+  assert.ok(demoSummary)
+  const demoKk = (await call(base, `/api/lessons/${demoSummary.id}?lang=kk`, { cookie: learner })).body
+  assert.equal(demoKk.lang, 'kk')
+  assert.equal(demoKk.available, true)
+  assert.equal(demoKk.title, 'Күн жүйесі')
+  assert.equal(demoKk.slides.length, 4)
+  assert.equal(demoKk.questions.length, 4)
+
+  const demoRu = (await call(base, `/api/lessons/${demoSummary.id}?lang=ru`, { cookie: learner })).body
+  const demoRuSubmit = await call(base, `/api/lessons/${demoSummary.id}/check`, {
+    method: 'POST',
+    cookie: learner,
+    json: { lang: 'ru', answers: demoRu.questions.map((q) => ({ questionId: q.id, optionIndex: 0 })) },
+  })
+  assert.equal(demoRuSubmit.status, 200)
+  assert.equal(demoRuSubmit.body.attempts.locked, true)
+  const demoKkLocked = (await call(base, `/api/lessons/${demoSummary.id}?lang=kk`, { cookie: learner })).body
+  assert.equal(demoKkLocked.available, true)
+  assert.equal(demoKkLocked.attempts.locked, true)
+  assert.equal(demoKkLocked.attempts.last.lang, 'ru')
+  const demoKkRepeat = await call(base, `/api/lessons/${demoSummary.id}/check`, {
+    method: 'POST',
+    cookie: learner,
+    json: { lang: 'kk', answers: [] },
+  })
+  assert.equal(demoKkRepeat.status, 200)
+  assert.equal(demoKkRepeat.body.repeated, true)
+  assert.equal(demoKkRepeat.body.lang, 'ru')
+
+  const ruOnly = (await call(base, '/api/admin/lessons', {
+    method: 'POST',
+    cookie: root,
+    json: {
+      title: 'Только русский',
+      format: 'video',
+      groups: { grades_5_9: true },
+      questions: [{ text: 'Вопрос RU?', correctIndex: 0, options: [{ text: 'Да' }, { text: 'Нет' }] }],
+    },
+  })).body
+  await call(base, `/api/admin/lessons/${ruOnly.id}/video?lang=ru`, {
+    method: 'PUT',
+    cookie: root,
+    body: Buffer.from('ru-video-bytes'),
+    headers: { 'Content-Type': 'video/mp4', 'X-File-Name': 'ru.mp4' },
+  })
+  const ruViewOk = (await call(base, `/api/lessons/${ruOnly.id}?lang=ru`, { cookie: learner })).body
+  assert.equal(ruViewOk.available, true)
+  assert.deepEqual(ruViewOk.languages, { ru: true, kk: false })
+  assert.equal(ruViewOk.video.name, 'ru.mp4')
+  const ruViewMissingKk = (await call(base, `/api/lessons/${ruOnly.id}?lang=kk`, { cookie: learner })).body
+  assert.equal(ruViewMissingKk.lang, 'kk')
+  assert.equal(ruViewMissingKk.available, false)
+  assert.equal(ruViewMissingKk.video, null)
+  assert.deepEqual(ruViewMissingKk.questions, [])
+  expectError(await call(base, `/api/lessons/${ruOnly.id}/media?lang=kk`, { cookie: learner }), 404, 'Видео не найдено')
+  expectError(await call(base, `/api/lessons/${ruOnly.id}/check`, { method: 'POST', cookie: learner, json: { answers: [], lang: 'kk' } }), 400, 'Данный материал не загружен')
+
+  const kkOnly = (await call(base, '/api/admin/lessons', {
+    method: 'POST',
+    cookie: root,
+    json: {
+      title: '',
+      titleKk: 'Тек қазақша',
+      format: 'video',
+      groups: { grades_5_9: true },
+      questionsKk: [{ text: 'Сұрақ KK?', correctIndex: 1, options: [{ text: 'Жоқ' }, { text: 'Иә' }] }],
+    },
+  })).body
+  assert.equal(kkOnly.status, undefined)
+  await call(base, `/api/admin/lessons/${kkOnly.id}/video?lang=kk`, {
+    method: 'PUT',
+    cookie: root,
+    body: Buffer.from('kk-video-bytes'),
+    headers: { 'Content-Type': 'video/mp4', 'X-File-Name': 'kk.mp4' },
+  })
+  const kkViewOk = (await call(base, `/api/lessons/${kkOnly.id}?lang=kk`, { cookie: learner })).body
+  assert.equal(kkViewOk.available, true)
+  assert.equal(kkViewOk.title, 'Тек қазақша')
+  assert.deepEqual(kkViewOk.languages, { ru: false, kk: true })
+  assert.equal(kkViewOk.video.name, 'kk.mp4')
+  assert.equal((await call(base, `/api/lessons/${kkOnly.id}/media?lang=kk`, { cookie: learner })).text, 'kk-video-bytes')
+  const kkCheck = await call(base, `/api/lessons/${kkOnly.id}/check`, {
+    method: 'POST',
+    cookie: learner,
+    json: { lang: 'kk', answers: [{ questionId: kkViewOk.questions[0].id, optionIndex: 1 }] },
+  })
+  assert.equal(kkCheck.status, 200)
+  assert.equal(kkCheck.body.score, 1)
+  assert.equal(kkCheck.body.total, 1)
+  const kkLocked = (await call(base, `/api/lessons/${kkOnly.id}?lang=kk`, { cookie: learner })).body
+  assert.equal(kkLocked.attempts.locked, true)
+  assert.equal(kkLocked.attempts.last.lang, 'kk')
+  const kkViewMissingRu = (await call(base, `/api/lessons/${kkOnly.id}?lang=ru`, { cookie: learner })).body
+  assert.equal(kkViewMissingRu.lang, 'ru')
+  assert.equal(kkViewMissingRu.available, false)
+  assert.equal(kkViewMissingRu.video, null)
+  assert.deepEqual(kkViewMissingRu.questions, [])
+  expectError(await call(base, `/api/lessons/${kkOnly.id}/media?lang=ru`, { cookie: learner }), 404, 'Видео не найдено')
+  expectError(await call(base, `/api/lessons/${kkOnly.id}/check`, { method: 'POST', cookie: learner, json: { answers: [], lang: 'ru' } }), 400, 'Данный материал не загружен')
+
+  const bothVideo = (await call(base, '/api/admin/lessons', {
+    method: 'POST',
+    cookie: root,
+    json: {
+      title: 'Два видео',
+      titleKk: 'Екі бейне',
+      format: 'video',
+      groups: { grades_5_9: true },
+      questions: [{ text: 'RU?', correctIndex: 0, options: [{ text: 'Да' }, { text: 'Нет' }] }],
+      questionsKk: [{ text: 'KK?', correctIndex: 0, options: [{ text: 'Иә' }, { text: 'Жоқ' }] }],
+    },
+  })).body
+  await call(base, `/api/admin/lessons/${bothVideo.id}/video?lang=ru`, {
+    method: 'PUT',
+    cookie: root,
+    body: Buffer.from('bytes-ru'),
+    headers: { 'Content-Type': 'video/mp4', 'X-File-Name': 'both-ru.mp4' },
+  })
+  await call(base, `/api/admin/lessons/${bothVideo.id}/video?lang=kk`, {
+    method: 'PUT',
+    cookie: root,
+    body: Buffer.from('bytes-kk'),
+    headers: { 'Content-Type': 'video/webm', 'X-File-Name': 'both-kk.webm' },
+  })
+  assert.equal((await call(base, `/api/lessons/${bothVideo.id}/media?lang=ru`, { cookie: learner })).text, 'bytes-ru')
+  assert.equal((await call(base, `/api/lessons/${bothVideo.id}/media?lang=kk`, { cookie: learner })).text, 'bytes-kk')
+  const delKk = await call(base, `/api/admin/lessons/${bothVideo.id}/video?lang=kk`, { method: 'DELETE', cookie: root })
+  assert.equal(delKk.status, 200)
+  assert.equal(fs.existsSync(path.join(mediaDir, `${bothVideo.id}.kk`)), false)
+  assert.equal(fs.existsSync(path.join(mediaDir, bothVideo.id)), true)
+  expectError(await call(base, `/api/lessons/${bothVideo.id}/media?lang=kk`, { cookie: learner }), 404, 'Видео не найдено')
+  assert.equal((await call(base, `/api/lessons/${bothVideo.id}/media?lang=ru`, { cookie: learner })).text, 'bytes-ru')
+
+  const pptx = await deck()
+  const impRu = (await call(base, '/api/admin/lessons/pptx?lang=ru', {
+    method: 'POST',
+    cookie: root,
+    body: pptx,
+    headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+  })).body
+  const impKk = (await call(base, '/api/admin/lessons/pptx?lang=kk', {
+    method: 'POST',
+    cookie: root,
+    body: pptx,
+    headers: { 'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+  })).body
+  const ruImgId = impRu.slides[1].fileId
+  const kkImgId = impKk.slides[1].fileId
+  assert.notEqual(ruImgId, kkImgId)
+  assert.equal((await call(base, `/api/lessons/files/${ruImgId}`, { cookie: root })).status, 200)
+  assert.equal((await call(base, `/api/lessons/files/${kkImgId}`, { cookie: root })).status, 200)
+
+  const bothSlides = (await call(base, '/api/admin/lessons', {
+    method: 'POST',
+    cookie: root,
+    json: {
+      title: 'Две презентации',
+      titleKk: 'Екі презентация',
+      groups: { grades_5_9: true },
+      slides: [
+        { id: impRu.slides[0].id, kind: 'frame', tone: 'sun', kicker: 'RU', title: 'RU', lines: ['Текст'] },
+        { id: impRu.slides[1].id, kind: 'image', caption: 'RU pic', fileId: ruImgId },
+      ],
+      slidesKk: [
+        { id: impKk.slides[0].id, kind: 'frame', tone: 'orbit', kicker: 'KK', title: 'KK', lines: ['Мәтін'] },
+        { id: impKk.slides[1].id, kind: 'image', caption: 'KK pic', fileId: kkImgId },
+      ],
+      questions: [{ text: 'RU?', correctIndex: 0, options: [{ text: 'Да' }, { text: 'Нет' }] }],
+      questionsKk: [{ text: 'KK?', correctIndex: 0, options: [{ text: 'Иә' }, { text: 'Жоқ' }] }],
+    },
+  })).body
+  assert.deepEqual(bothSlides.languages, { ru: true, kk: true })
+  assert.equal((await call(base, `/api/lessons/files/${ruImgId}`, { cookie: learner })).status, 200)
+  assert.equal((await call(base, `/api/lessons/files/${kkImgId}`, { cookie: learner })).status, 200)
 })

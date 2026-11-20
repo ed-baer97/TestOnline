@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { LearnFrame } from '../../components/layout/LearnFrame.jsx'
-import { useI18n } from '../../state/i18n.jsx'
+import { pick, useI18n } from '../../state/i18n.jsx'
 import { useLearnerHome } from '../../state/learnerHome.js'
 import LessonView from '../lessons/LessonView.jsx'
 
@@ -46,19 +46,26 @@ export default function LearnerHome({ onLogout }) {
             {groupLessons(lessons, lang).map((block) => (
               <section className="stack" key={block.key || 'loose'}>
                 {block.title && <h2>{block.title}</h2>}
-                {block.lessons.map((lesson) => (
-                  <Link className="lesson-card" key={lesson.id} to={`/learn/lessons/${lesson.id}`}>
-                    <div>
-                      <h2>{lesson.title}</h2>
-                      <p className="muted">
-                        {lesson.format === 'video'
-                          ? t('Видео · {count} вопр.', { count: lesson.questionCount })
-                          : t('Презентация · {slides} сл. · {count} вопр.', { slides: lesson.slideCount, count: lesson.questionCount })}
-                      </p>
-                    </div>
-                    <span>{lesson.best ? t('{score} из {total}', { score: lesson.best.score, total: lesson.best.total }) : t('Открыть')}</span>
-                  </Link>
-                ))}
+                {block.lessons.map((lesson) => {
+                  const countLang = lesson.languages?.[lang] ? lang : (lesson.languages?.ru ? 'ru' : 'kk')
+                  const slides = countLang === 'kk' ? (lesson.slideCountKk ?? lesson.slideCount) : lesson.slideCount
+                  const questions = countLang === 'kk' ? (lesson.questionCountKk ?? lesson.questionCount) : lesson.questionCount
+                  const badges = [lesson.languages?.ru && 'Рус', lesson.languages?.kk && 'Қаз'].filter(Boolean).join(' · ')
+                  return (
+                    <Link className="lesson-card" key={lesson.id} to={`/learn/lessons/${lesson.id}`}>
+                      <div>
+                        <h2>{pick(lang, lesson.title, lesson.titleKk)}</h2>
+                        <p className="muted">
+                          {lesson.format === 'video'
+                            ? t('Видео · {count} вопр.', { count: questions })
+                            : t('Презентация · {slides} сл. · {count} вопр.', { slides, count: questions })}
+                          {badges ? ` · ${badges}` : ''}
+                        </p>
+                      </div>
+                      <span>{lesson.best ? t('{score} из {total}', { score: lesson.best.score, total: lesson.best.total }) : t('Открыть')}</span>
+                    </Link>
+                  )
+                })}
               </section>
             ))}
           </div>
