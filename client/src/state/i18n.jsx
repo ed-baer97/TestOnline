@@ -474,6 +474,7 @@ const KK = {
   'Ошибка запроса ({status})': 'Сұраныс қатесі ({status})',
   '{orgClasses} кл. · {learners} тест. · {admins} адм.': '{orgClasses} сын. · {learners} тест. · {admins} әкім.',
   '{organizations} орг. · {admins} адм. · {learners} тест.': '{organizations} ұйым · {admins} әкім. · {learners} тест.',
+  '{organizations} орг. · {classes} кл. · {learners} тест. · {admins} адм.': '{organizations} ұйым · {classes} сын. · {learners} тест. · {admins} әкім.',
   // Статистика: навигация и общие элементы
   'Путь': 'Жол',
   'Разделы статистики': 'Статистика бөлімдері',

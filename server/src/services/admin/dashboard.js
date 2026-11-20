@@ -1,10 +1,15 @@
 import { fail } from '../../domain/errors.js'
 import { BANDS, classCaption, GROUP_KEYS } from '../../domain/structure.js'
 import * as classesRepo from '../../repositories/classes.js'
+import * as districtsRepo from '../../repositories/districts.js'
 import * as organizationsRepo from '../../repositories/organizations.js'
 import * as usersRepo from '../../repositories/users.js'
 import { listRegions } from './regions.js'
 import { mustOrg, mustRegion } from './scope.js'
+
+function byValue(items) {
+  return [...items].sort((a, b) => b.value - a.value || String(a.label).localeCompare(String(b.label), 'ru'))
+}
 
 function chart(caption, items, order = 'value') {
   const list = items.filter((item) => item.label)
@@ -27,6 +32,37 @@ function bandItems(classes, orgs) {
     label: band.label,
     value: totals.get(band.id) || 0,
   }))
+}
+
+function districtBuckets(districts, orgRows) {
+  const buckets = new Map(districts.map((district) => [district.id, {
+    key: district.id,
+    name: district.name,
+    nameKk: district.name_kk || '',
+    rows: [],
+  }]))
+  const loose = { key: 'none', name: 'Без района', nameKk: 'Аудансыз', rows: [] }
+  for (const org of orgRows) {
+    const bucket = (org.districtId && buckets.get(org.districtId)) || loose
+    bucket.rows.push(org)
+  }
+  const groups = [...buckets.values()].filter((group) => group.rows.length)
+  if (loose.rows.length) groups.push(loose)
+  if (groups.length < 2) return null
+  return groups.map((group) => ({
+    key: group.key,
+    name: group.name,
+    nameKk: group.nameKk,
+    organizations: group.rows.length,
+    classes: group.rows.reduce((sum, org) => sum + org.classes, 0),
+    learners: group.rows.reduce((sum, org) => sum + org.learners, 0),
+    admins: group.rows.reduce((sum, org) => sum + org.admins, 0),
+    rows: group.rows,
+  }))
+}
+
+function orgCells(org) {
+  return [org.name, org.classes, org.learners, org.admins]
 }
 
 function gradeItems(classes) {
@@ -89,15 +125,31 @@ async function regionDashboard(regionId) {
   const learnersByOrg = await usersRepo.learnerCountsByOrganization(ids)
   const learners = [...learnersByOrg.values()].reduce((sum, value) => sum + value, 0)
   const rows = await classesRepo.listClassesWithLearners(ids)
+  const adminByOrg = await usersRepo.orgAdminCountsByOrganization(ids)
   const orgRows = orgs
     .map((org) => ({
       id: org.id,
       name: org.name,
+      districtId: org.districtId,
       classes: rows.filter((item) => item.organizationId === org.id).length,
       learners: learnersByOrg.get(org.id) || 0,
+      admins: adminByOrg.get(org.id) || 0,
     }))
     .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
-  const adminByOrg = await usersRepo.orgAdminCountsByOrganization(ids)
+  const groups = districtBuckets(await districtsRepo.listDistrictRows(regionId), orgRows)
+  const orgChart = chart('Тестируемые по организациям', orgRows.map((org) => ({ key: org.id, label: org.name, value: org.learners })))
+  if (groups) {
+    orgChart.groups = groups.map((group) => ({
+      key: group.key,
+      name: group.name,
+      nameKk: group.nameKk,
+      organizations: group.organizations,
+      classes: group.classes,
+      learners: group.learners,
+      admins: group.admins,
+      items: byValue(group.rows.map((org) => ({ key: org.id, label: org.name, value: org.learners }))),
+    }))
+  }
   return {
     scope: 'region',
     title: region.name,
@@ -109,17 +161,26 @@ async function regionDashboard(regionId) {
       { label: 'Тестируемых', value: learners },
     ],
     charts: [
-      chart('Тестируемые по организациям', orgRows.map((org) => ({ key: org.id, label: org.name, value: org.learners }))),
+      orgChart,
       chart('Тестируемые по группам', bandItems(rows, orgs), 'given'),
       chart('Тестируемые по параллелям', gradeItems(rows), 'given'),
     ],
     table: {
       caption: 'Организации',
       columns: ['Организация', 'Классы', 'Тестируемые', 'Админы'],
-      rows: orgRows.map((org) => ({
-        key: org.id,
-        cells: [org.name, org.classes, org.learners, adminByOrg.get(org.id) || 0],
-      })),
+      rows: orgRows.map((org) => ({ key: org.id, cells: orgCells(org) })),
+      ...(groups ? {
+        groups: groups.map((group) => ({
+          key: group.key,
+          name: group.name,
+          nameKk: group.nameKk,
+          organizations: group.organizations,
+          classes: group.classes,
+          learners: group.learners,
+          admins: group.admins,
+          rows: group.rows.map((org) => ({ key: org.id, cells: orgCells(org) })),
+        })),
+      } : {}),
     },
   }
 }

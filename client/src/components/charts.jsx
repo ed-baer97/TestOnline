@@ -8,7 +8,7 @@ function numericValue(item) {
   return Number.isFinite(num) ? num : null
 }
 
-export function BarChart({ caption, items = [], order, percent = false, layout, note, limit = 12 }) {
+export function BarChart({ caption, items = [], order, percent = false, layout, note, limit = 12, plain = false }) {
   const { lang, t } = useI18n()
   const [expanded, setExpanded] = useState(false)
   if (!items?.length) return null
@@ -28,10 +28,8 @@ export function BarChart({ caption, items = [], order, percent = false, layout, 
   const max = percent ? 100 : Math.max(1, ...valid)
   const vertical = layout === 'vertical' || (!layout && order !== 'value' && !percent && sorted.length <= 8)
   const shown = !vertical && !expanded && sorted.length > limit ? sorted.slice(0, limit) : sorted
-
-  return (
-    <figure className="chart">
-      {caption && <figcaption>{caption}</figcaption>}
+  const body = (
+    <>
       {vertical ? (
         <div className="bars">
           {shown.map((item) => {
@@ -80,6 +78,13 @@ export function BarChart({ caption, items = [], order, percent = false, layout, 
         </div>
       )}
       {note && <p className="muted chart-note">{note}</p>}
+    </>
+  )
+  if (plain) return <div className="chart-plain">{body}</div>
+  return (
+    <figure className="chart">
+      {caption && <figcaption>{caption}</figcaption>}
+      {body}
     </figure>
   )
 }
