@@ -46,7 +46,7 @@ function LessonRow({ lesson, sections, onMove }) {
 }
 
 export function MaterialList() {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const { lessons, sections, error, createSection, saveSection, removeSection, moveLesson } = useMaterialList()
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
@@ -98,7 +98,9 @@ export function MaterialList() {
     removeSection(section.id).catch((err) => setFormError(err.message))
   }
 
-  const loose = lessons?.filter((lesson) => !lesson.section) || []
+  const visible = lessons?.filter((lesson) => lesson.languages?.[lang])
+  const hiddenByLang = Boolean(lessons?.length && visible?.length === 0)
+  const loose = visible?.filter((lesson) => !lesson.section) || []
 
   return (
     <section className="stack">
@@ -120,10 +122,11 @@ export function MaterialList() {
         </form>
       )}
       {lessons === null && !error && <p className="muted">{t('Загрузка…')}</p>}
+      {hiddenByLang && <p className="muted">{t('В этом языке пока нет уроков.')}</p>}
       <div className="stack">
         {sections.map((section) => {
           const draft = draftOf(section)
-          const inside = lessons?.filter((lesson) => lesson.section?.id === section.id) || []
+          const inside = visible?.filter((lesson) => lesson.section?.id === section.id) || []
           return (
             <section className="stack" key={section.id}>
               <div className="section-head">
@@ -377,7 +380,7 @@ export function LessonEditor() {
 export function MaterialQuizzes() {
   const { lang, t } = useI18n()
   const navigate = useNavigate()
-  const { quizzes, orgs, error, start, remove } = useQuizList(navigate, { classLaunch: true })
+  const { quizzes, hiddenByLang, orgs, error, start, remove } = useQuizList(navigate, { classLaunch: true })
   const [launchId, setLaunchId] = useState('')
   const [mode, setMode] = useState('public')
   const [orgId, setOrgId] = useState('')
@@ -405,13 +408,15 @@ export function MaterialQuizzes() {
       </div>
       {error && <p className="form-error">{t(error)}</p>}
       {quizzes === null && !error && <p className="muted">{t('Загрузка…')}</p>}
-      {quizzes?.length === 0 && <p className="muted">{t('Пока нет квизов. Создайте первый.')}</p>}
+      {quizzes?.length === 0 && (
+        <p className="muted">{t(hiddenByLang ? 'В этом языке пока нет квизов.' : 'Пока нет квизов. Создайте первый.')}</p>
+      )}
       <div className="quiz-list">
         {quizzes?.map((quiz) => (
           <article className="card quiz-card" key={quiz.id}>
             <div>
               <h2>{quiz.title}</h2>
-              <p className="muted">{t('{count} вопр.', { count: quiz.questionCount })}</p>
+              <p className="muted">{t('{count} вопр.', { count: quiz.questionCount })} · {quiz.lang === 'kk' ? 'Қаз' : 'Рус'}</p>
             </div>
             <div className="top-actions">
               <button className="primary" type="button" onClick={() => openLaunch(quiz.id)}>{t('Запустить')}</button>

@@ -6,7 +6,7 @@ import { pick, useI18n } from '../../state/i18n.jsx'
 export function QuizLaunch() {
   const { lang, t } = useI18n()
   const navigate = useNavigate()
-  const { quizzes, orgs, error, start } = useQuizLaunch(navigate)
+  const { quizzes, hiddenByLang, orgs, error, start } = useQuizLaunch(navigate)
   const [launchId, setLaunchId] = useState('')
   const [orgId, setOrgId] = useState('')
   const [classId, setClassId] = useState('')
@@ -30,13 +30,13 @@ export function QuizLaunch() {
       <div className="section-head"><h1>{t('Квизы')}</h1></div>
       {error && <p className="form-error">{t(error)}</p>}
       {quizzes === null && !error && <p className="muted">{t('Загрузка…')}</p>}
-      {quizzes?.length === 0 && <p className="muted">{t('Пока нет квизов.')}</p>}
+      {quizzes?.length === 0 && <p className="muted">{t(hiddenByLang ? 'В этом языке пока нет квизов.' : 'Пока нет квизов.')}</p>}
       <div className="quiz-list">
         {quizzes?.map((quiz) => (
           <article className="card quiz-card" key={quiz.id}>
             <div>
               <h2>{quiz.title}</h2>
-              <p className="muted">{t('{count} вопр.', { count: quiz.questionCount })}</p>
+              <p className="muted">{t('{count} вопр.', { count: quiz.questionCount })} · {quiz.lang === 'kk' ? 'Қаз' : 'Рус'}</p>
             </div>
             <div className="top-actions">
               <button className="primary" type="button" onClick={() => openLaunch(quiz.id)}>{t('Запустить')}</button>

@@ -23,6 +23,8 @@ function groupLessons(lessons, lang) {
 export default function LearnerHome({ onLogout }) {
   const { lang, t } = useI18n()
   const { me, lessons, live, error } = useLearnerHome()
+  const visibleLessons = lessons?.filter((lesson) => lesson.languages?.[lang])
+  const hiddenByLang = Boolean(lessons?.length && visibleLessons?.length === 0)
 
   return (
     <LearnFrame onLogout={onLogout}>
@@ -42,8 +44,10 @@ export default function LearnerHome({ onLogout }) {
                 <span className="primary">{t('Подключиться')}</span>
               </Link>
             ))}
-            {lessons?.length === 0 && <p className="muted">{t('Для вашего класса пока нет уроков.')}</p>}
-            {groupLessons(lessons, lang).map((block) => (
+            {lessons && visibleLessons.length === 0 && (
+              <p className="muted">{t(hiddenByLang ? 'В этом языке пока нет уроков.' : 'Для вашего класса пока нет уроков.')}</p>
+            )}
+            {groupLessons(visibleLessons, lang).map((block) => (
               <section className="stack" key={block.key || 'loose'}>
                 {block.title && <h2>{block.title}</h2>}
                 {block.lessons.map((lesson) => {

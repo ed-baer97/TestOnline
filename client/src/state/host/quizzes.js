@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api/index.js'
 import { newId } from '../../lib/ids.js'
+import { useI18n } from '../i18n.jsx'
 import { saveHostToken } from '../roomTokens.js'
+
+function quizzesInLang(quizzes, lang) {
+  if (quizzes == null) return null
+  return quizzes.filter((quiz) => (quiz.lang || 'ru') === lang)
+}
 
 export function blankQuestion() {
   return {
@@ -14,6 +20,7 @@ export function blankQuestion() {
 }
 
 export function useQuizList(navigate, { classLaunch = false } = {}) {
+  const { lang } = useI18n()
   const [quizzes, setQuizzes] = useState(null)
   const [orgs, setOrgs] = useState(null)
   const [account, setAccount] = useState('')
@@ -56,10 +63,13 @@ export function useQuizList(navigate, { classLaunch = false } = {}) {
     }
   }
 
-  return { quizzes, orgs, account, error, start, remove }
+  const visible = quizzesInLang(quizzes, lang)
+  const hiddenByLang = Boolean(quizzes?.length && visible?.length === 0)
+  return { quizzes: visible, hiddenByLang, orgs, account, error, start, remove }
 }
 
 export function useQuizLaunch(navigate) {
+  const { lang } = useI18n()
   const [quizzes, setQuizzes] = useState(null)
   const [orgs, setOrgs] = useState([])
   const [error, setError] = useState('')
@@ -84,11 +94,14 @@ export function useQuizLaunch(navigate) {
     }
   }
 
-  return { quizzes, orgs, error, start }
+  const visible = quizzesInLang(quizzes, lang)
+  const hiddenByLang = Boolean(quizzes?.length && visible?.length === 0)
+  return { quizzes: visible, hiddenByLang, orgs, error, start }
 }
 
 // Редактор квиза по адресу /host/quiz/new создаёт квиз при первом сохранении и подменяет адрес на /host/quiz/:id.
 export function useQuizEditor(id, navigate, editorBase = '/host/quiz') {
+  const { lang } = useI18n()
   // /host/quiz/new передаёт id «new», а /admin/quizzes/new — отдельный маршрут без параметра.
   const isNew = !id || id === 'new'
   const [title, setTitle] = useState('')
@@ -134,7 +147,7 @@ export function useQuizEditor(id, navigate, editorBase = '/host/quiz') {
   async function save(stay = true) {
     setError('')
     setSaved('')
-    const body = { title, questions }
+    const body = isNew ? { title, questions, lang } : { title, questions }
     try {
       const quiz = isNew ? await api.createQuiz(body) : await api.updateQuiz(id, body)
       setSaved('Сохранено')

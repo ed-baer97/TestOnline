@@ -33,7 +33,8 @@ test('квизы ведущего: создание, правка, удален�
   assert.equal(initial.status, 200)
   assert.equal(initial.body.quizzes.length, 1)
   const demo = initial.body.quizzes[0]
-  assert.deepEqual(Object.keys(demo), ['id', 'title', 'questionCount', 'updatedAt'])
+  assert.deepEqual(Object.keys(demo), ['id', 'title', 'lang', 'questionCount', 'updatedAt'])
+  assert.equal(demo.lang, 'ru')
   assert.equal(demo.title, 'Демо: общий кругозор')
   assert.equal(demo.questionCount, 5)
 

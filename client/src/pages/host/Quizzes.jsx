@@ -6,7 +6,7 @@ import { useI18n } from '../../state/i18n.jsx'
 export default function Quizzes({ onLogout }) {
   const { t } = useI18n()
   const navigate = useNavigate()
-  const { quizzes, account, error, start, remove } = useQuizList(navigate)
+  const { quizzes, hiddenByLang, account, error, start, remove } = useQuizList(navigate)
 
   function confirmRemove(quiz) {
     if (window.confirm(t('Удалить «{name}»?', { name: quiz.title }))) remove(quiz)
@@ -16,13 +16,15 @@ export default function Quizzes({ onLogout }) {
     <HostFrame onLogout={onLogout} account={account} title={t('Квизы')}>
       {error && <p className="form-error">{t(error)}</p>}
       {quizzes === null && !error && <p className="muted">{t('Загрузка…')}</p>}
-      {quizzes?.length === 0 && <p className="muted">{t('Пока нет квизов. Создайте первый.')}</p>}
+      {quizzes?.length === 0 && (
+        <p className="muted">{t(hiddenByLang ? 'В этом языке пока нет квизов.' : 'Пока нет квизов. Создайте первый.')}</p>
+      )}
       <div className="quiz-list">
         {quizzes?.map((quiz) => (
           <article className="card quiz-card" key={quiz.id}>
             <div>
               <h2>{quiz.title}</h2>
-              <p className="muted">{t('{count} вопр.', { count: quiz.questionCount })}</p>
+              <p className="muted">{t('{count} вопр.', { count: quiz.questionCount })} · {quiz.lang === 'kk' ? 'Қаз' : 'Рус'}</p>
             </div>
             <div className="top-actions">
               <button className="primary" type="button" data-testid="start-quiz" onClick={() => start(quiz.id)}>{t('Запустить')}</button>

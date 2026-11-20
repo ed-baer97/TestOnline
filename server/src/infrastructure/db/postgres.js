@@ -126,6 +126,7 @@ const SCHEMA = [
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )`,
+  `ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS lang TEXT NOT NULL DEFAULT 'ru'`,
   `CREATE TABLE IF NOT EXISTS results (
       id TEXT PRIMARY KEY,
       user_id TEXT,

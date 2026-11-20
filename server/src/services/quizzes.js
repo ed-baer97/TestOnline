@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { readLang } from '../domain/lesson.js'
 import { normalizeQuiz } from '../domain/quiz.js'
 import * as quizzesRepo from '../repositories/quizzes.js'
 
@@ -68,7 +69,15 @@ export async function createQuiz(userId, input) {
   const quiz = normalizeQuiz(input)
   const now = new Date().toISOString()
   const id = crypto.randomUUID()
-  await quizzesRepo.insertQuiz({ id, userId, title: quiz.title, questions: quiz.questions, createdAt: now, updatedAt: now })
+  await quizzesRepo.insertQuiz({
+    id,
+    userId,
+    title: quiz.title,
+    questions: quiz.questions,
+    lang: readLang(input?.lang),
+    createdAt: now,
+    updatedAt: now,
+  })
   return getQuiz(id, userId)
 }
 

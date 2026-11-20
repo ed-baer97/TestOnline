@@ -1,23 +1,29 @@
 import { db } from '../infrastructure/db/index.js'
 
+function quizLang(value) {
+  return value === 'kk' ? 'kk' : 'ru'
+}
+
 function mapQuiz(row) {
   return {
     id: row.id,
     userId: row.user_id,
     title: row.title,
+    lang: quizLang(row.lang),
     questions: JSON.parse(row.questions),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
 }
 
-export async function insertQuiz({ id, userId, title, questions, createdAt, updatedAt }) {
+export async function insertQuiz({ id, userId, title, questions, lang = 'ru', createdAt, updatedAt }) {
   await db.run(
-    'INSERT INTO quizzes (id, user_id, title, questions, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO quizzes (id, user_id, title, questions, lang, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
     id,
     userId,
     title,
     JSON.stringify(questions),
+    quizLang(lang),
     createdAt,
     updatedAt,
   )
@@ -27,19 +33,20 @@ function quizSummary(row) {
   return {
     id: row.id,
     title: row.title,
+    lang: quizLang(row.lang),
     questionCount: JSON.parse(row.questions).length,
     updatedAt: row.updated_at,
   }
 }
 
 export async function listQuizSummaries(userId) {
-  const rows = await db.all('SELECT id, title, questions, updated_at FROM quizzes WHERE user_id = ? ORDER BY updated_at DESC', userId)
+  const rows = await db.all('SELECT id, title, lang, questions, updated_at FROM quizzes WHERE user_id = ? ORDER BY updated_at DESC', userId)
   return rows.map(quizSummary)
 }
 
 export async function listSuperQuizSummaries() {
   const rows = await db.all(
-    `SELECT q.id, q.title, q.questions, q.updated_at
+    `SELECT q.id, q.title, q.lang, q.questions, q.updated_at
      FROM quizzes q
      JOIN users u ON u.id = q.user_id
      WHERE u.role = 'super'
