@@ -5,6 +5,7 @@ export function publicInfo(room) {
     status: room.status,
     playerCount: room.players.size,
     joinable: room.status === 'lobby',
+    access: room.audience?.kind === 'private' ? 'private' : 'public',
   }
 }
 
@@ -76,6 +77,10 @@ export function viewFor(room, viewer, board = leaderboard(room)) {
           }
         : null,
       leaderboard: board.slice(0, 50).map(({ name, score, rank }) => ({ name, score, rank })),
+      access: room.audience?.kind === 'private' ? 'private' : 'public',
+      organizationName: room.audience?.organizationName || '',
+      organizationNameKk: room.audience?.organizationNameKk || '',
+      classLabel: room.audience?.classLabel || '',
     }
   }
 

@@ -18,6 +18,7 @@ export function createApp() {
   const app = express()
   app.disable('x-powered-by')
   const httpServer = createServer(app)
+  httpServer.requestTimeout = 10 * 60 * 1000
   const io = new Server(httpServer, {
     pingInterval: 10000,
     pingTimeout: 20000,

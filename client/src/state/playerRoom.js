@@ -14,12 +14,21 @@ export function usePlayerRoom(code) {
   const [state, setState] = useState(null)
   const [online, setOnline] = useState(true)
   const [identity, setIdentity] = useState(() => readPlayerToken(code) || '')
+  const [me, setMe] = useState(undefined)
+  const autoJoin = useRef(false)
   const socketRef = useRef(null)
   const nameRef = useRef(name)
   nameRef.current = name
 
   useEffect(() => {
     let alive = true
+    api.me().then((data) => { if (alive) setMe(data) }).catch(() => { if (alive) setMe({ ok: false }) })
+    return () => { alive = false }
+  }, [])
+
+  useEffect(() => {
+    let alive = true
+    autoJoin.current = false
     setInfo(null)
     setMissing(false)
     setError('')
@@ -31,6 +40,17 @@ export function usePlayerRoom(code) {
       .catch(() => { if (alive) setMissing(true) })
     return () => { alive = false }
   }, [code])
+
+  useEffect(() => {
+    if (info?.access !== 'private' || !me?.ok || identity || autoJoin.current) return
+    autoJoin.current = true
+    const token = readPlayerToken(code) || newId()
+    savePlayerToken(code, token)
+    const displayName = me.displayName || me.login || ''
+    nameRef.current = displayName
+    setName(displayName)
+    setIdentity(token)
+  }, [info, me, identity, code])
 
   useEffect(() => {
     if (!identity) return undefined
@@ -102,5 +122,5 @@ export function usePlayerRoom(code) {
     return api.answerRoom(code, identity, optionIndex)
   }
 
-  return { info, missing, name, setName, error, state, online, identity, enter, answer }
+  return { info, missing, name, setName, error, state, online, identity, me, enter, answer }
 }

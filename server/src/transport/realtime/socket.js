@@ -1,3 +1,5 @@
+import { readSession } from '../../infrastructure/session.js'
+import { sessionProfile } from '../../services/accounts.js'
 import {
   advance,
   getRoom,
@@ -12,6 +14,20 @@ import {
   submitAnswer,
   viewFor,
 } from '../../services/rooms/index.js'
+
+function cookieValue(header, name) {
+  for (const part of String(header || '').split(';')) {
+    const [key, ...rest] = part.trim().split('=')
+    if (key === name) {
+      try {
+        return decodeURIComponent(rest.join('='))
+      } catch {
+        return ''
+      }
+    }
+  }
+  return ''
+}
 
 // Сокеты всех экземпляров io в процессе: комнаты живут в памяти процесса и общие для них.
 const watchers = new Set()
@@ -67,7 +83,9 @@ export function attachRealtime(io) {
           ack?.({ error: 'Комната не найдена' })
           return
         }
-        const result = joinPlayer(room, { name, playerToken })
+        const session = readSession(cookieValue(socket.handshake.headers.cookie, 'session'))
+        const user = session?.userId ? await sessionProfile(session) : null
+        const result = joinPlayer(room, { name, playerToken, user })
         if (result.error) {
           ack?.({ error: result.error })
           return

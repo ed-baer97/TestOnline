@@ -1,7 +1,17 @@
 import crypto from 'node:crypto'
-import { deleteLiveRoom, readLiveRoom, saveLiveRoom } from '../../repositories/liveRooms.js'
+import { deleteLiveRoom, listLiveRooms, readLiveRoom, saveLiveRoom } from '../../repositories/liveRooms.js'
 import { onRoomPersist } from './events.js'
 import { armTimer, clearTimer, closeQuestion } from './game.js'
+
+const PUBLIC_AUDIENCE = {
+  kind: 'public',
+  organizationId: null,
+  classId: null,
+  band: null,
+  organizationName: '',
+  organizationNameKk: '',
+  classLabel: '',
+}
 
 const rooms = new Map()
 const ROOM_TTL_MS = 4 * 60 * 60 * 1000
@@ -16,7 +26,7 @@ onRoomPersist((room) => {
   void remember(room)
 })
 
-export async function createRoom(quiz) {
+export async function createRoom(quiz, audience = null) {
   let code
   do {
     code = String(crypto.randomInt(100000, 1000000))
@@ -37,6 +47,7 @@ export async function createRoom(quiz) {
         options: question.options.map((option) => ({ text: option.text })),
       })),
     },
+    audience: audience?.kind === 'private' ? audience : { ...PUBLIC_AUDIENCE },
     status: 'lobby',
     questionIndex: -1,
     questionStartedAt: null,
@@ -58,6 +69,7 @@ function freeze(room) {
     code: room.code,
     hostToken: room.hostToken,
     quiz: room.quiz,
+    audience: room.audience || { ...PUBLIC_AUDIENCE },
     status: room.status,
     questionIndex: room.questionIndex,
     questionStartedAt: room.questionStartedAt,
@@ -78,6 +90,7 @@ function thaw(data) {
   }
   return {
     ...data,
+    audience: data.audience?.kind === 'private' ? data.audience : { ...PUBLIC_AUDIENCE },
     timer: null,
     players,
     byToken,
@@ -216,6 +229,31 @@ export async function openRoom(code) {
 
 export function getRoom(code) {
   return rooms.get(String(code || '')) || null
+}
+
+export async function listPrivateForClass(classId) {
+  if (!classId) return []
+  const rows = await listLiveRooms()
+  const found = []
+  for (const row of rows) {
+    let data
+    try {
+      data = JSON.parse(row.payload)
+    } catch {
+      continue
+    }
+    if (data.audience?.kind !== 'private' || data.audience.classId !== classId) continue
+    if (data.status === 'podium') continue
+    const room = await openRoom(data.code)
+    if (!room || room.audience?.classId !== classId || room.status === 'podium') continue
+    found.push({
+      code: room.code,
+      title: room.quiz.title,
+      status: room.status,
+      playerCount: room.players.size,
+    })
+  }
+  return found
 }
 
 setInterval(() => {

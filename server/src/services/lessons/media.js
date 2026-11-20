@@ -32,7 +32,7 @@ export async function saveLessonVideo(actor, id, source, mime, name) {
   await ensureMediaDir()
   await writeVideoStreamOrBuffer(mediaPath(id), source, MAX_VIDEO, {
     onEmpty: () => appError('Файл пустой', 400),
-    onTooLarge: () => appError('Видео больше 150 МБ', 413),
+    onTooLarge: () => appError('Видео больше 250 МБ', 413),
   })
   const safeName = cleanText(name).slice(0, 120) || 'video'
   await lessonsRepo.setLessonVideo(id, { mime: type, name: safeName, updatedAt: new Date().toISOString() })

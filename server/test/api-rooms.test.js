@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { io } from 'socket.io-client'
 import { evictRoom, flushRooms, getRoom, scheduleRemember } from '../src/services/rooms/index.js'
 import { createHost, rawDb, useTestDatabase } from './helpers/db.js'
 import { call, login, startServer } from './helpers/http.js'
 
 await useTestDatabase('api-rooms')
 process.env.SESSION_SECRET = 'test-secret'
+process.env.SUPER_LOGIN = 'root'
+process.env.SUPER_PASSWORD = 'rootpass'
 
 const twoQuestions = {
   title: 'Комната по REST',
@@ -54,13 +57,14 @@ test('комната по REST: лобби, вход, ответы, раскры
 
   const created = await call(base, '/api/rooms', { method: 'POST', cookie, json: { quizId: quiz.id } })
   assert.equal(created.status, 201)
-  assert.deepEqual(Object.keys(created.body), ['code', 'hostToken', 'title'])
+  assert.deepEqual(Object.keys(created.body), ['code', 'hostToken', 'title', 'access'])
   assert.match(created.body.code, /^\d{6}$/)
   assert.match(created.body.hostToken, /^[\w-]{32}$/)
   assert.equal(created.body.title, 'Комната по REST')
+  assert.equal(created.body.access, 'public')
   const { code, hostToken } = created.body
 
-  assert.deepEqual((await call(base, `/api/rooms/${code}`)).body, { code, title: 'Комната по REST', status: 'lobby', playerCount: 0, joinable: true })
+  assert.deepEqual((await call(base, `/api/rooms/${code}`)).body, { code, title: 'Комната по REST', status: 'lobby', playerCount: 0, joinable: true, access: 'public' })
   const noRoom = await call(base, '/api/rooms/000000')
   assert.equal(noRoom.status, 404)
   assert.deepEqual(noRoom.body, { error: 'Комната не найдена' })
@@ -87,6 +91,10 @@ test('комната по REST: лобби, вход, ответы, раскры
     players: [],
     question: null,
     leaderboard: [],
+    access: 'public',
+    organizationName: '',
+    organizationNameKk: '',
+    classLabel: '',
   })
 
   const joinErrors = [
@@ -167,7 +175,7 @@ test('комната по REST: лобби, вход, ответы, раскры
   assert.equal(late.status, 400)
   assert.deepEqual(late.body, { error: 'Игра уже началась' })
   assert.equal((await call(base, `/api/rooms/${code}/join`, { method: 'POST', json: { name: 'Аня', playerToken: token(1) } })).status, 200)
-  assert.deepEqual((await call(base, `/api/rooms/${code}`)).body, { code, title: 'Комната по REST', status: 'question', playerCount: 2, joinable: false })
+  assert.deepEqual((await call(base, `/api/rooms/${code}`)).body, { code, title: 'Комната по REST', status: 'question', playerCount: 2, joinable: false, access: 'public' })
 
   const playQuestion = (await call(base, `/api/rooms/${code}/play?token=${token(1)}`)).body
   assert.deepEqual(playQuestion.question, started.body.question)
@@ -229,15 +237,15 @@ test('комната по REST: лобби, вход, ответы, раскры
   const anyaPodium = (await call(base, `/api/rooms/${code}/play?token=${token(1)}`)).body
   assert.deepEqual(anyaPodium.me, { name: 'Аня', score: points, answered: false, answerIndex: null, lastPoints: 0, lastCorrect: false, rank: 1 })
   assert.equal(anyaPodium.question, null)
-  assert.deepEqual((await call(base, `/api/rooms/${code}`)).body, { code, title: 'Комната по REST', status: 'podium', playerCount: 2, joinable: false })
+  assert.deepEqual((await call(base, `/api/rooms/${code}`)).body, { code, title: 'Комната по REST', status: 'podium', playerCount: 2, joinable: false, access: 'public' })
 
   const results = (await call(base, '/api/results', { cookie })).body.results
   assert.equal(results.length, 1)
   assert.deepEqual(Object.keys(results[0]), ['title', 'code', 'players', 'finishedAt'])
   assert.equal(results[0].code, code)
   assert.deepEqual(results[0].players.map(({ answers, ...player }) => player), [
-    { name: 'Аня', score: points, rank: 1 },
-    { name: 'Боря', score: 0, rank: 2 },
+    { name: 'Аня', userId: null, score: points, rank: 1 },
+    { name: 'Боря', userId: null, score: 0, rank: 2 },
   ])
   assert.deepEqual(results[0].players[0].answers.map(({ questionId, ...answer }) => answer), [
     { question: '2 + 2?', chosen: '4', correct: '4', ok: true, points },
@@ -258,6 +266,7 @@ test('комната по REST: лобби, вход, ответы, раскры
     { text: 'Цвет неба?', correct: 0, total: 2, rate: 0 },
   ])
   assert.equal(stats.sessions[0].code, code)
+  assert.equal(stats.sessions[0].access, 'public')
   assert.equal(stats.sessions[0].topScore, points)
   assert.equal(stats.sessions[0].playerCount, 2)
   assert.deepEqual(stats.sessions[0].players.map((player) => player.rank), [1, 2])
@@ -281,13 +290,13 @@ test('комната хранится в live_rooms: закрытие вопро
   const { code, hostToken } = room
 
   const stored = await readPayload(code)
-  assert.deepEqual(Object.keys(stored), ['code', 'hostToken', 'quiz', 'status', 'questionIndex', 'questionStartedAt', 'endsAt', 'saved', 'players', 'createdAt', 'podiumAt', 'startedAt'])
+  assert.deepEqual(Object.keys(stored), ['code', 'hostToken', 'quiz', 'audience', 'status', 'questionIndex', 'questionStartedAt', 'endsAt', 'saved', 'players', 'createdAt', 'podiumAt', 'startedAt'])
   assert.equal(stored.status, 'lobby')
   assert.equal(stored.hostToken, hostToken)
 
   await call(base, `/api/rooms/${code}/join`, { method: 'POST', json: { name: 'Аня', playerToken: token(1) } })
   const withPlayer = await readPayload(code)
-  assert.deepEqual(Object.keys(withPlayer.players[0]), ['id', 'token', 'name', 'score', 'answered', 'answerIndex', 'lastPoints', 'lastCorrect', 'answers', 'online', 'joinedAt'])
+  assert.deepEqual(Object.keys(withPlayer.players[0]), ['id', 'token', 'userId', 'name', 'score', 'answered', 'answerIndex', 'lastPoints', 'lastCorrect', 'answers', 'online', 'joinedAt'])
   assert.equal(withPlayer.players[0].online, true)
 
   await call(base, `/api/rooms/${code}/advance`, { method: 'POST', json: { hostToken } })
@@ -430,4 +439,299 @@ test('ограничение перебора кодов комнат возвр
   })
   assert.equal(blocked.status, 429)
   assert.deepEqual(blocked.body, { error: 'Слишком много запросов. Попробуйте через минуту' })
+})
+
+test('приватные и публичные квизы: запуск по ролям, вход класса, переподключение, отзыв сессии и статистика', async (t) => {
+  const server = await startServer()
+  const sockets = []
+  t.after(async () => {
+    for (const socket of sockets) socket.disconnect()
+    await server.close()
+  })
+  const { base } = server
+
+  const rootCookie = await login(base, 'root', 'rootpass')
+  await createHost('priv.host', 'secret1')
+  const hostCookie = await login(base, 'priv.host', 'secret1')
+  const hostQuiz = (await call(base, '/api/quizzes', { method: 'POST', cookie: hostCookie, json: twoQuestions })).body
+
+  // Структура: два региона, две школы, два класса, ученики.
+  const regionA = (await call(base, '/api/admin/regions', { method: 'POST', cookie: rootCookie, json: { name: 'Область А', nameKk: 'А облысы' } })).body
+  const regionB = (await call(base, '/api/admin/regions', { method: 'POST', cookie: rootCookie, json: { name: 'Область Б' } })).body
+  await call(base, '/api/admin/regional-admins', {
+    method: 'POST',
+    cookie: rootCookie,
+    json: { login: 'reg.a', password: 'secret1', displayName: 'Рег А', regionId: regionA.id },
+  })
+  await call(base, '/api/admin/regional-admins', {
+    method: 'POST',
+    cookie: rootCookie,
+    json: { login: 'reg.b', password: 'secret1', displayName: 'Рег Б', regionId: regionB.id },
+  })
+  const regACookie = await login(base, 'reg.a', 'secret1')
+  const regBCookie = await login(base, 'reg.b', 'secret1')
+
+  const schoolA = (await call(base, '/api/admin/organizations', {
+    method: 'POST',
+    cookie: regACookie,
+    json: { name: 'Школа А', nameKk: 'А мектебі', groups: { grades_5_9: true } },
+  })).body
+  const schoolB = (await call(base, '/api/admin/organizations', {
+    method: 'POST',
+    cookie: regBCookie,
+    json: { name: 'Школа Б', groups: { grades_5_9: true } },
+  })).body
+
+  await call(base, '/api/admin/org-admins', {
+    method: 'POST',
+    cookie: regACookie,
+    json: { login: 'org.a', password: 'secret1', displayName: 'Орг А', organizationId: schoolA.id },
+  })
+  await call(base, '/api/admin/org-admins', {
+    method: 'POST',
+    cookie: regBCookie,
+    json: { login: 'org.b', password: 'secret1', displayName: 'Орг Б', organizationId: schoolB.id },
+  })
+  const orgACookie = await login(base, 'org.a', 'secret1')
+  const orgBCookie = await login(base, 'org.b', 'secret1')
+
+  const classA1 = (await call(base, '/api/admin/classes', { method: 'POST', cookie: orgACookie, json: { grade: 5, name: '5а' } })).body
+  const classA2 = (await call(base, '/api/admin/classes', { method: 'POST', cookie: orgACookie, json: { grade: 5, name: '5б' } })).body
+  const classB1 = (await call(base, '/api/admin/classes', { method: 'POST', cookie: orgBCookie, json: { grade: 5, name: '5в' } })).body
+
+  const pupil1 = (await call(base, '/api/admin/learners', {
+    method: 'POST',
+    cookie: orgACookie,
+    json: { login: 'pupil.one', password: 'secret1', displayName: 'Арман Тест', classId: classA1.id },
+  })).body
+  await call(base, '/api/admin/learners', {
+    method: 'POST',
+    cookie: orgACookie,
+    json: { login: 'pupil.two', password: 'secret1', displayName: 'Дана Тест', classId: classA1.id },
+  })
+  await call(base, '/api/admin/learners', {
+    method: 'POST',
+    cookie: orgACookie,
+    json: { login: 'pupil.other', password: 'secret1', displayName: 'Аида 5б', classId: classA2.id },
+  })
+  await call(base, '/api/admin/learners', {
+    method: 'POST',
+    cookie: orgACookie,
+    json: { login: 'pupil.revoked', password: 'secret1', displayName: 'Серик Отзыв', classId: classA1.id },
+  })
+
+  const pupil1Cookie = await login(base, 'pupil.one', 'secret1')
+  const pupil2Cookie = await login(base, 'pupil.two', 'secret1')
+  const otherClassCookie = await login(base, 'pupil.other', 'secret1')
+  const revokedCookie = await login(base, 'pupil.revoked', 'secret1')
+
+  // Смена пароля отзывает cookie-сессию, в том числе для приватных комнат.
+  const updatedLearner = await call(base, `/api/admin/learners/${pupil1.id}`, { method: 'PATCH', cookie: orgACookie, json: { displayName: 'Арман Тест', classId: classA1.id } })
+  assert.equal(updatedLearner.status, 200)
+  const listForRevoke = (await call(base, '/api/admin/learners?search=pupil.revoked', { cookie: orgACookie })).body.learners
+  await call(base, `/api/admin/learners/${listForRevoke[0].id}`, {
+    method: 'PATCH',
+    cookie: orgACookie,
+    json: { displayName: 'Серик Отзыв', classId: classA1.id, password: 'newpass2' },
+  })
+
+  // Квиз платформы (super) и проверка launch-targets / launch-quizzes.
+  const superQuiz = (await call(base, '/api/quizzes', {
+    method: 'POST',
+    cookie: rootCookie,
+    json: {
+      title: 'Платформенный квиз',
+      questions: [{ text: 'Столица Казахстана?', timeLimit: 60, correctIndex: 0, options: [{ text: 'Астана' }, { text: 'Алматы' }] }],
+    },
+  })).body
+
+  assert.equal((await call(base, '/api/admin/launch-targets', { cookie: hostCookie })).status, 403)
+  assert.equal((await call(base, '/api/admin/launch-targets', { cookie: pupil1Cookie })).status, 403)
+  assert.equal((await call(base, '/api/admin/launch-quizzes', { cookie: hostCookie })).status, 403)
+  assert.equal((await call(base, '/api/admin/launch-quizzes', { cookie: pupil1Cookie })).status, 403)
+
+  const superTargets = await call(base, '/api/admin/launch-targets', { cookie: rootCookie })
+  assert.equal(superTargets.status, 200)
+  assert.deepEqual(superTargets.body.organizations.map((org) => org.id), [schoolA.id, schoolB.id])
+  const regTargets = await call(base, '/api/admin/launch-targets', { cookie: regACookie })
+  assert.deepEqual(regTargets.body.organizations.map((org) => org.id), [schoolA.id])
+  const orgTargets = await call(base, '/api/admin/launch-targets', { cookie: orgACookie })
+  assert.deepEqual(orgTargets.body.organizations.map((org) => org.id), [schoolA.id])
+
+  const launchCatalog = await call(base, '/api/admin/launch-quizzes', { cookie: regACookie })
+  assert.equal(launchCatalog.status, 200)
+  assert.deepEqual(launchCatalog.body.quizzes.map((q) => q.id), [superQuiz.id])
+  assert.equal(launchCatalog.body.quizzes.some((q) => q.id === hostQuiz.id), false)
+
+  // Проверки прав при запуске комнат.
+  const hostPrivate = await call(base, '/api/rooms', {
+    method: 'POST',
+    cookie: hostCookie,
+    json: { quizId: hostQuiz.id, mode: 'private', organizationId: schoolA.id, classId: classA1.id },
+  })
+  assert.equal(hostPrivate.status, 403)
+
+  const regPublic = await call(base, '/api/rooms', {
+    method: 'POST',
+    cookie: regACookie,
+    json: { quizId: superQuiz.id, mode: 'public' },
+  })
+  assert.equal(regPublic.status, 400)
+  assert.deepEqual(regPublic.body, { error: 'Выберите класс' })
+
+  const orgForeign = await call(base, '/api/rooms', {
+    method: 'POST',
+    cookie: orgACookie,
+    json: { quizId: superQuiz.id, mode: 'private', organizationId: schoolB.id, classId: classB1.id },
+  })
+  assert.equal(orgForeign.status, 400)
+  assert.deepEqual(orgForeign.body, { error: 'Выберите организацию' })
+
+  const regHostQuiz = await call(base, '/api/rooms', {
+    method: 'POST',
+    cookie: regACookie,
+    json: { quizId: hostQuiz.id, mode: 'private', organizationId: schoolA.id, classId: classA1.id },
+  })
+  assert.equal(regHostQuiz.status, 404)
+
+  // Публичный запуск квиза платформы суперглавным.
+  const superPublic = await call(base, '/api/rooms', {
+    method: 'POST',
+    cookie: rootCookie,
+    json: { quizId: superQuiz.id, mode: 'public' },
+  })
+  assert.equal(superPublic.status, 201)
+  assert.equal(superPublic.body.access, 'public')
+  await call(base, `/api/rooms/${superPublic.body.code}/join`, { method: 'POST', json: { name: 'Гость', playerToken: token(10) } })
+  await call(base, `/api/rooms/${superPublic.body.code}/advance`, { method: 'POST', json: { hostToken: superPublic.body.hostToken } })
+  await call(base, `/api/rooms/${superPublic.body.code}/answer`, { method: 'POST', json: { playerToken: token(10), optionIndex: 1 } })
+  await call(base, `/api/rooms/${superPublic.body.code}/advance`, { method: 'POST', json: { hostToken: superPublic.body.hostToken } })
+  await call(base, `/api/rooms/${superPublic.body.code}/advance`, { method: 'POST', json: { hostToken: superPublic.body.hostToken } })
+
+  // Приватный запуск квиза платформы админом организации для classA1.
+  const privRoomRes = await call(base, '/api/rooms', {
+    method: 'POST',
+    cookie: orgACookie,
+    json: { quizId: superQuiz.id, mode: 'private', organizationId: schoolA.id, classId: classA1.id },
+  })
+  assert.equal(privRoomRes.status, 201)
+  const privRoom = privRoomRes.body
+  assert.equal(privRoom.access, 'private')
+
+  const privInfo = await call(base, `/api/rooms/${privRoom.code}`)
+  assert.equal(privInfo.body.access, 'private')
+  const privHost = await call(base, `/api/rooms/${privRoom.code}/host?token=${privRoom.hostToken}`)
+  assert.equal(privHost.body.access, 'private')
+  assert.equal(privHost.body.organizationName, 'Школа А')
+  assert.equal(privHost.body.organizationNameKk, 'А мектебі')
+  assert.equal(privHost.body.classLabel, '5а · 5 класс')
+
+  // /api/learn/live видит только целевой класс.
+  const liveForTarget = await call(base, '/api/learn/live', { cookie: pupil1Cookie })
+  assert.equal(liveForTarget.status, 200)
+  assert.deepEqual(liveForTarget.body.quizzes.map((item) => item.code), [privRoom.code])
+  const liveForOther = await call(base, '/api/learn/live', { cookie: otherClassCookie })
+  assert.equal(liveForOther.body.quizzes.length, 0)
+  assert.deepEqual((await call(base, '/api/learn/live', { cookie: orgACookie })).body.quizzes, [])
+
+  // Гость, чужой класс и отозванная сессия не допускаются.
+  const guestBlocked = await call(base, `/api/rooms/${privRoom.code}/join`, {
+    method: 'POST',
+    json: { name: 'Гость', playerToken: token(11) },
+  })
+  assert.equal(guestBlocked.status, 400)
+  assert.deepEqual(guestBlocked.body, { error: 'Этот квиз только для выбранного класса. Войдите под своим логином.' })
+
+  const otherClassBlocked = await call(base, `/api/rooms/${privRoom.code}/join`, {
+    method: 'POST',
+    cookie: otherClassCookie,
+    json: { name: 'Аида', playerToken: token(12) },
+  })
+  assert.equal(otherClassBlocked.status, 400)
+
+  const revokedBlocked = await call(base, `/api/rooms/${privRoom.code}/join`, {
+    method: 'POST',
+    cookie: revokedCookie,
+    json: { name: 'Серик', playerToken: token(13) },
+  })
+  assert.equal(revokedBlocked.status, 400)
+
+  // Вход ученика 1 по REST — имя берётся из профиля, игнорируя переданное name.
+  const restJoin = await call(base, `/api/rooms/${privRoom.code}/join`, {
+    method: 'POST',
+    cookie: pupil1Cookie,
+    json: { name: 'Левое имя', playerToken: token(14) },
+  })
+  assert.equal(restJoin.status, 200)
+  assert.equal(restJoin.body.me.name, 'Арман Тест')
+
+  // Socket.IO: проверка отозванной сессии и вход другого ученика (или переподключение).
+  const badSocket = io(base, {
+    transports: ['websocket'],
+    forceNew: true,
+    extraHeaders: { Cookie: revokedCookie },
+  })
+  sockets.push(badSocket)
+  const badJoinAck = await new Promise((resolve) => {
+    badSocket.emit('player:join', { code: privRoom.code, name: 'Хак', playerToken: token(15) }, resolve)
+  })
+  assert.equal(badJoinAck.error, 'Этот квиз только для выбранного класса. Войдите под своим логином.')
+
+  // Переход к вопросу (старт игры).
+  await call(base, `/api/rooms/${privRoom.code}/advance`, { method: 'POST', cookie: orgACookie, json: { hostToken: privRoom.hostToken } })
+
+  // Ученик 2, не входивший в лобби, получает ошибку «Игра уже началась».
+  const lateLearner = await call(base, `/api/rooms/${privRoom.code}/join`, {
+    method: 'POST',
+    cookie: pupil2Cookie,
+    json: { name: 'Дана', playerToken: token(16) },
+  })
+  assert.equal(lateLearner.status, 400)
+  assert.deepEqual(lateLearner.body, { error: 'Игра уже началась' })
+
+  // Ученик 1 переподключается через Socket.IO с новым playerToken и отвечает на вопрос.
+  const pupilSocket = io(base, {
+    transports: ['websocket'],
+    forceNew: true,
+    extraHeaders: { Cookie: pupil1Cookie },
+  })
+  sockets.push(pupilSocket)
+  const socketReconnect = await new Promise((resolve) => {
+    pupilSocket.emit('player:join', { code: privRoom.code, name: 'Другое', playerToken: token(17) }, resolve)
+  })
+  assert.deepEqual(socketReconnect, { ok: true, name: 'Арман Тест' })
+
+  const answerAck = await new Promise((resolve) => {
+    pupilSocket.emit('player:answer', { optionIndex: 0 }, resolve)
+  })
+  assert.equal(answerAck.ok, true)
+
+  // Завершение игры.
+  await call(base, `/api/rooms/${privRoom.code}/advance`, { method: 'POST', json: { hostToken: privRoom.hostToken } })
+  await call(base, `/api/rooms/${privRoom.code}/advance`, { method: 'POST', json: { hostToken: privRoom.hostToken } })
+
+  // После подиума комната исчезает из /api/learn/live.
+  assert.equal((await call(base, '/api/learn/live', { cookie: pupil1Cookie })).body.quizzes.length, 0)
+
+  // Статистика квиза разделяет публичные и приватные запуски, а статистика платформы и школы учитывает приватный запуск.
+  let quizStats
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    quizStats = (await call(base, `/api/quizzes/${superQuiz.id}/stats`, { cookie: rootCookie })).body
+    if (quizStats.runs === 2) break
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  assert.equal(quizStats.runs, 2)
+  assert.deepEqual(quizStats.sessions.map((item) => item.access).sort(), ['private', 'public'])
+
+  const platform = (await call(base, `/api/admin/platform-stats?regionId=${regionA.id}`, { cookie: rootCookie })).body
+  assert.equal(platform.totals.quizRuns, 1)
+  assert.equal(platform.totals.quizParticipants, 1)
+  assert.equal(platform.totals.quizCorrect, 1)
+  assert.equal(platform.publicQuizzes.find((item) => item.id === superQuiz.id).runs, 1)
+
+  const orgReport = (await call(base, '/api/admin/org-stats', { cookie: orgACookie })).body
+  assert.equal(orgReport.totals.quizRuns, 1)
+  assert.equal(orgReport.totals.quizParticipants, 1)
+  assert.equal(orgReport.quizzes[0].id, superQuiz.id)
+  assert.equal(orgReport.quizzes[0].rate, 100)
 })

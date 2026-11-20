@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { normalizeAccount } from '../src/domain/accounts.js'
+import { MAX_VIDEO } from '../src/domain/lesson.js'
 import { normalizeQuiz, scorePoints } from '../src/domain/quiz.js'
 
 test('быстрый верный ответ стоит 1000, медленный 500', () => {
@@ -39,4 +40,8 @@ test('пустые варианты отбрасываются до провер
   })
   assert.equal(quiz.questions[0].options[0].text, 'Синий')
   assert.equal(quiz.questions[0].correctIndex, 0)
+})
+
+test('максимальный размер видео — 250 МБ', () => {
+  assert.equal(MAX_VIDEO, 250 * 1024 * 1024)
 })

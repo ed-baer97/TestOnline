@@ -87,11 +87,16 @@ export function useHostRoom(code) {
 }
 
 // Ссылка для телефонов: если ведущий открыл сайт как localhost, подставляется адрес компьютера в локальной сети.
-export function useJoinLink(code) {
+export function useJoinLink(code, enabled = true) {
   const [qr, setQr] = useState('')
   const [joinUrl, setJoinUrl] = useState('')
 
   useEffect(() => {
+    if (!enabled) {
+      setJoinUrl('')
+      setQr('')
+      return undefined
+    }
     let ignore = false
     api.network().then((data) => {
       if (ignore) return
@@ -103,10 +108,13 @@ export function useJoinLink(code) {
     return () => {
       ignore = true
     }
-  }, [code])
+  }, [code, enabled])
 
   useEffect(() => {
-    if (!joinUrl) return undefined
+    if (!joinUrl) {
+      setQr('')
+      return undefined
+    }
     QRCode.toDataURL(joinUrl, { margin: 1, width: 360, color: { dark: '#17191f', light: '#ffffff' } })
       .then(setQr)
       .catch(() => setQr(''))

@@ -9,12 +9,14 @@ function mapResult(row) {
     players: JSON.parse(row.players),
     startedAt: row.started_at,
     finishedAt: row.finished_at,
+    access: row.access === 'private' ? 'private' : 'public',
   }
 }
 
-export async function insertResult({ id, userId, quizId, quizTitle, code, players, startedAt, finishedAt }) {
+export async function insertResult({ id, userId, quizId, quizTitle, code, players, startedAt, finishedAt, access, organizationId, classId, band }) {
+  const priv = access === 'private'
   await db.run(
-    'INSERT INTO results (id, user_id, quiz_id, quiz_title, code, players, started_at, finished_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO results (id, user_id, quiz_id, quiz_title, code, players, started_at, finished_at, access, organization_id, class_id, band) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     id,
     userId,
     quizId,
@@ -23,13 +25,17 @@ export async function insertResult({ id, userId, quizId, quizTitle, code, player
     JSON.stringify(players),
     startedAt,
     finishedAt,
+    priv ? 'private' : 'public',
+    priv ? organizationId || null : null,
+    priv ? classId || null : null,
+    priv ? band || null : null,
   )
 }
 
 export async function listResults(userId, quizId) {
   const sql = quizId
-    ? 'SELECT id, quiz_id, quiz_title, code, players, started_at, finished_at FROM results WHERE user_id = ? AND quiz_id = ? ORDER BY finished_at DESC'
-    : 'SELECT id, quiz_id, quiz_title, code, players, started_at, finished_at FROM results WHERE user_id = ? ORDER BY finished_at DESC'
+    ? 'SELECT id, quiz_id, quiz_title, code, players, started_at, finished_at, access FROM results WHERE user_id = ? AND quiz_id = ? ORDER BY finished_at DESC'
+    : 'SELECT id, quiz_id, quiz_title, code, players, started_at, finished_at, access FROM results WHERE user_id = ? ORDER BY finished_at DESC'
   const rows = quizId ? await db.all(sql, userId, quizId) : await db.all(sql, userId)
   return rows.map(mapResult)
 }

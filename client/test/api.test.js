@@ -47,6 +47,8 @@ const cases = [
   [() => api.updateRegionalAdmin('u1', { login: 'a' }), send('/api/admin/regional-admins/u1', 'PATCH', { login: 'a' })],
   [() => api.deleteRegionalAdmin('u1'), send('/api/admin/regional-admins/u1', 'DELETE')],
   [() => api.organizations(), get('/api/admin/organizations')],
+  [() => api.launchTargets(), get('/api/admin/launch-targets')],
+  [() => api.launchQuizzes(), get('/api/admin/launch-quizzes')],
   [() => api.createOrganization({ name: 'О' }), send('/api/admin/organizations', 'POST', { name: 'О' })],
   [() => api.updateOrganization('o1', { name: 'О' }), send('/api/admin/organizations/o1', 'PATCH', { name: 'О' })],
   [() => api.deleteOrganization('o1'), send('/api/admin/organizations/o1', 'DELETE')],
@@ -90,6 +92,8 @@ const cases = [
   [() => api.stats(), get('/api/stats')],
   [() => api.quizStats('q1'), get('/api/quizzes/q1/stats')],
   [() => api.createRoom('q1'), send('/api/rooms', 'POST', { quizId: 'q1' })],
+  [() => api.createRoom({ quizId: 'q1', mode: 'private', organizationId: 'o1', classId: 'c1' }), send('/api/rooms', 'POST', { quizId: 'q1', mode: 'private', organizationId: 'o1', classId: 'c1' })],
+  [() => api.liveQuizzes(), get('/api/learn/live')],
   [() => api.room('123456'), get('/api/rooms/123456')],
   [() => api.hostRoom('123456', 'a+b/c='), get('/api/rooms/123456/host?token=a%2Bb%2Fc%3D')],
   [() => api.advanceRoom('123456', 'tok'), send('/api/rooms/123456/advance', 'POST', { hostToken: 'tok' })],
@@ -101,7 +105,7 @@ const cases = [
 ]
 
 test('каждый метод api отправляет тот же запрос', async () => {
-  assert.equal(cases.length, Object.keys(api).length + 2)
+  assert.equal(cases.length, Object.keys(api).length + 3)
   for (const [run, expected] of cases) {
     calls.length = 0
     assert.deepEqual(await run(), { ok: true })

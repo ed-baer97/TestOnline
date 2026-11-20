@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import * as resultsRepo from '../repositories/results.js'
 import { getQuiz, listQuizzes } from './quizzes.js'
 
-export async function saveResult({ userId, quizId, quizTitle, code, players, startedAt }) {
+export async function saveResult({ userId, quizId, quizTitle, code, players, startedAt, access, organizationId, classId, band }) {
   await resultsRepo.insertResult({
     id: crypto.randomUUID(),
     userId,
@@ -12,6 +12,10 @@ export async function saveResult({ userId, quizId, quizTitle, code, players, sta
     players,
     startedAt: startedAt ? new Date(startedAt).toISOString() : null,
     finishedAt: new Date().toISOString(),
+    access,
+    organizationId,
+    classId,
+    band,
   })
 }
 
@@ -129,6 +133,7 @@ export async function quizStats(userId, quizId) {
       playerCount: result.players.length,
       averageScore: averageScore(result.players),
       topScore: result.players[0]?.score ?? null,
+      access: result.access === 'private' ? 'private' : 'public',
       players: result.players.map((player) => ({
         name: player.name,
         score: player.score,

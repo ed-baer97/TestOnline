@@ -4,6 +4,7 @@ import { AdminFrame } from '../../components/layout/AdminFrame.jsx'
 import { Classes, Learners } from './OrgPanels.jsx'
 import { Organizations, OrgStaff } from './RegionalPanels.jsx'
 import { LessonEditor, MaterialList, MaterialQuizEditor, MaterialQuizzes } from './Materials.jsx'
+import { QuizLaunch } from './QuizLaunch.jsx'
 import { Regions, RegionalStaff } from './SuperPanels.jsx'
 import { DashboardView } from '../../components/admin/ui.jsx'
 import LessonView from '../lessons/LessonView.jsx'
@@ -29,6 +30,7 @@ function tabsFor(role, t) {
       tab('/admin/stats', 'Статистика'),
       tab('/admin/organizations', 'Организации'),
       tab('/admin/staff', 'Админы'),
+      tab('/admin/quizzes', 'Квизы'),
     ]
   }
   return [
@@ -36,6 +38,7 @@ function tabsFor(role, t) {
     tab('/admin/stats', 'Статистика'),
     tab('/admin/classes', 'Классы'),
     tab('/admin/learners', 'Тестируемые'),
+    tab('/admin/quizzes', 'Квизы'),
   ]
 }
 
@@ -84,12 +87,14 @@ export default function Admin({ onLogout }) {
           <>
             <Route path="organizations" element={<Organizations me={me} />} />
             <Route path="staff" element={<OrgStaff />} />
+            <Route path="quizzes" element={<QuizLaunch />} />
           </>
         )}
         {me.role === 'org' && (
           <>
             <Route path="classes" element={<Classes />} />
             <Route path="learners" element={<Learners />} />
+            <Route path="quizzes" element={<QuizLaunch />} />
           </>
         )}
         <Route path="*" element={<Navigate to="/admin" replace />} />

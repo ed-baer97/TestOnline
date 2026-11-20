@@ -22,7 +22,7 @@ function groupLessons(lessons, lang) {
 
 export default function LearnerHome({ onLogout }) {
   const { lang, t } = useI18n()
-  const { me, lessons, error } = useLearnerHome()
+  const { me, lessons, live, error } = useLearnerHome()
 
   return (
     <LearnFrame onLogout={onLogout}>
@@ -33,6 +33,15 @@ export default function LearnerHome({ onLogout }) {
           <div className="section-head"><h1>{me.displayName}</h1></div>
           <p className="muted">{me.organizationName} · {t(me.classLabel || me.className)}</p>
           <div className="stack">
+            {live.map((quiz) => (
+              <Link className="lesson-card live-quiz" key={quiz.code} to={`/play/${quiz.code}`}>
+                <div>
+                  <h2>{quiz.title}</h2>
+                  <p className="muted">{t('Активный квиз')}</p>
+                </div>
+                <span className="primary">{t('Подключиться')}</span>
+              </Link>
+            ))}
             {lessons?.length === 0 && <p className="muted">{t('Для вашего класса пока нет уроков.')}</p>}
             {groupLessons(lessons, lang).map((block) => (
               <section className="stack" key={block.key || 'loose'}>

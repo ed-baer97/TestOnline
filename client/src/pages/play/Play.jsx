@@ -11,7 +11,7 @@ import { usePlayerRoom } from '../../state/playerRoom.js'
 export default function Play() {
   const { t } = useI18n()
   const { code } = useParams()
-  const { info, missing, name, setName, error, state, online, identity, enter, answer } = usePlayerRoom(code)
+  const { info, missing, name, setName, error, state, online, identity, me, enter, answer } = usePlayerRoom(code)
   const seconds = useCountdown(state?.endsAt, state?.serverNow)
 
   if (missing) {
@@ -24,7 +24,25 @@ export default function Play() {
     )
   }
 
-  if (!info) return <p className="center muted">{t('Ищем комнату…')}</p>
+  if (!info || (info.access === 'private' && me === undefined)) return <p className="center muted">{t('Ищем комнату…')}</p>
+
+  if (info.access === 'private' && !identity) {
+    return (
+      <main className="auth">
+        <section className="card">
+          <div className="auth-top">
+            <Brand to="/" />
+            <EnvControls />
+          </div>
+          <h1 className="quiz-title">{info.title}</h1>
+          <p className="muted">{t('Войдите под своим логином, чтобы подключиться к квизу.')}</p>
+          {error && <p className="form-error">{t(error)}</p>}
+          {!me?.ok && <Link className="primary" to="/login">{t('Войти')}</Link>}
+          {me?.ok && me.role === 'learner' && <Link className="ghost" to="/learn">{t('На главную')}</Link>}
+        </section>
+      </main>
+    )
+  }
 
   if (!identity) {
     return (

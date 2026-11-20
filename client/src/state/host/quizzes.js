@@ -13,8 +13,9 @@ export function blankQuestion() {
   }
 }
 
-export function useQuizList(navigate) {
+export function useQuizList(navigate, { classLaunch = false } = {}) {
   const [quizzes, setQuizzes] = useState(null)
+  const [orgs, setOrgs] = useState(null)
   const [account, setAccount] = useState('')
   const [error, setError] = useState('')
 
@@ -26,12 +27,18 @@ export function useQuizList(navigate) {
 
   useEffect(() => {
     load().catch((err) => setError(err.message))
-  }, [])
+    if (!classLaunch) return undefined
+    api.launchTargets().then((data) => setOrgs(data.organizations)).catch(() => setOrgs([]))
+    return undefined
+  }, [classLaunch])
 
-  async function start(id) {
+  async function start(id, options = {}) {
     setError('')
     try {
-      const room = await api.createRoom(id)
+      const body = options?.mode === 'private'
+        ? { quizId: id, mode: 'private', organizationId: options.organizationId, classId: options.classId }
+        : { quizId: id, mode: 'public' }
+      const room = await api.createRoom(body)
       saveHostToken(room.code, room.hostToken)
       navigate(`/host/room/${room.code}`)
     } catch (err) {
@@ -49,7 +56,35 @@ export function useQuizList(navigate) {
     }
   }
 
-  return { quizzes, account, error, start, remove }
+  return { quizzes, orgs, account, error, start, remove }
+}
+
+export function useQuizLaunch(navigate) {
+  const [quizzes, setQuizzes] = useState(null)
+  const [orgs, setOrgs] = useState([])
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    Promise.all([api.launchQuizzes(), api.launchTargets()])
+      .then(([quizData, targetData]) => {
+        setQuizzes(quizData.quizzes)
+        setOrgs(targetData.organizations || [])
+      })
+      .catch((err) => setError(err.message))
+  }, [])
+
+  async function start({ quizId, organizationId, classId }) {
+    setError('')
+    try {
+      const room = await api.createRoom({ quizId, mode: 'private', organizationId, classId })
+      saveHostToken(room.code, room.hostToken)
+      navigate(`/host/room/${room.code}`)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  return { quizzes, orgs, error, start }
 }
 
 // Редактор квиза по адресу /host/quiz/new создаёт квиз при первом сохранении и подменяет адрес на /host/quiz/:id.

@@ -18,8 +18,10 @@ import {
   deleteRegionalAdmin,
   deleteTrack,
   importLearners,
+  launchTargets,
   learnersTemplate,
   listDistricts,
+  listLaunchQuizzes,
   listLearners,
   listOrgAdmins,
   listOrganizations,
@@ -94,6 +96,12 @@ export function registerAdminRoutes(app) {
   }))
   app.get('/api/admin/organizations', guard, route(async (req, res) => {
     res.json({ organizations: await listOrganizations(req.user) })
+  }))
+  app.get('/api/admin/launch-targets', guard, route(async (req, res) => {
+    res.json({ organizations: await launchTargets(req.user) })
+  }))
+  app.get('/api/admin/launch-quizzes', guard, route(async (req, res) => {
+    res.json({ quizzes: await listLaunchQuizzes(req.user) })
   }))
   app.post('/api/admin/organizations', guard, route(async (req, res) => {
     res.status(201).json(await createOrganization(req.user, req.body || {}))

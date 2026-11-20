@@ -34,6 +34,18 @@ export async function listOrganizationNames(regionId) {
   return db.all('SELECT id, name, name_kk FROM organizations WHERE region_id = ?', regionId)
 }
 
+export async function listAllOrganizationNames() {
+  return db.all('SELECT id, name, name_kk FROM organizations ORDER BY name')
+}
+
+export async function listRegionOrganizationNames(regionId) {
+  return db.all('SELECT id, name, name_kk FROM organizations WHERE region_id = ? ORDER BY name', regionId)
+}
+
+export async function findOrganizationName(id) {
+  return db.get('SELECT id, name, name_kk FROM organizations WHERE id = ?', id)
+}
+
 export async function countOrganizations() {
   return count('SELECT COUNT(*) AS n FROM organizations')
 }

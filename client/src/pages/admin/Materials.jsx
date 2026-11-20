@@ -4,7 +4,7 @@ import { GroupChecks, Notice } from '../../components/admin/ui.jsx'
 import { EMPTY_GROUPS, groupLabels } from '../../lib/bands.js'
 import { blankFrame, blankQuestion, useLessonEditor, useMaterialList } from '../../state/admin/materials.js'
 import { useQuizList } from '../../state/host/quizzes.js'
-import { useI18n } from '../../state/i18n.jsx'
+import { pick, useI18n } from '../../state/i18n.jsx'
 import Editor from '../host/Editor.jsx'
 
 const TONES = [
@@ -336,9 +336,23 @@ export function LessonEditor() {
 }
 
 export function MaterialQuizzes() {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const navigate = useNavigate()
-  const { quizzes, error, start, remove } = useQuizList(navigate)
+  const { quizzes, orgs, error, start, remove } = useQuizList(navigate, { classLaunch: true })
+  const [launchId, setLaunchId] = useState('')
+  const [mode, setMode] = useState('public')
+  const [orgId, setOrgId] = useState('')
+  const [classId, setClassId] = useState('')
+
+  const effectiveOrgId = orgs?.length === 1 ? orgs[0].id : orgId
+  const classes = orgs?.find((org) => org.id === effectiveOrgId)?.classes || []
+
+  function openLaunch(id) {
+    setLaunchId((current) => (current === id ? '' : id))
+    setMode('public')
+    setOrgId(orgs?.length === 1 ? orgs[0].id : '')
+    setClassId('')
+  }
 
   function confirmRemove(quiz) {
     if (window.confirm(t('Удалить «{name}»?', { name: quiz.title }))) remove(quiz)
@@ -361,11 +375,57 @@ export function MaterialQuizzes() {
               <p className="muted">{t('{count} вопр.', { count: quiz.questionCount })}</p>
             </div>
             <div className="top-actions">
-              <button className="primary" type="button" onClick={() => start(quiz.id)}>{t('Запустить')}</button>
+              <button className="primary" type="button" onClick={() => openLaunch(quiz.id)}>{t('Запустить')}</button>
               <Link to={`/admin/quizzes/${quiz.id}/stats`}>{t('Статистика')}</Link>
               <Link to={`/admin/quizzes/${quiz.id}`}>{t('Править')}</Link>
               <button className="ghost" type="button" onClick={() => confirmRemove(quiz)}>{t('Удалить')}</button>
             </div>
+            {launchId === quiz.id && (
+              <form
+                className="launch-box"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  start(
+                    quiz.id,
+                    mode === 'private'
+                      ? { mode: 'private', organizationId: effectiveOrgId, classId }
+                      : { mode: 'public' },
+                  )
+                }}
+              >
+                <div className="tone-row">
+                  <button className={`ghost ${mode === 'public' ? 'on' : ''}`} type="button" onClick={() => setMode('public')}>{t('Публичный')}</button>
+                  <button className={`ghost ${mode === 'private' ? 'on' : ''}`} type="button" onClick={() => setMode('private')}>{t('Приватный')}</button>
+                </div>
+                {mode === 'private' && (
+                  <>
+                    <label>
+                      {t('Организация')}
+                      <select
+                        value={effectiveOrgId}
+                        onChange={(event) => { setOrgId(event.target.value); setClassId('') }}
+                        disabled={!orgs?.length}
+                      >
+                        <option value="">{t(orgs?.length ? 'Выберите организацию' : 'Нет организаций')}</option>
+                        {(orgs || []).map((org) => (
+                          <option key={org.id} value={org.id}>{pick(lang, org.name, org.nameKk)}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      {t('Класс')}
+                      <select value={classId} onChange={(event) => setClassId(event.target.value)} disabled={!effectiveOrgId}>
+                        <option value="">{t('Выберите класс')}</option>
+                        {classes.map((item) => (
+                          <option key={item.id} value={item.id}>{t(item.label)}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </>
+                )}
+                <button className="primary" type="submit" disabled={mode === 'private' && !classId}>{t('Запустить')}</button>
+              </form>
+            )}
           </article>
         ))}
       </div>

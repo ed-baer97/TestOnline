@@ -50,6 +50,17 @@ export async function listClassesWithTracks(organizationId) {
   )
 }
 
+export async function listClassesForLaunch(organizationIds) {
+  if (!organizationIds.length) return []
+  return db.all(
+    `SELECT c.id, c.name, c.grade, c.band, c.organization_id, t.name AS track_name
+     FROM classes c
+     LEFT JOIN tracks t ON t.id = c.track_id
+     WHERE c.organization_id IN (${placeholders(organizationIds)})`,
+    ...organizationIds,
+  )
+}
+
 export async function findClassWithTrack(id, organizationId) {
   return db.get(
     `SELECT c.id, c.band, c.name AS class_name, c.grade, t.name AS track_name

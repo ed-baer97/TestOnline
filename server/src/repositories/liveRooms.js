@@ -11,6 +11,10 @@ export async function saveLiveRoom(code, payload, updatedAt) {
   )
 }
 
+export async function listLiveRooms() {
+  return db.all('SELECT code, payload FROM live_rooms')
+}
+
 export async function readLiveRoom(code) {
   const row = await db.get('SELECT payload FROM live_rooms WHERE code = ?', code)
   return row?.payload || null

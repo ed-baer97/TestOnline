@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import http from 'node:http'
 import path from 'node:path'
 import test from 'node:test'
 import JSZip from 'jszip'
@@ -188,6 +189,34 @@ test('уроки по HTTP: список, правка, тест, картинк
   expectError(await call(base, `/api/lessons/${lesson.id}/media`, { cookie: who.root }), 404, 'Видео не найдено')
 
   const bytes = Buffer.from('video-bytes-0123456789')
+  const tooLargeVideo = await new Promise((resolve, reject) => {
+    const target = new URL(`/api/admin/lessons/${lesson.id}/video`, base)
+    let settled = false
+    const req = http.request(target, {
+      method: 'PUT',
+      agent: false,
+      headers: {
+        Cookie: who.root,
+        'Content-Type': 'video/mp4',
+        'Content-Length': String(250 * 1024 * 1024 + 1),
+      },
+    }, (res) => {
+      const chunks = []
+      res.on('data', (chunk) => chunks.push(chunk))
+      res.on('end', () => {
+        settled = true
+        req.destroy()
+        resolve({ status: res.statusCode, body: JSON.parse(Buffer.concat(chunks).toString('utf8')) })
+      })
+    })
+    req.on('error', (error) => {
+      if (!settled) reject(error)
+    })
+    req.flushHeaders()
+  })
+  assert.equal(tooLargeVideo.status, 413)
+  assert.deepEqual(tooLargeVideo.body, { error: 'Видео больше 250 МБ' })
+
   expectError(await call(base, `/api/admin/lessons/${lesson.id}/video`, { method: 'PUT', cookie: who.root, body: bytes, headers: { 'Content-Type': 'text/plain' } }), 400, 'Нужен ролик MP4, WebM, MOV или OGG')
   expectError(await call(base, `/api/admin/lessons/${lesson.id}/video`, { method: 'PUT', cookie: who.root, body: Buffer.alloc(0), headers: { 'Content-Type': 'video/mp4' } }), 400, 'Файл пустой')
   expectError(await call(base, `/api/admin/lessons/${demoId}/video`, { method: 'PUT', cookie: who.root, body: bytes, headers: { 'Content-Type': 'video/mp4' } }), 400, 'Этот урок — презентация')

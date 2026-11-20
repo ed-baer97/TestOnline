@@ -52,6 +52,14 @@ export async function listQuizzes(userId) {
   return quizzesRepo.listQuizSummaries(userId)
 }
 
+export async function listSuperQuizzes() {
+  return quizzesRepo.listSuperQuizSummaries()
+}
+
+export async function getLaunchQuiz(id) {
+  return quizzesRepo.findSuperQuiz(id)
+}
+
 export async function getQuiz(id, userId) {
   return quizzesRepo.findQuiz(id, userId)
 }

@@ -4,7 +4,7 @@ import { pickGroups } from './structure.js'
 import { cleanLabel, cleanText } from './text.js'
 
 export const VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg'])
-export const MAX_VIDEO = 150 * 1024 * 1024
+export const MAX_VIDEO = 250 * 1024 * 1024
 export const MAX_IMAGE = 1_500_000
 export const TONES = ['sun', 'orbit', 'planets', 'earth']
 

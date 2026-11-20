@@ -23,14 +23,39 @@ export async function insertQuiz({ id, userId, title, questions, createdAt, upda
   )
 }
 
-export async function listQuizSummaries(userId) {
-  const rows = await db.all('SELECT id, title, questions, updated_at FROM quizzes WHERE user_id = ? ORDER BY updated_at DESC', userId)
-  return rows.map((row) => ({
+function quizSummary(row) {
+  return {
     id: row.id,
     title: row.title,
     questionCount: JSON.parse(row.questions).length,
     updatedAt: row.updated_at,
-  }))
+  }
+}
+
+export async function listQuizSummaries(userId) {
+  const rows = await db.all('SELECT id, title, questions, updated_at FROM quizzes WHERE user_id = ? ORDER BY updated_at DESC', userId)
+  return rows.map(quizSummary)
+}
+
+export async function listSuperQuizSummaries() {
+  const rows = await db.all(
+    `SELECT q.id, q.title, q.questions, q.updated_at
+     FROM quizzes q
+     JOIN users u ON u.id = q.user_id
+     WHERE u.role = 'super'
+     ORDER BY q.updated_at DESC`,
+  )
+  return rows.map(quizSummary)
+}
+
+export async function findSuperQuiz(id) {
+  const row = await db.get(
+    `SELECT q.* FROM quizzes q
+     JOIN users u ON u.id = q.user_id
+     WHERE q.id = ? AND u.role = 'super'`,
+    id,
+  )
+  return row ? mapQuiz(row) : null
 }
 
 export async function findQuiz(id, userId) {

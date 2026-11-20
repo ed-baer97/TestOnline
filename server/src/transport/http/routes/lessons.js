@@ -104,7 +104,7 @@ export function registerLessonRoutes(app) {
   app.put('/api/admin/lessons/:id/video', guard, route(async (req, res) => {
     const length = Number(req.headers['content-length'])
     if (Number.isFinite(length) && length > MAX_VIDEO) {
-      res.status(413).json({ error: 'Видео больше 150 МБ' })
+      res.status(413).json({ error: 'Видео больше 250 МБ' })
       return
     }
     let name

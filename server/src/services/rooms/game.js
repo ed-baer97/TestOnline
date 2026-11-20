@@ -28,23 +28,49 @@ function findByToken(room, token) {
   return null
 }
 
-export function joinPlayer(room, { name, playerToken }) {
-  const existing = findByToken(room, playerToken)
-  if (existing) return { player: existing }
+function seatName(value, limit) {
+  const name = String(value || '').replace(/\s+/g, ' ').trim()
+  if (name.length < 2 || name.length > limit) return null
+  return name
+}
+
+export function joinPlayer(room, { name, playerToken, user }) {
+  const closed = room.audience?.kind === 'private'
+  if (closed) {
+    if (!user || user.role !== 'learner' || user.classId !== room.audience.classId) {
+      return { error: 'Этот квиз только для выбранного класса. Войдите под своим логином.' }
+    }
+    if (typeof playerToken !== 'string' || !/^[A-Za-z0-9-]{20,80}$/.test(playerToken)) {
+      return { error: 'Не удалось войти в комнату' }
+    }
+    const seated = [...room.players.values()].find((player) => player.userId === user.id)
+    if (seated) {
+      if (seated.token && seated.token !== playerToken) room.byToken?.delete(seated.token)
+      seated.token = playerToken
+      room.byToken?.set(playerToken, seated.id)
+      return { player: seated }
+    }
+  } else {
+    const existing = findByToken(room, playerToken)
+    if (existing) return { player: existing }
+  }
 
   if (room.status !== 'lobby') return { error: 'Игра уже началась' }
   if (typeof playerToken !== 'string' || !/^[A-Za-z0-9-]{20,80}$/.test(playerToken)) {
     return { error: 'Не удалось войти в комнату' }
   }
-  const nickname = cleanName(name)
-  if (!nickname) return { error: 'Имя от 2 до 20 символов' }
-  const taken = [...room.players.values()].some((player) => player.name.toLowerCase() === nickname.toLowerCase())
-  if (taken) return { error: 'Такое имя уже занято' }
+  const nickname = closed ? seatName(user.displayName, 80) : cleanName(name)
+  if (!nickname) return { error: closed ? 'В профиле нет имени' : 'Имя от 2 до 20 символов' }
+  if (!closed) {
+    const taken = [...room.players.values()].some((player) => player.name.toLowerCase() === nickname.toLowerCase())
+    if (taken) return { error: 'Такое имя уже занято' }
+  }
   if (room.players.size >= 300) return { error: 'Комната заполнена' }
 
   const player = {
     id: crypto.randomUUID(),
     token: playerToken,
+    userId: closed ? user.id : null,
     name: nickname,
     score: 0,
     answered: false,
@@ -121,13 +147,21 @@ function finish(room) {
     quizId: room.quiz.id,
     quizTitle: room.quiz.title,
     code: room.code,
+    access: room.audience?.kind === 'private' ? 'private' : 'public',
+    organizationId: room.audience?.kind === 'private' ? room.audience.organizationId : null,
+    classId: room.audience?.kind === 'private' ? room.audience.classId : null,
+    band: room.audience?.kind === 'private' ? room.audience.band : null,
     startedAt: room.startedAt || room.createdAt,
-    players: leaderboard(room).map((entry) => ({
-      name: entry.name,
-      score: entry.score,
-      rank: entry.rank,
-      answers: room.players.get(entry.id)?.answers || [],
-    })),
+    players: leaderboard(room).map((entry) => {
+      const player = room.players.get(entry.id)
+      return {
+        name: entry.name,
+        userId: player?.userId || null,
+        score: entry.score,
+        rank: entry.rank,
+        answers: player?.answers || [],
+      }
+    }),
   }).catch((error) => {
     room.saved = false
     console.error('Не удалось сохранить итог игры', error)

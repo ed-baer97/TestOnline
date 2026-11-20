@@ -4,6 +4,7 @@ import { api } from '../api/index.js'
 export function useLearnerHome() {
   const [me, setMe] = useState(null)
   const [lessons, setLessons] = useState(null)
+  const [live, setLive] = useState([])
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -18,5 +19,24 @@ export function useLearnerHome() {
       .catch((err) => setError(err.message))
   }, [])
 
-  return { me, lessons, error }
+  useEffect(() => {
+    if (!me) return undefined
+    let stop = false
+    async function pull() {
+      try {
+        const data = await api.liveQuizzes()
+        if (!stop) setLive(data.quizzes || [])
+      } catch {
+        if (!stop) setLive([])
+      }
+    }
+    pull()
+    const timer = setInterval(pull, 3000)
+    return () => {
+      stop = true
+      clearInterval(timer)
+    }
+  }, [me])
+
+  return { me, lessons, live, error }
 }

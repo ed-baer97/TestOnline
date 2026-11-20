@@ -299,7 +299,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   box-shadow: var(--panel-shadow);
   backdrop-filter: blur(14px);
 }
-.quiz-card { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 18px 20px; border: 1px solid var(--line); border-radius: 22px; background: var(--card); }
+.quiz-card { display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap; padding: 18px 20px; border: 1px solid var(--line); border-radius: 22px; background: var(--card); }
+.launch-box { flex: 1 0 100%; display: grid; gap: 10px; }
 .quiz-card h2, .question-card h2, .results h2 { margin: 0; }
 .results ul { list-style: none; padding: 0; display: grid; gap: 10px; }
 .results li { display: grid; gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--line); }
@@ -558,6 +559,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .choice.good { border-color: var(--green); }
 .choice.bad { border-color: var(--red); }
 .lesson-card { display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap; padding: 18px 20px; border: 1px solid var(--line); border-radius: 22px; background: var(--card); text-decoration: none; }
+.lesson-card.live-quiz { border-color: var(--accent); }
 .lesson-card h2 { margin: 0 0 6px; font-size: 1.25rem; }
 .slide-editor { display: grid; gap: 10px; }
 .tone-row { display: flex; flex-wrap: wrap; gap: 8px; }

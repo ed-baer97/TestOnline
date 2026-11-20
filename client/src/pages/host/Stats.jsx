@@ -125,49 +125,73 @@ function Tiles({ items }) {
   )
 }
 
-function QuizReport({ stats, statsTo }) {
+function meanScore(sessions) {
+  const scores = sessions.flatMap((session) => (session.players || []).map((player) => Number(player.score) || 0))
+  if (!scores.length) return null
+  return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
+}
+
+function AccessReport({ title, sessions, statsTo }) {
   const { lang, t } = useI18n()
-  const runs = [...stats.sessions].reverse()
+  const runs = [...sessions].reverse()
+  const players = sessions.flatMap((session) => session.players || [])
+  return (
+    <section className="stack">
+      <h2>{t(title)}</h2>
+      <Tiles items={[
+        { label: 'Запусков', value: sessions.length },
+        { label: 'Участников', value: players.length },
+        { label: 'Средний балл', value: scoreText(meanScore(sessions)) },
+      ]} />
+      {sessions.length === 0 ? (
+        <p className="muted">{t('Пока пусто.')}</p>
+      ) : (
+        <>
+          <div className="chart-grid">
+            <BarChart
+              caption={t('Участники по запускам')}
+              items={runs.map((session) => ({ key: session.id, label: shortWhen(launchWhen(session), lang), value: session.playerCount }))}
+            />
+            <BarChart
+              caption={t('Средний балл по запускам')}
+              items={runs.map((session) => ({ key: session.id, label: shortWhen(launchWhen(session), lang), value: session.averageScore ?? 0 }))}
+            />
+          </div>
+          <RateList caption={t('Верные ответы по вопросам')} items={questionsOf(players)} />
+          <ul className="session-list">
+            {sessions.map((session) => (
+              <li key={session.id}>
+                <Link to={statsTo(`/${session.id}`)}>
+                  <strong>{launchLabel(session, lang, t)}</strong>
+                  <span>{t('код {code}', { code: formatCode(session.code) })}</span>
+                  <span>{t('{count} участ.', { count: session.playerCount })}</span>
+                  <span>{t('средний {score}', { score: scoreText(session.averageScore) })}</span>
+                  <span>{t('лучший {score}', { score: scoreText(session.topScore) })}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  )
+}
+
+function QuizReport({ stats, statsTo }) {
+  const { t } = useI18n()
+  const publicSessions = stats.sessions.filter((session) => session.access !== 'private')
+  const privateSessions = stats.sessions.filter((session) => session.access === 'private')
   return (
     <>
-      <Tiles items={[
-        { label: 'Запусков', value: stats.runs },
-        { label: 'Участников', value: stats.participants },
-        { label: 'Средний балл', value: scoreText(stats.averageScore) },
-        { label: 'Вопросов', value: stats.questionCount },
-      ]} />
+      <Tiles items={[{ label: 'Вопросов', value: stats.questionCount }]} />
       {stats.runs === 0 ? (
         <p className="muted">{t('Этот квиз ещё не запускали. После игры здесь появятся баллы и ошибки.')}</p>
       ) : (
-        <div className="chart-grid">
-          <BarChart
-            caption={t('Участники по запускам')}
-            items={runs.map((session) => ({ key: session.id, label: shortWhen(launchWhen(session), lang), value: session.playerCount }))}
-          />
-          <BarChart
-            caption={t('Средний балл по запускам')}
-            items={runs.map((session) => ({ key: session.id, label: shortWhen(launchWhen(session), lang), value: session.averageScore ?? 0 }))}
-          />
-        </div>
+        <>
+          <AccessReport title="Публичные" sessions={publicSessions} statsTo={statsTo} />
+          <AccessReport title="Приватные" sessions={privateSessions} statsTo={statsTo} />
+        </>
       )}
-      <RateList caption={t('Верные ответы по вопросам')} items={stats.questions} />
-      <section className="results">
-        <h2>{t('Запуски')}</h2>
-        {stats.sessions.length === 0 && <p className="muted">{t('Пока пусто.')}</p>}
-        <ul className="session-list">
-          {stats.sessions.map((session) => (
-            <li key={session.id}>
-              <Link to={statsTo(`/${session.id}`)}>
-                <strong>{launchLabel(session, lang, t)}</strong>
-                <span>{t('код {code}', { code: formatCode(session.code) })}</span>
-                <span>{t('{count} участ.', { count: session.playerCount })}</span>
-                <span>{t('средний {score}', { score: scoreText(session.averageScore) })}</span>
-                <span>{t('лучший {score}', { score: scoreText(session.topScore) })}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
     </>
   )
 }
@@ -179,7 +203,9 @@ function SessionReport({ session, statsTo }) {
   const correctRate = answers.length ? Math.round((answers.filter((answer) => answer.ok).length / answers.length) * 100) : null
   return (
     <>
-      <p className="muted"><Link to={statsTo()}>{t('Все запуски')}</Link> · {t('код {code}', { code: formatCode(session.code) })}</p>
+      <p className="muted">
+        <Link to={statsTo()}>{t('Все запуски')}</Link> · {t(session.access === 'private' ? 'Приватный' : 'Публичный')} · {t('код {code}', { code: formatCode(session.code) })}
+      </p>
       <Tiles items={[
         { label: 'Участников', value: session.playerCount },
         { label: 'Средний балл', value: scoreText(session.averageScore) },

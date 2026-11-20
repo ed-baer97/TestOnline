@@ -7,16 +7,16 @@ import { COLOR_NAMES, SHAPES, Shape } from '../../components/shapes.jsx'
 import { formatCode } from '../../lib/format.js'
 import { useCountdown } from '../../state/countdown.js'
 import { useHostRoom, useJoinLink } from '../../state/hostRoom.js'
-import { useI18n } from '../../state/i18n.jsx'
+import { pick, useI18n } from '../../state/i18n.jsx'
 import { useSession } from '../../state/session.js'
 
 export default function HostRoom() {
-  const { t } = useI18n()
+  const { lang, t } = useI18n()
   const { code } = useParams()
   const me = useSession()
-  const backTo = me?.role === 'super' ? '/admin/quizzes' : '/host'
+  const backTo = ['super', 'regional', 'org'].includes(me?.role) ? '/admin/quizzes' : '/host'
   const { state, error, online, advance } = useHostRoom(code)
-  const { joinUrl, qr } = useJoinLink(code)
+  const { joinUrl, qr } = useJoinLink(code, state?.access === 'public')
   const seconds = useCountdown(state?.endsAt, state?.serverNow)
   const advanceRef = useRef(advance)
   advanceRef.current = advance
@@ -69,9 +69,20 @@ export default function HostRoom() {
         <section className="lobby">
           <div>
             <h1 className="quiz-title">{state.title}</h1>
-            <p className="lead">{t('Покажите QR-код. Телефоны откроют игру сами, вводить код не нужно.')}</p>
-            {joinUrl && <p className="join-url">{joinUrl}</p>}
-            {joinUrl.includes('localhost') && <p className="form-error">{t('Телефоны не откроют localhost. Зайдите на этот компьютер по адресу в локальной сети.')}</p>}
+            {state.access === 'private' ? (
+              <p className="lead">
+                {t('Квиз для {org}, {klass}. Участники заходят из кабинета под своими логинами.', {
+                  org: pick(lang, state.organizationName, state.organizationNameKk),
+                  klass: t(state.classLabel),
+                })}
+              </p>
+            ) : (
+              <>
+                <p className="lead">{t('Покажите QR-код. Телефоны откроют игру сами, вводить код не нужно.')}</p>
+                {joinUrl && <p className="join-url">{joinUrl}</p>}
+                {joinUrl.includes('localhost') && <p className="form-error">{t('Телефоны не откроют localhost. Зайдите на этот компьютер по адресу в локальной сети.')}</p>}
+              </>
+            )}
             <p className="count">{t('{count} в лобби', { count: state.playerCount })}</p>
             <div className="chips">
               {state.players.map((player) => (
@@ -79,7 +90,7 @@ export default function HostRoom() {
               ))}
             </div>
           </div>
-          {qr && <img className="qr" src={qr} alt={t('QR-код для входа в игру')} />}
+          {state.access !== 'private' && qr && <img className="qr" src={qr} alt={t('QR-код для входа в игру')} />}
         </section>
       )}
       {(state.status === 'question' || state.status === 'reveal') && state.question && (

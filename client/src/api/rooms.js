@@ -1,7 +1,8 @@
 import { request } from './http.js'
 
 export const roomsApi = {
-  createRoom: (quizId) => request('/api/rooms', { method: 'POST', body: JSON.stringify({ quizId }) }),
+  createRoom: (body) => request('/api/rooms', { method: 'POST', body: JSON.stringify(typeof body === 'string' ? { quizId: body } : body) }),
+  liveQuizzes: () => request('/api/learn/live'),
   room: (code) => request(`/api/rooms/${code}`),
   hostRoom: (code, token) => request(`/api/rooms/${code}/host?token=${encodeURIComponent(token)}`),
   advanceRoom: (code, hostToken) => request(`/api/rooms/${code}/advance`, { method: 'POST', body: JSON.stringify({ hostToken }) }),
