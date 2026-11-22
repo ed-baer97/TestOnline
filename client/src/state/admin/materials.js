@@ -149,7 +149,17 @@ export function useMaterialList() {
     }
   }
 
-  return { lessons, sections, error, createSection, saveSection, removeSection, moveLesson }
+  async function reorderLesson(lessonId, direction, neighborId) {
+    try {
+      await api.reorderLesson(lessonId, neighborId ? { direction, neighborId } : { direction })
+      dropStatsCache()
+      await load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  return { lessons, sections, error, createSection, saveSection, removeSection, moveLesson, reorderLesson }
 }
 
 // Редактор урока. После первого сохранения урок обновляется по savedId, а новый адрес подменяет /new.

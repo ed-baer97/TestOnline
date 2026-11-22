@@ -16,6 +16,7 @@ import {
   listLessons,
   openLessonFile,
   openLessonMedia,
+  reorderLesson,
   saveLessonVideo,
   updateLesson,
   updateLessonSection,
@@ -147,5 +148,8 @@ export function registerLessonRoutes(app) {
   }))
   app.patch('/api/admin/lessons/:id/section', guard, route(async (req, res) => {
     res.json(await assignLessonSection(req.user, req.params.id, req.body?.sectionId))
+  }))
+  app.patch('/api/admin/lessons/:id/order', guard, route(async (req, res) => {
+    res.json(await reorderLesson(req.user, req.params.id, req.body || {}))
   }))
 }

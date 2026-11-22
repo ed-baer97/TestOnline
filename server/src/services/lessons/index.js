@@ -6,6 +6,7 @@ export {
   createLessonSection,
   deleteLessonSection,
   listLessonSections,
+  reorderLesson,
   updateLessonSection,
 } from './sections.js'
 export { ensureDemoLesson } from './demo.js'

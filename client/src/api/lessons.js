@@ -37,4 +37,5 @@ export const lessonsApi = {
   updateLessonSection: (id, body) => request(`/api/admin/lesson-sections/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteLessonSection: (id) => request(`/api/admin/lesson-sections/${id}`, { method: 'DELETE' }),
   assignLessonSection: (id, sectionId) => request(`/api/admin/lessons/${id}/section`, { method: 'PATCH', body: JSON.stringify({ sectionId }) }),
+  reorderLesson: (id, body) => request(`/api/admin/lessons/${id}/order`, { method: 'PATCH', body: JSON.stringify(body) }),
 }

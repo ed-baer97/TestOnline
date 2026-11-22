@@ -93,6 +93,7 @@ const cases = [
   [() => api.updateLessonSection('s1', { name: 'Б' }), send('/api/admin/lesson-sections/s1', 'PATCH', { name: 'Б' })],
   [() => api.deleteLessonSection('s1'), send('/api/admin/lesson-sections/s1', 'DELETE')],
   [() => api.assignLessonSection('s1', 'sec'), send('/api/admin/lessons/s1/section', 'PATCH', { sectionId: 'sec' })],
+  [() => api.reorderLesson('s1', { direction: -1 }), send('/api/admin/lessons/s1/order', 'PATCH', { direction: -1 })],
   [() => api.quizzes(), get('/api/quizzes')],
   [() => api.quiz('q1'), get('/api/quizzes/q1')],
   [() => api.createQuiz({ title: 'К' }), send('/api/quizzes', 'POST', { title: 'К' })],

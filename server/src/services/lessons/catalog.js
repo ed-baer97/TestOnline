@@ -228,6 +228,7 @@ async function saveLesson(id, input, seedKey) {
   const now = new Date().toISOString()
   const existing = await lessonsRepo.lessonExists(id)
   if (!existing) {
+    const sortOrder = await lessonsRepo.nextLessonSortOrder()
     await lessonsRepo.insertLesson({
       id,
       title,
@@ -239,6 +240,7 @@ async function saveLesson(id, input, seedKey) {
       questions,
       slidesKk,
       questionsKk,
+      sortOrder,
       createdAt: now,
       updatedAt: now,
     })

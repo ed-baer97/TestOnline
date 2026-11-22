@@ -296,3 +296,41 @@ test('раздел задаёт блоки урока', async () => {
   assert.equal(detached.section, null)
   assert.equal(detached.groups.students, true)
 })
+
+test('порядок уроков возрастает и допускает перестановку местами', async () => {
+  const lessons = await import('../src/services/lessons/index.js')
+  const { ensureSuperAdmin } = await import('../src/services/accounts.js')
+  const root = await ensureSuperAdmin()
+  const section = await lessons.createLessonSection(root, {
+    name: 'Порядок видео',
+    groups: { grades_5_9: true },
+  })
+  const first = await lessons.createLesson(root, {
+    title: 'Первый ролик',
+    format: 'video',
+    sectionId: section.id,
+    questions: [{ text: 'Q1?', correctIndex: 0, options: [{ text: 'Да' }, { text: 'Нет' }] }],
+  })
+  const second = await lessons.createLesson(root, {
+    title: 'Второй ролик',
+    format: 'video',
+    sectionId: section.id,
+    questions: [{ text: 'Q2?', correctIndex: 0, options: [{ text: 'Да' }, { text: 'Нет' }] }],
+  })
+  const third = await lessons.createLesson(root, {
+    title: 'Третий ролик',
+    format: 'video',
+    sectionId: section.id,
+    questions: [{ text: 'Q3?', correctIndex: 0, options: [{ text: 'Да' }, { text: 'Нет' }] }],
+  })
+
+  const titles = async () => (await lessons.listLessons(root))
+    .filter((item) => item.section?.id === section.id)
+    .map((item) => item.title)
+
+  assert.deepEqual(await titles(), ['Первый ролик', 'Второй ролик', 'Третий ролик'])
+  await lessons.reorderLesson(root, third.id, { direction: -1 })
+  assert.deepEqual(await titles(), ['Первый ролик', 'Третий ролик', 'Второй ролик'])
+  await lessons.reorderLesson(root, first.id, { direction: 1, neighborId: second.id })
+  assert.deepEqual(await titles(), ['Второй ролик', 'Третий ролик', 'Первый ролик'])
+})

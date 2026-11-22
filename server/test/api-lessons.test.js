@@ -526,3 +526,45 @@ test('двуязычные уроки: отдельная загрузка RU/KK
   assert.equal((await call(base, `/api/lessons/files/${ruImgId}`, { cookie: learner })).status, 200)
   assert.equal((await call(base, `/api/lessons/files/${kkImgId}`, { cookie: learner })).status, 200)
 })
+
+test('порядок видео по HTTP: 1-й остаётся первым, перестановка через /order', async (t) => {
+  const server = await startServer()
+  t.after(() => server.close())
+  const { base } = server
+  const root = await login(base, 'root', 'rootpass')
+
+  const sec = (await call(base, '/api/admin/lesson-sections', {
+    method: 'POST',
+    cookie: root,
+    json: { name: 'Серия видео', groups: { grades_5_9: true } },
+  })).body
+
+  const mk = (title) => call(base, '/api/admin/lessons', {
+    method: 'POST',
+    cookie: root,
+    json: {
+      title,
+      format: 'video',
+      sectionId: sec.id,
+      questions: [{ text: 'Вопрос?', correctIndex: 0, options: [{ text: 'Да' }, { text: 'Нет' }] }],
+    },
+  }).then((r) => r.body)
+
+  const v1 = await mk('Видео 1')
+  const v2 = await mk('Видео 2')
+  const list1 = (await call(base, '/api/lessons', { cookie: root })).body.lessons
+    .filter((item) => item.section?.id === sec.id)
+    .map((item) => item.title)
+  assert.deepEqual(list1, ['Видео 1', 'Видео 2'])
+
+  const moved = await call(base, `/api/admin/lessons/${v2.id}/order`, {
+    method: 'PATCH',
+    cookie: root,
+    json: { direction: -1, neighborId: v1.id },
+  })
+  assert.equal(moved.status, 200)
+  const list2 = (await call(base, '/api/lessons', { cookie: root })).body.lessons
+    .filter((item) => item.section?.id === sec.id)
+    .map((item) => item.title)
+  assert.deepEqual(list2, ['Видео 2', 'Видео 1'])
+})

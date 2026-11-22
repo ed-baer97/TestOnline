@@ -92,7 +92,7 @@ export async function listAllLessons() {
   return db.all(
     `SELECT id, title, title_kk, format, grades_1_4, grades_5_9, grades_10_11, students, questions, questions_kk
        FROM lessons
-      ORDER BY created_at DESC`,
+      ORDER BY COALESCE(sort_order, 0) ASC, created_at ASC, id ASC`,
   )
 }
 

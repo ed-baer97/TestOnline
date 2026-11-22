@@ -168,6 +168,21 @@ const SCHEMA = [
       key TEXT PRIMARY KEY,
       applied_at TEXT NOT NULL
     )`,
+  'ALTER TABLE lessons ADD COLUMN IF NOT EXISTS sort_order INTEGER',
+  `WITH ordered AS (
+     SELECT l.id,
+            ROW_NUMBER() OVER (
+              PARTITION BY link.section_id
+              ORDER BY COALESCE(link.sort_order, 0) ASC, l.created_at ASC, l.id ASC
+            ) - 1 AS rn
+     FROM lessons l
+     LEFT JOIN lesson_section_lessons link ON link.lesson_id = l.id
+   )
+   UPDATE lessons AS l
+   SET sort_order = ordered.rn
+   FROM ordered
+   WHERE l.id = ordered.id AND l.sort_order IS NULL`,
+  'ALTER TABLE lessons ALTER COLUMN sort_order SET DEFAULT 0',
 ]
 
 function toPg(sql) {

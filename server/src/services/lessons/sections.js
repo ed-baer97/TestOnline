@@ -45,7 +45,10 @@ export async function sectionBriefs() {
 
 export async function placeLesson(lessonId, sectionId) {
   await requireSection(sectionId)
+  const current = await repo.findPlacement(lessonId)
+  if (current && current.section_id === sectionId) return
   await repo.replacePlacement(lessonId, sectionId)
+  await lessonsRepo.setLessonSortOrder(lessonId, await lessonsRepo.nextLessonSortOrder())
 }
 
 export async function detachLesson(lessonId) {
@@ -101,7 +104,27 @@ export async function assignLessonSection(actor, lessonId, sectionId) {
   const lesson = await lessonsRepo.lessonExists(lessonId)
   if (!lesson) fail('Урок не найден', 404)
   const section = await requireSection(sectionId)
-  await repo.replacePlacement(lessonId, sectionId)
+  await placeLesson(lessonId, sectionId)
   await lessonsRepo.setLessonGroups(lessonId, section.groups)
   return section
+}
+
+export async function reorderLesson(actor, lessonId, input = {}) {
+  assertRole(actor, 'super')
+  const lesson = await lessonsRepo.lessonExists(lessonId)
+  if (!lesson) fail('Урок не найден', 404)
+  const placement = await repo.findPlacement(lessonId)
+  const sectionId = placement?.section_id || null
+  const rows = await lessonsRepo.listLessonsInBucket(sectionId)
+  const ids = rows.map((row) => row.id)
+  const from = ids.indexOf(lessonId)
+  if (from < 0) return { ok: true }
+  const to = typeof input?.neighborId === 'string' && input.neighborId
+    ? ids.indexOf(input.neighborId)
+    : from + (Number(input?.direction) < 0 ? -1 : 1)
+  if (to >= 0 && to < ids.length && to !== from) {
+    ;[ids[from], ids[to]] = [ids[to], ids[from]]
+    await lessonsRepo.saveLessonOrder(ids, sectionId)
+  }
+  return { ok: true }
 }

@@ -44,13 +44,58 @@ export async function fillSeedLessonKazakh(id, { titleKk, slidesKk, questionsKk 
 }
 
 export async function listAllLessons() {
-  return db.all('SELECT * FROM lessons ORDER BY created_at DESC')
+  return db.all('SELECT * FROM lessons ORDER BY COALESCE(sort_order, 0) ASC, created_at ASC, id ASC')
 }
 
 // band подставляется в SQL как имя колонки, поэтому допускаются только ключи групп.
 export async function listLessonsForBand(band) {
   if (!GROUP_KEYS.includes(band)) throw new Error(`Неизвестная группа: ${band}`)
-  return db.all(`SELECT * FROM lessons WHERE ${band} = 1 ORDER BY created_at DESC`)
+  return db.all(`SELECT * FROM lessons WHERE ${band} = 1 ORDER BY COALESCE(sort_order, 0) ASC, created_at ASC, id ASC`)
+}
+
+export async function nextLessonSortOrder() {
+  const row = await db.get('SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM lessons')
+  return Number(row?.n || 0)
+}
+
+export async function setLessonSortOrder(id, sortOrder) {
+  await db.run('UPDATE lessons SET sort_order = ? WHERE id = ?', sortOrder, id)
+}
+
+export async function listLessonsInBucket(sectionId = null) {
+  if (sectionId) {
+    return db.all(
+      `SELECT l.id
+       FROM lessons l
+       JOIN lesson_section_lessons link ON link.lesson_id = l.id
+       WHERE link.section_id = ?
+       ORDER BY COALESCE(l.sort_order, link.sort_order, 0) ASC, l.created_at ASC, l.id ASC`,
+      sectionId,
+    )
+  }
+  return db.all(
+    `SELECT l.id
+     FROM lessons l
+     LEFT JOIN lesson_section_lessons link ON link.lesson_id = l.id
+     WHERE link.section_id IS NULL
+     ORDER BY COALESCE(l.sort_order, 0) ASC, l.created_at ASC, l.id ASC`,
+  )
+}
+
+export async function saveLessonOrder(orderedIds, sectionId = null) {
+  await db.tx(async (tx) => {
+    for (const [index, id] of orderedIds.entries()) {
+      await tx.run('UPDATE lessons SET sort_order = ? WHERE id = ?', index, id)
+      if (sectionId) {
+        await tx.run(
+          'UPDATE lesson_section_lessons SET sort_order = ? WHERE section_id = ? AND lesson_id = ?',
+          index,
+          sectionId,
+          id,
+        )
+      }
+    }
+  })
 }
 
 export async function findLesson(id) {
@@ -65,11 +110,11 @@ export async function lessonExists(id) {
   return db.get('SELECT id FROM lessons WHERE id = ?', id)
 }
 
-export async function insertLesson({ id, title, titleKk = '', seedKey, groups, format, slides, questions, slidesKk = [], questionsKk = [], createdAt, updatedAt }) {
+export async function insertLesson({ id, title, titleKk = '', seedKey, groups, format, slides, questions, slidesKk = [], questionsKk = [], sortOrder = 0, createdAt, updatedAt }) {
   await db.run(
     `INSERT INTO lessons (
-      id, title, title_kk, seed_key, grades_1_4, grades_5_9, grades_10_11, students, format, slides, questions, slides_kk, questions_kk, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, title, title_kk, seed_key, grades_1_4, grades_5_9, grades_10_11, students, format, slides, questions, slides_kk, questions_kk, sort_order, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     title,
     titleKk,
@@ -80,6 +125,7 @@ export async function insertLesson({ id, title, titleKk = '', seedKey, groups, f
     JSON.stringify(questions),
     JSON.stringify(slidesKk),
     JSON.stringify(questionsKk),
+    sortOrder,
     createdAt,
     updatedAt,
   )

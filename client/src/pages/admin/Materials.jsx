@@ -14,7 +14,7 @@ const TONES = [
   { id: 'earth', label: 'Земля' },
 ]
 
-function LessonRow({ lesson, sections, onMove }) {
+function LessonRow({ lesson, index, total, prevId, nextId, sections, onMove, onReorder }) {
   const { lang, t } = useI18n()
   const countLang = lesson.languages?.[lang] ? lang : (lesson.languages?.ru ? 'ru' : 'kk')
   const slides = countLang === 'kk' ? (lesson.slideCountKk ?? lesson.slideCount) : lesson.slideCount
@@ -23,7 +23,7 @@ function LessonRow({ lesson, sections, onMove }) {
   return (
     <article className="lesson-card">
       <div>
-        <h2>{pick(lang, lesson.title, lesson.titleKk)}</h2>
+        <h2>{index + 1}. {pick(lang, lesson.title, lesson.titleKk)}</h2>
         <p className="muted">
           {lesson.format === 'video'
             ? t('Видео · {count} вопр.', { count: questions })
@@ -32,6 +32,8 @@ function LessonRow({ lesson, sections, onMove }) {
         </p>
       </div>
       <div className="row-actions">
+        <button className="ghost" type="button" disabled={index === 0} onClick={() => onReorder(lesson.id, -1, prevId)}>{t('Выше')}</button>
+        <button className="ghost" type="button" disabled={index === total - 1} onClick={() => onReorder(lesson.id, 1, nextId)}>{t('Ниже')}</button>
         <select value={lesson.section?.id || ''} onChange={(event) => event.target.value && onMove(lesson.id, event.target.value)}>
           {!lesson.section && <option value="">{t('В раздел…')}</option>}
           {sections.map((section) => (
@@ -47,7 +49,7 @@ function LessonRow({ lesson, sections, onMove }) {
 
 export function MaterialList() {
   const { lang, t } = useI18n()
-  const { lessons, sections, error, createSection, saveSection, removeSection, moveLesson } = useMaterialList()
+  const { lessons, sections, error, createSection, saveSection, removeSection, moveLesson, reorderLesson } = useMaterialList()
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [groups, setGroups] = useState({ ...EMPTY_GROUPS, grades_5_9: true })
@@ -143,14 +145,38 @@ export function MaterialList() {
                 <button className="primary" type="button" onClick={() => keepSection(section)}>{t('Сохранить раздел')}</button>
                 <button className="ghost" type="button" onClick={() => dropSection(section)}>{t('Удалить раздел')}</button>
               </div>
-              {inside.map((lesson) => <LessonRow lesson={lesson} sections={sections} onMove={moveLesson} key={lesson.id} />)}
+              {inside.map((lesson, index) => (
+                <LessonRow
+                  key={lesson.id}
+                  lesson={lesson}
+                  index={index}
+                  total={inside.length}
+                  prevId={inside[index - 1]?.id}
+                  nextId={inside[index + 1]?.id}
+                  sections={sections}
+                  onMove={moveLesson}
+                  onReorder={reorderLesson}
+                />
+              ))}
             </section>
           )
         })}
         {loose.length > 0 && (
           <section className="stack">
             <h2>{t('Без раздела')}</h2>
-            {loose.map((lesson) => <LessonRow lesson={lesson} sections={sections} onMove={moveLesson} key={lesson.id} />)}
+            {loose.map((lesson, index) => (
+              <LessonRow
+                key={lesson.id}
+                lesson={lesson}
+                index={index}
+                total={loose.length}
+                prevId={loose[index - 1]?.id}
+                nextId={loose[index + 1]?.id}
+                sections={sections}
+                onMove={moveLesson}
+                onReorder={reorderLesson}
+              />
+            ))}
           </section>
         )}
       </div>

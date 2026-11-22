@@ -50,7 +50,7 @@ export default function LearnerHome({ onLogout }) {
             {groupLessons(visibleLessons, lang).map((block) => (
               <section className="stack" key={block.key || 'loose'}>
                 {block.title && <h2>{block.title}</h2>}
-                {block.lessons.map((lesson) => {
+                {block.lessons.map((lesson, index) => {
                   const countLang = lesson.languages?.[lang] ? lang : (lesson.languages?.ru ? 'ru' : 'kk')
                   const slides = countLang === 'kk' ? (lesson.slideCountKk ?? lesson.slideCount) : lesson.slideCount
                   const questions = countLang === 'kk' ? (lesson.questionCountKk ?? lesson.questionCount) : lesson.questionCount
@@ -58,7 +58,7 @@ export default function LearnerHome({ onLogout }) {
                   return (
                     <Link className="lesson-card" key={lesson.id} to={`/learn/lessons/${lesson.id}`}>
                       <div>
-                        <h2>{pick(lang, lesson.title, lesson.titleKk)}</h2>
+                        <h2>{index + 1}. {pick(lang, lesson.title, lesson.titleKk)}</h2>
                         <p className="muted">
                           {lesson.format === 'video'
                             ? t('Видео · {count} вопр.', { count: questions })
