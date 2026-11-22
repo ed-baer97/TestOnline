@@ -11,8 +11,9 @@ export default function LessonView({ backTo }) {
   const { id } = useParams()
   const [viewLang, setViewLang] = useState(lang)
   const {
-    lesson, available, languages, error, index, seen, answers, setAnswers, result, setResult, pending, setVideoWatched, showSlide, submit,
+    lesson, available, languages, error, index, seen, answers, result, pending, setVideoWatched, showSlide, submit,
     isVideo, slide, last, locked, lockedLang, lockedOtherLang, watched, byQuestion, attemptsLeft,
+    questionIndex, totalQuestions, currentQuestion, allAnswered, setQuestionIndex, chooseAnswer,
   } = useLessonView(id, viewLang)
   const testRef = useRef(null)
   const [videoError, setVideoError] = useState(false)
@@ -162,14 +163,25 @@ export default function LessonView({ backTo }) {
       )}
       {lesson && available && watched && !lockedOtherLang && (
         <form className="lesson-test" ref={testRef} onSubmit={submit}>
-          <h2>{t('Тест')}</h2>
-          {lesson.questions.map((question, questionIndex) => {
-            const verdict = byQuestion.get(question.id)
+          <div className="lesson-test-head">
+            <h2>{t('Тест')}</h2>
+            {totalQuestions > 0 && (
+              <span className="muted">{t('Вопрос {n} из {total}', { n: questionIndex + 1, total: totalQuestions })}</span>
+            )}
+          </div>
+          {result && (
+            <p className="saved">
+              {t('Результат: {score} из {total}', { score: result.score, total: result.total })}
+              {result.repeated ? t(' · показан сохранённый результат') : ''}
+            </p>
+          )}
+          {currentQuestion && (() => {
+            const verdict = byQuestion.get(currentQuestion.id)
             return (
-              <fieldset className="question-card" key={question.id}>
-                <FitLegend>{questionIndex + 1}. {question.text}</FitLegend>
-                {question.options.map((option, optionIndex) => {
-                  const picked = answers[question.id] === optionIndex
+              <fieldset className="question-card" key={currentQuestion.id}>
+                <FitLegend>{questionIndex + 1}. {currentQuestion.text}</FitLegend>
+                {currentQuestion.options.map((option, optionIndex) => {
+                  const picked = answers[currentQuestion.id] === optionIndex
                   const mark = verdict
                     ? optionIndex === verdict.correctIndex
                       ? 'good'
@@ -178,17 +190,13 @@ export default function LessonView({ backTo }) {
                         : ''
                     : ''
                   return (
-                    <label className={`choice ${mark}`} key={`${question.id}-${optionIndex}`}>
+                    <label className={`choice ${mark}`} key={`${currentQuestion.id}-${optionIndex}`}>
                       <input
                         type="radio"
-                        name={question.id}
+                        name={currentQuestion.id}
                         checked={picked}
                         disabled={locked}
-                        onChange={() => {
-                          if (locked) return
-                          setAnswers((current) => ({ ...current, [question.id]: optionIndex }))
-                          setResult(null)
-                        }}
+                        onChange={() => chooseAnswer(currentQuestion.id, optionIndex)}
                       />
                       {option.text}
                     </label>
@@ -196,24 +204,62 @@ export default function LessonView({ backTo }) {
                 })}
               </fieldset>
             )
-          })}
-          {result && (
-            <p className="saved">
-              {t('Результат: {score} из {total}', { score: result.score, total: result.total })}
-              {result.repeated ? t(' · показан сохранённый результат') : ''}
-            </p>
-          )}
-          {locked ? (
-            <p className="muted">{t('Тест пройден. Повторная отправка не предусмотрена.')}</p>
-          ) : (
-            <>
-              {attemptsLeft != null && attemptsLeft > 0 && lesson.attempts && (
-                <p className="muted">{t('Осталось попыток: {count}', { count: attemptsLeft })}</p>
-              )}
-              <button className="primary add" type="submit" disabled={pending}>
+          })()}
+          <div className="deck-bar test-bar">
+            <button
+              className="ghost"
+              type="button"
+              disabled={questionIndex === 0}
+              onClick={() => setQuestionIndex(Math.max(0, questionIndex - 1))}
+            >
+              {t('Назад')}
+            </button>
+            <div className="test-steps" role="navigation" aria-label={t('Вопросы теста')}>
+              {lesson.questions.map((question, step) => {
+                const verdict = byQuestion.get(question.id)
+                const classes = ['test-step']
+                if (step === questionIndex) classes.push('on')
+                if (verdict) classes.push(verdict.ok ? 'good' : 'bad')
+                else if (answers[question.id] != null) classes.push('done')
+                return (
+                  <button
+                    key={question.id}
+                    type="button"
+                    className={classes.join(' ')}
+                    aria-label={t('Вопрос {n}', { n: step + 1 })}
+                    aria-current={step === questionIndex ? 'step' : undefined}
+                    onClick={() => setQuestionIndex(step)}
+                  >
+                    {step + 1}
+                  </button>
+                )
+              })}
+            </div>
+            {questionIndex < totalQuestions - 1 ? (
+              <button
+                className={answers[currentQuestion?.id] != null && !locked ? 'primary' : 'ghost'}
+                type="button"
+                onClick={() => setQuestionIndex(Math.min(totalQuestions - 1, questionIndex + 1))}
+              >
+                {t('Дальше')}
+              </button>
+            ) : !locked ? (
+              <button className="primary" type="submit" disabled={pending}>
                 {t(pending ? 'Отправка…' : result ? 'Проверить снова' : 'Проверить')}
               </button>
-            </>
+            ) : <span />}
+          </div>
+          {!locked && allAnswered && questionIndex < totalQuestions - 1 && (
+            <button className="primary add" type="submit" disabled={pending}>
+              {t(pending ? 'Отправка…' : result ? 'Проверить снова' : 'Проверить')}
+            </button>
+          )}
+          {locked ? (
+            <p className="muted deck-note">{t('Тест пройден. Повторная отправка не предусмотрена.')}</p>
+          ) : (
+            attemptsLeft != null && attemptsLeft > 0 && lesson.attempts && (
+              <p className="muted deck-note">{t('Осталось попыток: {count}', { count: attemptsLeft })}</p>
+            )
           )}
         </form>
       )}

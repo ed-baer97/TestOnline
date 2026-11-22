@@ -24,6 +24,7 @@ export function FitLegend({ children }) {
       el.style.width = `${high}px`
       el.dataset.available = String(available)
     }
+    delete el.dataset.available
     fit()
     const observer = new ResizeObserver(fit)
     observer.observe(parent)

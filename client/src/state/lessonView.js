@@ -10,6 +10,17 @@ export function lessonLockState(result, viewLang) {
   return { locked, lockedLang, lockedOtherLang, sameLangResult }
 }
 
+export function lessonTestState(questions, answers, currentIndex) {
+  const list = Array.isArray(questions) ? questions : []
+  const total = list.length
+  const questionIndex = total ? Math.min(Math.max(0, currentIndex), total - 1) : 0
+  const currentQuestion = total ? list[questionIndex] : null
+  const unansweredIndex = list.findIndex((question) => answers[question.id] == null)
+  const answeredCount = list.filter((question) => answers[question.id] != null).length
+  const allAnswered = total > 0 && unansweredIndex === -1
+  return { questionIndex, totalQuestions: total, currentQuestion, unansweredIndex, answeredCount, allAnswered }
+}
+
 // Тест открывается после всех слайдов или всего ролика; когда попытки исчерпаны, сразу виден последний результат.
 export function useLessonView(id, viewLang = 'ru') {
   const [lesson, setLesson] = useState(null)
@@ -17,6 +28,7 @@ export function useLessonView(id, viewLang = 'ru') {
   const [index, setIndex] = useState(0)
   const [seen, setSeen] = useState(() => new Set([0]))
   const [videoWatched, setVideoWatched] = useState(false)
+  const [questionIndex, setQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState({})
   const [result, setResult] = useState(null)
   const [pending, setPending] = useState(false)
@@ -28,6 +40,7 @@ export function useLessonView(id, viewLang = 'ru') {
     setIndex(0)
     setSeen(new Set([0]))
     setVideoWatched(false)
+    setQuestionIndex(0)
     setAnswers({})
     setResult(null)
     api.lesson(id, viewLang).then((data) => {
@@ -69,7 +82,9 @@ export function useLessonView(id, viewLang = 'ru') {
   async function submit(event) {
     event.preventDefault()
     if (!lesson || !lesson.available || pending || locked) return
-    if (lesson.questions.some((question) => answers[question.id] == null)) {
+    const missing = lesson.questions.findIndex((question) => answers[question.id] == null)
+    if (missing >= 0) {
+      setQuestionIndex(missing)
       setError('Ответьте на все вопросы')
       return
     }
@@ -97,6 +112,14 @@ export function useLessonView(id, viewLang = 'ru') {
   const watched = (locked && !lockedOtherLang) || (isVideo ? videoWatched : Boolean(lesson?.slides?.length) && seen.size > last)
   const byQuestion = new Map((sameLangResult ? result?.results || [] : []).map((item) => [item.questionId, item]))
   const attemptsLeft = result?.attempts ? result.attempts.max - result.attempts.used : lesson?.attempts ? lesson.attempts.max - lesson.attempts.used : null
+  const testStep = lessonTestState(lesson?.questions, answers, questionIndex)
+
+  function chooseAnswer(questionId, optionIndex) {
+    if (locked) return
+    setAnswers((current) => ({ ...current, [questionId]: optionIndex }))
+    setResult(null)
+    setError('')
+  }
 
   return {
     lesson,
@@ -122,5 +145,8 @@ export function useLessonView(id, viewLang = 'ru') {
     watched,
     byQuestion,
     attemptsLeft,
+    ...testStep,
+    setQuestionIndex,
+    chooseAnswer,
   }
 }

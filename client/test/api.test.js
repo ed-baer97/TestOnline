@@ -3,7 +3,7 @@ import test from 'node:test'
 import { api } from '../src/api/index.js'
 import { formatCode } from '../src/lib/format.js'
 import { newId } from '../src/lib/ids.js'
-import { lessonLockState } from '../src/state/lessonView.js'
+import { lessonLockState, lessonTestState } from '../src/state/lessonView.js'
 import { forgetPlayerToken, readHostToken, readPlayerToken, saveHostToken, savePlayerToken } from '../src/state/roomTokens.js'
 
 const calls = []
@@ -222,5 +222,33 @@ test('lessonLockState различает блокировку на текуще�
     lockedLang: null,
     lockedOtherLang: false,
     sameLangResult: true,
+  })
+})
+
+test('lessonTestState ведёт навигацию по одному вопросу и считает ответы', () => {
+  const questions = [{ id: 'q1' }, { id: 'q2' }, { id: 'q3' }]
+  assert.deepEqual(lessonTestState([], {}, 2), {
+    questionIndex: 0,
+    totalQuestions: 0,
+    currentQuestion: null,
+    unansweredIndex: -1,
+    answeredCount: 0,
+    allAnswered: false,
+  })
+  assert.deepEqual(lessonTestState(questions, { q1: 0, q3: 2 }, 99), {
+    questionIndex: 2,
+    totalQuestions: 3,
+    currentQuestion: { id: 'q3' },
+    unansweredIndex: 1,
+    answeredCount: 2,
+    allAnswered: false,
+  })
+  assert.deepEqual(lessonTestState(questions, { q1: 0, q2: 1, q3: 2 }, -3), {
+    questionIndex: 0,
+    totalQuestions: 3,
+    currentQuestion: { id: 'q1' },
+    unansweredIndex: -1,
+    answeredCount: 3,
+    allAnswered: true,
   })
 })
