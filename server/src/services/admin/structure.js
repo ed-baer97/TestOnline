@@ -6,11 +6,11 @@ import { cleanLabel, sameText } from '../../domain/text.js'
 import * as classesRepo from '../../repositories/classes.js'
 import * as tracksRepo from '../../repositories/tracks.js'
 import * as usersRepo from '../../repositories/users.js'
-import { mustOrg } from './scope.js'
+import { mustOrg, resolveTargetOrgId } from './scope.js'
 
-export async function structure(actor) {
-  assertRole(actor, 'org')
-  const org = await mustOrg(actor.organizationId)
+export async function structure(actor, requestedOrgId = null) {
+  const orgId = await resolveTargetOrgId(actor, requestedOrgId)
+  const org = await mustOrg(orgId)
   const mapped = await classesRepo.listOrganizationClasses(org.id)
   const tracks = await tracksRepo.listTracks(org.id)
   const sections = []
@@ -50,8 +50,8 @@ function assertUniqueClass(rows, name, exceptId) {
 }
 
 export async function createTrack(actor, input) {
-  assertRole(actor, 'org')
-  const org = await mustOrg(actor.organizationId)
+  const orgId = await resolveTargetOrgId(actor, input?.organizationId)
+  const org = await mustOrg(orgId)
   if (!org.groups.students) fail('В организации не отмечены студенты')
   const name = cleanLabel(input?.name, 2, 40, 'Название курса')
   const rows = await tracksRepo.listTracks(org.id)
@@ -82,8 +82,8 @@ export async function deleteTrack(actor, id) {
 }
 
 export async function createClass(actor, input) {
-  assertRole(actor, 'org')
-  const org = await mustOrg(actor.organizationId)
+  const orgId = await resolveTargetOrgId(actor, input?.organizationId)
+  const org = await mustOrg(orgId)
   const name = cleanLabel(input?.name, 1, 20, 'Название класса')
   if (input?.trackId) {
     if (!org.groups.students) fail('В организации не отмечены студенты')

@@ -30,6 +30,11 @@ export async function listOrganizations(regionId) {
   return rows.map(mapOrg)
 }
 
+export async function listAllOrganizations() {
+  const rows = await db.all(ORG_SELECT)
+  return rows.map(mapOrg)
+}
+
 export async function listOrganizationNames(regionId) {
   return db.all('SELECT id, name, name_kk FROM organizations WHERE region_id = ?', regionId)
 }

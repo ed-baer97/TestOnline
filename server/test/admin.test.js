@@ -148,3 +148,82 @@ test('регион видит своих, организация собирае�
     await new Promise((resolve) => httpServer.close(resolve))
   }
 })
+
+test('суперадмин и регистрация по списку ФИО с автогенерацией логина и пароля', async () => {
+  const admin = await import('../src/services/admin/index.js')
+  const { authenticate, ensureSuperAdmin } = await import('../src/services/accounts.js')
+  const root = await ensureSuperAdmin()
+
+  const region = await admin.createRegion(root, { name: 'Западно-Казахстанская область' })
+  const regional = await admin.createRegionalAdmin(root, {
+    login: 'zko.reg',
+    password: 'secret1',
+    displayName: 'Динара',
+    regionId: region.id,
+  })
+  const college = await admin.createOrganization(regional, {
+    name: 'Колледж №1',
+    groups: { grades_10_11: true, students: true },
+  })
+
+  const targets = await admin.learnerTargets(root)
+  assert.ok(targets.regions.some((item) => item.id === region.id))
+  assert.ok(targets.organizations.some((item) => item.id === college.id))
+  await assert.rejects(() => admin.learnerTargets(regional), (error) => error.status === 403)
+
+  const track = await admin.createTrack(root, { organizationId: college.id, name: '1 курс' })
+  const group = await admin.createClass(root, { organizationId: college.id, trackId: track.id, name: 'П-11' })
+  const eleventh = await admin.createClass(root, { organizationId: college.id, grade: 11, name: '11а' })
+  const tree = await admin.structure(root, college.id)
+  assert.equal(tree.organization.id, college.id)
+
+  const single = await admin.createLearner(root, {
+    organizationId: college.id,
+    classId: eleventh.id,
+    displayName: 'Иванов Иван Иванович',
+    login: '',
+    password: '',
+  })
+  assert.equal(single.login, 'ivanov.ivan')
+  assert.match(single.password, /^[a-z0-9]{8}$/)
+  assert.equal((await authenticate(single.login, single.password)).role, 'learner')
+
+  const bulk = await admin.importLearnersList(root, {
+    organizationId: college.id,
+    classId: group.id,
+    text: [
+      'ФИО',
+      '1. Иванов Иван Сергеевич',
+      '2) Қасымова Аида Серікқызы',
+      '• Қасымова Аида Тимурқызы',
+      'А',
+    ].join('\n'),
+  })
+  assert.equal(bulk.created, 3)
+  assert.deepEqual(bulk.learners.map((item) => item.login), ['ivanov.ivan2', 'qasymova.aida', 'qasymova.aida2'])
+  assert.equal(bulk.learners[0].classLabel, 'П-11 · 1 курс')
+  assert.equal(bulk.errors.length, 1)
+  assert.match(bulk.errors[0], /Строка 5: имя от 2 до 80 символов/)
+  assert.equal((await authenticate(bulk.learners[1].login, bulk.learners[1].password)).role, 'learner')
+
+  const ExcelJS = (await import('exceljs')).default
+  const book = new ExcelJS.Workbook()
+  const sheet = book.addWorksheet('Список')
+  sheet.addRow(['Фамилия', 'Имя', 'Отчество'])
+  sheet.addRow(['Петров', 'Пётр', 'Петрович'])
+  sheet.addRow(['Иванов', 'Иван', 'Олегович'])
+  const imported = await admin.importLearners(root, Buffer.from(await book.xlsx.writeBuffer()), {
+    organizationId: college.id,
+    classId: group.id,
+  })
+  assert.equal(imported.created, 2)
+  assert.deepEqual(imported.learners.map((item) => item.login), ['petrov.petr', 'ivanov.ivan3'])
+
+  const listed = await admin.listLearners(root, { organizationId: college.id })
+  assert.equal(listed.total, 6)
+  const updated = await admin.updateLearner(root, single.id, { displayName: 'Иванов И.', classId: group.id, password: '' })
+  assert.equal(updated.displayName, 'Иванов И.')
+  assert.equal(updated.classLabel, 'П-11 · 1 курс')
+  await admin.deleteLearner(root, single.id)
+  assert.equal((await admin.listLearners(root, { organizationId: college.id })).total, 5)
+})

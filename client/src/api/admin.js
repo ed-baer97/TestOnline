@@ -1,4 +1,4 @@
-import { request } from './http.js'
+import { request, requestBlob } from './http.js'
 
 export const adminApi = {
   dashboard: () => request('/api/admin/dashboard'),
@@ -35,7 +35,11 @@ export const adminApi = {
   createOrgAdmin: (body) => request('/api/admin/org-admins', { method: 'POST', body: JSON.stringify(body) }),
   updateOrgAdmin: (id, body) => request(`/api/admin/org-admins/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteOrgAdmin: (id) => request(`/api/admin/org-admins/${id}`, { method: 'DELETE' }),
-  structure: () => request('/api/admin/structure'),
+  structure: (organizationId) => {
+    const query = organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : ''
+    return request(`/api/admin/structure${query}`)
+  },
+  learnerTargets: () => request('/api/admin/learners/targets'),
   createTrack: (body) => request('/api/admin/tracks', { method: 'POST', body: JSON.stringify(body) }),
   updateTrack: (id, body) => request(`/api/admin/tracks/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteTrack: (id) => request(`/api/admin/tracks/${id}`, { method: 'DELETE' }),
@@ -48,15 +52,21 @@ export const adminApi = {
     const suffix = query.toString()
     return request(`/api/admin/learners${suffix ? `?${suffix}` : ''}`)
   },
-  importLearners: (file) => {
+  importLearners: (file, options = {}) => {
     if (!/\.xlsx$/i.test(file?.name || '')) return Promise.reject(new Error('Нужен файл Excel .xlsx'))
     if (file.size > 5 * 1024 * 1024) return Promise.reject(new Error('Файл больше 5 МБ'))
-    return request('/api/admin/learners/import', {
+    const query = new URLSearchParams()
+    if (options.organizationId) query.set('organizationId', options.organizationId)
+    if (options.classId) query.set('classId', options.classId)
+    const suffix = query.toString()
+    return request(`/api/admin/learners/import${suffix ? `?${suffix}` : ''}`, {
       method: 'POST',
       body: file,
       headers: { 'Content-Type': 'application/octet-stream' },
     })
   },
+  bulkLearners: (body) => request('/api/admin/learners/bulk', { method: 'POST', body: JSON.stringify(body) }),
+  exportLearnersExcel: (body) => requestBlob('/api/admin/learners/export', { method: 'POST', body: JSON.stringify(body) }),
   createLearner: (body) => request('/api/admin/learners', { method: 'POST', body: JSON.stringify(body) }),
   updateLearner: (id, body) => request(`/api/admin/learners/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteLearner: (id) => request(`/api/admin/learners/${id}`, { method: 'DELETE' }),

@@ -1,3 +1,4 @@
+import { assertRole } from '../../domain/access.js'
 import { fail } from '../../domain/errors.js'
 import * as classesRepo from '../../repositories/classes.js'
 import * as organizationsRepo from '../../repositories/organizations.js'
@@ -27,4 +28,12 @@ export async function classInOrg(classId, organizationId) {
   const org = await mustOrg(organizationId)
   if (!org.groups[row.band]) fail('Эта группа в организации не отмечена')
   return row
+}
+
+export async function resolveTargetOrgId(actor, requestedOrgId = null) {
+  assertRole(actor, 'org', 'super')
+  if (actor.role === 'org') return actor.organizationId
+  if (!requestedOrgId || typeof requestedOrgId !== 'string') fail('Выберите организацию')
+  const org = await mustOrg(requestedOrgId)
+  return org.id
 }

@@ -17,8 +17,11 @@ import {
   deleteRegion,
   deleteRegionalAdmin,
   deleteTrack,
+  exportLearnersWorkbook,
   importLearners,
+  importLearnersList,
   launchTargets,
+  learnerTargets,
   learnersTemplate,
   listDistricts,
   listLaunchQuizzes,
@@ -127,7 +130,8 @@ export function registerAdminRoutes(app) {
     res.json({ ok: true })
   }))
   app.get('/api/admin/structure', guard, route(async (req, res) => {
-    res.json(await structure(req.user))
+    const organizationId = typeof req.query.organizationId === 'string' ? req.query.organizationId : null
+    res.json(await structure(req.user, organizationId || null))
   }))
   app.post('/api/admin/tracks', guard, route(async (req, res) => {
     res.status(201).json(await createTrack(req.user, req.body || {}))
@@ -152,18 +156,35 @@ export function registerAdminRoutes(app) {
   app.get('/api/admin/learners', guard, route(async (req, res) => {
     res.json(await listLearners(req.user, req.query))
   }))
+  app.get('/api/admin/learners/targets', guard, route(async (req, res) => {
+    res.json(await learnerTargets(req.user))
+  }))
   app.get('/api/admin/learners/template', guard, route(async (req, res) => {
-    if (req.user.role !== 'org') {
+    if (req.user.role !== 'org' && req.user.role !== 'super') {
       res.status(403).json({ error: 'Недостаточно прав' })
       return
     }
-    const buffer = await learnersTemplate()
+    const mode = req.query.mode === 'fio' ? 'fio' : 'full'
+    const buffer = await learnersTemplate(mode)
+    const filename = mode === 'fio' ? 'spisok-fio-shablon.xlsx' : 'testiruemye-shablon.xlsx'
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    res.setHeader('Content-Disposition', 'attachment; filename="testiruemye-shablon.xlsx"')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
     res.send(Buffer.from(buffer))
   }))
   app.post('/api/admin/learners/import', guard, express.raw({ type: () => true, limit: '5mb' }), route(async (req, res) => {
-    res.json(await importLearners(req.user, req.body))
+    res.json(await importLearners(req.user, req.body, {
+      organizationId: typeof req.query.organizationId === 'string' ? req.query.organizationId : null,
+      classId: typeof req.query.classId === 'string' ? req.query.classId : null,
+    }))
+  }))
+  app.post('/api/admin/learners/bulk', guard, express.json({ limit: '2mb' }), route(async (req, res) => {
+    res.json(await importLearnersList(req.user, req.body || {}))
+  }))
+  app.post('/api/admin/learners/export', guard, express.json({ limit: '2mb' }), route(async (req, res) => {
+    const buffer = await exportLearnersWorkbook(req.user, req.body || {})
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', 'attachment; filename="paroli-testiruemyh.xlsx"')
+    res.send(Buffer.from(buffer))
   }))
   app.post('/api/admin/learners', guard, route(async (req, res) => {
     res.status(201).json(await createLearner(req.user, req.body || {}))

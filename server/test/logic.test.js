@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { normalizeAccount } from '../src/domain/accounts.js'
+import { allocateUniqueLogin, loginBaseFromName, normalizeAccount, parseFioLines } from '../src/domain/accounts.js'
 import { MAX_VIDEO } from '../src/domain/lesson.js'
 import { normalizeQuiz, scorePoints } from '../src/domain/quiz.js'
 
@@ -44,4 +44,56 @@ test('пустые варианты отбрасываются до провер
 
 test('максимальный размер видео — 250 МБ', () => {
   assert.equal(MAX_VIDEO, 250 * 1024 * 1024)
+})
+
+test('генерация базового логина из ФИО на русском и казахском', () => {
+  assert.equal(loginBaseFromName('Иванов Иван Иванович'), 'ivanov.ivan')
+  assert.equal(loginBaseFromName('Қасымова Аида Серікқызы'), 'qasymova.aida')
+  assert.equal(loginBaseFromName('Өмірзақ Ғалымжан Ұланұлы'), 'omirzaq.galymzhan')
+  assert.equal(loginBaseFromName('Щукина Юлия'), 'shchukina.yuliya')
+  assert.equal(loginBaseFromName('А. Б. Иванов'), 'a.b.ivanov')
+  assert.equal(loginBaseFromName('Ли'), 'user.li')
+  assert.equal(loginBaseFromName('ъь---'), 'user')
+  const longBase = loginBaseFromName('Абдрахманов-Сулейманов Константин Александрович')
+  assert.ok(longBase.length <= 26)
+  assert.ok(!longBase.endsWith('.'))
+  assert.match(longBase, /^[a-z0-9][a-z0-9._-]{2,31}$/)
+})
+
+test('выделение уникального логина с нумерацией и длиной до 32 символов', () => {
+  const taken = new Set(['ivanov.ivan', 'ivanov.ivan2'])
+  assert.equal(allocateUniqueLogin('ivanov.ivan', taken), 'ivanov.ivan3')
+  assert.equal(allocateUniqueLogin('ivanov.ivan', taken), 'ivanov.ivan4')
+
+  const longRoot = 'a'.repeat(26)
+  const boundaryTaken = new Set([longRoot])
+  const allocated = allocateUniqueLogin(longRoot, boundaryTaken)
+  assert.equal(allocated, `${longRoot}2`)
+  assert.ok(allocated.length <= 32)
+
+  const maxRoot = 'a'.repeat(32)
+  const maxTaken = new Set([maxRoot])
+  const truncated = allocateUniqueLogin(maxRoot, maxTaken)
+  assert.equal(truncated, `${'a'.repeat(31)}2`)
+  assert.equal(truncated.length, 32)
+})
+
+test('разбор текстового списка ФИО с номерами, маркерами и заголовком', () => {
+  const parsed = parseFioLines([
+    '',
+    'ФИО',
+    '1. Иванов Иван',
+    '2) Петрова Анна',
+    '• Сидоров Олег',
+    '- Қасымова Аида\tСерікқызы',
+    '   ',
+  ].join('\n'))
+  assert.deepEqual(parsed, [
+    { lineNumber: 3, displayName: 'Иванов Иван' },
+    { lineNumber: 4, displayName: 'Петрова Анна' },
+    { lineNumber: 5, displayName: 'Сидоров Олег' },
+    { lineNumber: 6, displayName: 'Қасымова Аида Серікқызы' },
+  ])
+
+  assert.deepEqual(parseFioLines('ФИО'), [{ lineNumber: 1, displayName: 'ФИО' }])
 })

@@ -58,6 +58,8 @@ const cases = [
   [() => api.updateOrgAdmin('u2', { login: 'b' }), send('/api/admin/org-admins/u2', 'PATCH', { login: 'b' })],
   [() => api.deleteOrgAdmin('u2'), send('/api/admin/org-admins/u2', 'DELETE')],
   [() => api.structure(), get('/api/admin/structure')],
+  [() => api.structure('o1'), get('/api/admin/structure?organizationId=o1')],
+  [() => api.learnerTargets(), get('/api/admin/learners/targets')],
   [() => api.createTrack({ name: 'К' }), send('/api/admin/tracks', 'POST', { name: 'К' })],
   [() => api.updateTrack('t1', { name: 'К' }), send('/api/admin/tracks/t1', 'PATCH', { name: 'К' })],
   [() => api.deleteTrack('t1'), send('/api/admin/tracks/t1', 'DELETE')],
@@ -67,6 +69,8 @@ const cases = [
   [() => api.learners(), get('/api/admin/learners')],
   [() => api.learners({ classId: '', search: 'Ан на', offset: 0, limit: 100, extra: null }), get('/api/admin/learners?search=%D0%90%D0%BD+%D0%BD%D0%B0&offset=0&limit=100')],
   [() => api.importLearners(xlsx), upload('/api/admin/learners/import', 'POST', xlsx, { 'Content-Type': 'application/octet-stream' })],
+  [() => api.importLearners(xlsx, { organizationId: 'o1', classId: 'c1' }), upload('/api/admin/learners/import?organizationId=o1&classId=c1', 'POST', xlsx, { 'Content-Type': 'application/octet-stream' })],
+  [() => api.bulkLearners({ classId: 'c1', text: 'Иванов Иван' }), send('/api/admin/learners/bulk', 'POST', { classId: 'c1', text: 'Иванов Иван' })],
   [() => api.createLearner({ login: 'c' }), send('/api/admin/learners', 'POST', { login: 'c' })],
   [() => api.updateLearner('l1', { login: 'c' }), send('/api/admin/learners/l1', 'PATCH', { login: 'c' })],
   [() => api.deleteLearner('l1'), send('/api/admin/learners/l1', 'DELETE')],
@@ -111,13 +115,21 @@ const cases = [
 ]
 
 test('каждый метод api отправляет тот же запрос', async () => {
-  assert.equal(cases.length, Object.keys(api).length + 7)
+  assert.equal(cases.length, Object.keys(api).length + 8)
   for (const [run, expected] of cases) {
     calls.length = 0
     assert.deepEqual(await run(), { ok: true })
     assert.equal(calls.length, 1)
     assert.deepEqual(calls[0], expected, expected.url)
   }
+})
+
+test('exportLearnersExcel отправляет POST и возвращает Blob', async () => {
+  calls.length = 0
+  const blob = await api.exportLearnersExcel({ learners: [{ login: 'a', password: 'b' }], lang: 'ru' })
+  assert.equal(calls.length, 1)
+  assert.deepEqual(calls[0], send('/api/admin/learners/export', 'POST', { learners: [{ login: 'a', password: 'b' }], lang: 'ru' }))
+  assert.ok(blob instanceof Blob)
 })
 
 test('файлы проверяются до отправки', async () => {

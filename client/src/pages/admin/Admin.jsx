@@ -22,6 +22,7 @@ function tabsFor(role, t) {
       tab('/admin/quizzes', 'Квизы'),
       tab('/admin/regions', 'Регионы'),
       tab('/admin/staff', 'Админы'),
+      tab('/admin/learners', 'Тестируемые'),
     ]
   }
   if (role === 'regional') {
@@ -81,6 +82,7 @@ export default function Admin({ onLogout }) {
             <Route path="quizzes/:id" element={<MaterialQuizEditor />} />
             <Route path="regions" element={<Regions />} />
             <Route path="staff" element={<RegionalStaff />} />
+            <Route path="learners" element={<Learners isSuper />} />
           </>
         )}
         {me.role === 'regional' && (

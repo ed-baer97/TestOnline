@@ -245,20 +245,28 @@ export async function findLearner(id, organizationId) {
   )
 }
 
+export async function findLearnerById(id) {
+  return db.get("SELECT id, organization_id FROM users WHERE id = ? AND role = 'learner'", id)
+}
+
 export async function updateLearner(id, { displayName, classId }) {
   await db.run('UPDATE users SET display_name = ?, class_id = ? WHERE id = ?', displayName, classId, id)
 }
 
-export async function deleteLearner(id, organizationId) {
+async function removeLearner(id, sql, ...params) {
   return db.tx(async (tx) => {
-    const result = await tx.run(
-      "DELETE FROM users WHERE id = ? AND role = 'learner' AND organization_id = ?",
-      id,
-      organizationId,
-    )
+    const result = await tx.run(sql, id, ...params)
     if (result.changes) await tx.run('DELETE FROM lesson_attempts WHERE user_id = ?', id)
     return result.changes
   })
+}
+
+export function deleteLearner(id, organizationId) {
+  return removeLearner(id, "DELETE FROM users WHERE id = ? AND role = 'learner' AND organization_id = ?", organizationId)
+}
+
+export function deleteLearnerById(id) {
+  return removeLearner(id, "DELETE FROM users WHERE id = ? AND role = 'learner'")
 }
 
 // Логины в нижнем регистре, которые уже заняты. Запрос идёт пачками по 500, чтобы не упереться в лимит параметров.
@@ -267,6 +275,19 @@ export async function findTakenLogins(logins) {
   for (let start = 0; start < logins.length; start += 500) {
     const chunk = logins.slice(start, start + 500)
     const found = await db.all(`SELECT login FROM users WHERE lower(login) IN (${placeholders(chunk)})`, ...chunk)
+    for (const item of found) taken.add(String(item.login).toLowerCase())
+  }
+  return taken
+}
+
+export async function findTakenLoginsByPrefixes(prefixes) {
+  const unique = [...new Set(prefixes.map((item) => String(item || '').toLowerCase()).filter(Boolean))]
+  const taken = new Set()
+  for (let start = 0; start < unique.length; start += 100) {
+    const chunk = unique.slice(start, start + 100)
+    const where = chunk.map(() => "lower(login) LIKE ? ESCAPE '\\'").join(' OR ')
+    const params = chunk.map((prefix) => `${prefix.replace(/[\\%_]/g, '\\$&')}%`)
+    const found = await db.all(`SELECT login FROM users WHERE ${where}`, ...params)
     for (const item of found) taken.add(String(item.login).toLowerCase())
   }
   return taken

@@ -336,3 +336,124 @@ test('админка по HTTP: регионы, организации, клас
   expectError(await su(`/api/admin/regions/${regionId}`, { method: 'DELETE' }), 404, 'Регион не найден')
   assert.deepEqual((await su('/api/admin/regions')).body.regions.map((item) => item.name), ['Атырауская область'])
 })
+
+test('массовая регистрация по ФИО, автологины, экспорт Excel и доступ суперадмина', async (t) => {
+  const server = await startServer()
+  t.after(() => server.close())
+  const { base } = server
+  const root = await login(base, 'root', 'rootpass')
+  const as = (cookie) => (path, options = {}) => call(base, path, { ...options, cookie })
+  const su = as(root)
+
+  const region = (await su('/api/admin/regions', { method: 'POST', json: { name: 'Актюбинская область' } })).body
+  const regional = (await su('/api/admin/regional-admins', {
+    method: 'POST',
+    json: { login: 'aktobe.reg', password: 'secret1', displayName: 'Асет', regionId: region.id },
+  })).body
+  assert.ok(regional.id)
+  const reg = as(await login(base, 'aktobe.reg', 'secret1'))
+  const school = (await reg('/api/admin/organizations', {
+    method: 'POST',
+    json: { name: 'Школа №7', groups: { grades_5_9: true, students: true } },
+  })).body
+  const orgAdmin = (await reg('/api/admin/org-admins', {
+    method: 'POST',
+    json: { login: 'school7', password: 'secret1', displayName: 'Светлана', organizationId: school.id },
+  })).body
+  assert.ok(orgAdmin.id)
+  const org = as(await login(base, 'school7', 'secret1'))
+
+  expectError(await reg('/api/admin/learners/targets'), 403, 'Недостаточно прав')
+  const targets = await su('/api/admin/learners/targets')
+  assert.equal(targets.status, 200)
+  assert.ok(targets.body.regions.some((item) => item.id === region.id))
+  assert.ok(targets.body.organizations.some((item) => item.id === school.id))
+
+  const klass = (await su('/api/admin/classes', {
+    method: 'POST',
+    json: { organizationId: school.id, grade: 7, name: '7а' },
+  })).body
+  assert.equal(klass.name, '7а')
+  const tree = await su(`/api/admin/structure?organizationId=${school.id}`)
+  assert.equal(tree.status, 200)
+  assert.equal(tree.body.organization.id, school.id)
+
+  const fioTpl = await su('/api/admin/learners/template?mode=fio')
+  assert.equal(fioTpl.status, 200)
+  assert.equal(fioTpl.headers.get('content-disposition'), 'attachment; filename="spisok-fio-shablon.xlsx"')
+  const tplBook = new ExcelJS.Workbook()
+  await tplBook.xlsx.load(fioTpl.buffer)
+  assert.deepEqual(tplBook.worksheets[0].getRow(1).values.slice(1), ['ФИО'])
+  expectError(await reg('/api/admin/learners/template?mode=fio'), 403, 'Недостаточно прав')
+
+  assert.equal((await call(base, '/api/admin/learners/bulk', { method: 'POST', json: { classId: klass.id, text: 'А' } })).status, 401)
+  expectError(await reg('/api/admin/learners/bulk', { method: 'POST', json: { organizationId: school.id, classId: klass.id, text: 'Иванов Иван' } }), 403, 'Недостаточно прав')
+
+  const bulk = await su('/api/admin/learners/bulk', {
+    method: 'POST',
+    json: {
+      organizationId: school.id,
+      classId: klass.id,
+      text: '1. Нұрланов Ернар\n2. Нұрланов Ернар\n3. Смирнова Мария',
+    },
+  })
+  assert.equal(bulk.status, 200)
+  assert.equal(bulk.body.created, 3)
+  assert.deepEqual(bulk.body.learners.map((item) => item.login), ['nurlanov.ernar', 'nurlanov.ernar2', 'smirnova.mariya'])
+  for (const person of bulk.body.learners) assert.match(person.password, /^[a-z0-9]{8}$/)
+
+  const learnerLogin = await call(base, '/api/login', {
+    method: 'POST',
+    json: { login: bulk.body.learners[0].login, password: bulk.body.learners[0].password },
+  })
+  assert.equal(learnerLogin.status, 200)
+  assert.equal(learnerLogin.body.role, 'learner')
+  const pupil = as(learnerLogin.headers.get('set-cookie').split(';')[0])
+  expectError(await pupil('/api/admin/learners/targets'), 403, 'Недостаточно прав')
+
+  const book = new ExcelJS.Workbook()
+  const sheet = book.addWorksheet('ФИО')
+  sheet.addRow(['ФИО'])
+  sheet.addRow(['Смирнова Мария Андреевна'])
+  sheet.addRow(['Ахметова Зарина'])
+  const imported = await org(`/api/admin/learners/import?classId=${klass.id}`, {
+    method: 'POST',
+    body: Buffer.from(await book.xlsx.writeBuffer()),
+    headers: { 'Content-Type': 'application/octet-stream' },
+  })
+  assert.equal(imported.status, 200)
+  assert.equal(imported.body.created, 2)
+  assert.deepEqual(imported.body.learners.map((item) => item.login), ['smirnova.mariya2', 'akhmetova.zarina'])
+
+  const single = await su('/api/admin/learners', {
+    method: 'POST',
+    json: { organizationId: school.id, classId: klass.id, displayName: 'Серік Дамир', login: '', password: '' },
+  })
+  assert.equal(single.status, 201)
+  assert.equal(single.body.login, 'serik.damir')
+  assert.match(single.body.password, /^[a-z0-9]{8}$/)
+
+  const exported = await su('/api/admin/learners/export', {
+    method: 'POST',
+    json: { organizationName: 'Школа №7', lang: 'ru', learners: bulk.body.learners },
+  })
+  assert.equal(exported.status, 200)
+  assert.equal(exported.headers.get('content-type'), XLSX)
+  const expBook = new ExcelJS.Workbook()
+  await expBook.xlsx.load(exported.buffer)
+  assert.deepEqual(expBook.worksheets[0].getRow(1).values.slice(1), ['Организация', 'Класс', 'ФИО', 'Логин', 'Пароль'])
+  assert.equal(expBook.worksheets[0].getRow(2).getCell(4).value, 'nurlanov.ernar')
+  expectError(await reg('/api/admin/learners/export', { method: 'POST', json: { learners: bulk.body.learners } }), 403, 'Недостаточно прав')
+
+  const list = await su(`/api/admin/learners?organizationId=${school.id}`)
+  assert.equal(list.status, 200)
+  assert.equal(list.body.total, 6)
+  const patched = await su(`/api/admin/learners/${single.body.id}`, {
+    method: 'PATCH',
+    json: { displayName: 'Серік Дамир М.', classId: klass.id },
+  })
+  assert.equal(patched.status, 200)
+  assert.equal(patched.body.displayName, 'Серік Дамир М.')
+  const deleted = await su(`/api/admin/learners/${single.body.id}`, { method: 'DELETE' })
+  assert.deepEqual(deleted.body, { ok: true })
+})
