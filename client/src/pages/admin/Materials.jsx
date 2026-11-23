@@ -47,6 +47,22 @@ function LessonRow({ lesson, index, total, prevId, nextId, sections, onMove, onR
   )
 }
 
+function SectionLessons({ items, sections, onMove, onReorder }) {
+  return items.map((lesson, index) => (
+    <LessonRow
+      key={lesson.id}
+      lesson={lesson}
+      index={index}
+      total={items.length}
+      prevId={items[index - 1]?.id}
+      nextId={items[index + 1]?.id}
+      sections={sections}
+      onMove={onMove}
+      onReorder={onReorder}
+    />
+  ))
+}
+
 export function MaterialList() {
   const { lang, t } = useI18n()
   const { lessons, sections, error, createSection, saveSection, removeSection, moveLesson, reorderLesson } = useMaterialList()
@@ -125,61 +141,57 @@ export function MaterialList() {
       )}
       {lessons === null && !error && <p className="muted">{t('Загрузка…')}</p>}
       {hiddenByLang && <p className="muted">{t('В этом языке пока нет уроков.')}</p>}
-      <div className="stack">
-        {sections.map((section) => {
-          const draft = draftOf(section)
-          const inside = visible?.filter((lesson) => lesson.section?.id === section.id) || []
-          return (
-            <section className="stack" key={section.id}>
-              <div className="section-head">
-                <h2>{section.name}</h2>
-                <Link className="primary" to={`/admin/materials/new?section=${section.id}`}>{t('+ Урок')}</Link>
+      {(sections.length > 0 || loose.length > 0) && (
+        <div className="accordion">
+          {sections.map((section) => {
+            const draft = draftOf(section)
+            const inside = visible?.filter((lesson) => lesson.section?.id === section.id) || []
+            const groupsText = groupLabels(section.groups, t)
+            return (
+              <details key={section.id}>
+                <summary>
+                  <span className="summary-line">
+                    <span>{section.name}</span>
+                    <span className="muted">
+                      {t('Уроков: {count}', { count: inside.length })}
+                      {groupsText ? ` · ${groupsText}` : ''}
+                    </span>
+                  </span>
+                </summary>
+                <div className="stack">
+                  <div className="form-card-head">
+                    <span className="muted">{groupLabels(draft.groups, t) || t('Блоки не выбраны')}</span>
+                    <Link className="primary" to={`/admin/materials/new?section=${section.id}`}>{t('+ Урок')}</Link>
+                  </div>
+                  <label>
+                    {t('Название')}
+                    <input value={draft.name} onChange={(event) => patchDraft(section, { name: event.target.value })} />
+                  </label>
+                  <GroupChecks groups={draft.groups} onChange={(next) => patchDraft(section, { groups: next })} />
+                  <div className="row-actions">
+                    <button className="primary" type="button" onClick={() => keepSection(section)}>{t('Сохранить раздел')}</button>
+                    <button className="ghost" type="button" onClick={() => dropSection(section)}>{t('Удалить раздел')}</button>
+                  </div>
+                  <SectionLessons items={inside} sections={sections} onMove={moveLesson} onReorder={reorderLesson} />
+                </div>
+              </details>
+            )
+          })}
+          {loose.length > 0 && (
+            <details>
+              <summary>
+                <span className="summary-line">
+                  <span>{t('Без раздела')}</span>
+                  <span className="muted">{t('Уроков: {count}', { count: loose.length })}</span>
+                </span>
+              </summary>
+              <div className="stack">
+                <SectionLessons items={loose} sections={sections} onMove={moveLesson} onReorder={reorderLesson} />
               </div>
-              <label>
-                {t('Название')}
-                <input value={draft.name} onChange={(event) => patchDraft(section, { name: event.target.value })} />
-              </label>
-              <GroupChecks groups={draft.groups} onChange={(next) => patchDraft(section, { groups: next })} />
-              <p className="muted">{groupLabels(draft.groups, t) || t('Блоки не выбраны')}</p>
-              <div className="row-actions">
-                <button className="primary" type="button" onClick={() => keepSection(section)}>{t('Сохранить раздел')}</button>
-                <button className="ghost" type="button" onClick={() => dropSection(section)}>{t('Удалить раздел')}</button>
-              </div>
-              {inside.map((lesson, index) => (
-                <LessonRow
-                  key={lesson.id}
-                  lesson={lesson}
-                  index={index}
-                  total={inside.length}
-                  prevId={inside[index - 1]?.id}
-                  nextId={inside[index + 1]?.id}
-                  sections={sections}
-                  onMove={moveLesson}
-                  onReorder={reorderLesson}
-                />
-              ))}
-            </section>
-          )
-        })}
-        {loose.length > 0 && (
-          <section className="stack">
-            <h2>{t('Без раздела')}</h2>
-            {loose.map((lesson, index) => (
-              <LessonRow
-                key={lesson.id}
-                lesson={lesson}
-                index={index}
-                total={loose.length}
-                prevId={loose[index - 1]?.id}
-                nextId={loose[index + 1]?.id}
-                sections={sections}
-                onMove={moveLesson}
-                onReorder={reorderLesson}
-              />
-            ))}
-          </section>
-        )}
-      </div>
+            </details>
+          )}
+        </div>
+      )}
     </section>
   )
 }

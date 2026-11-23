@@ -20,11 +20,34 @@ function groupLessons(lessons, lang) {
   return blocks.sort((left, right) => left.sort - right.sort || left.title.localeCompare(right.title, locale))
 }
 
+function LessonCard({ lesson, index }) {
+  const { lang, t } = useI18n()
+  const countLang = lesson.languages?.[lang] ? lang : (lesson.languages?.ru ? 'ru' : 'kk')
+  const slides = countLang === 'kk' ? (lesson.slideCountKk ?? lesson.slideCount) : lesson.slideCount
+  const questions = countLang === 'kk' ? (lesson.questionCountKk ?? lesson.questionCount) : lesson.questionCount
+  const badges = [lesson.languages?.ru && 'Рус', lesson.languages?.kk && 'Қаз'].filter(Boolean).join(' · ')
+  return (
+    <Link className="lesson-card" to={`/learn/lessons/${lesson.id}`}>
+      <div>
+        <h2>{index + 1}. {pick(lang, lesson.title, lesson.titleKk)}</h2>
+        <p className="muted">
+          {lesson.format === 'video'
+            ? t('Видео · {count} вопр.', { count: questions })
+            : t('Презентация · {slides} сл. · {count} вопр.', { slides, count: questions })}
+          {badges ? ` · ${badges}` : ''}
+        </p>
+      </div>
+      <span>{lesson.best ? t('{score} из {total}', { score: lesson.best.score, total: lesson.best.total }) : t('Открыть')}</span>
+    </Link>
+  )
+}
+
 export default function LearnerHome({ onLogout }) {
   const { lang, t } = useI18n()
   const { me, lessons, live, error } = useLearnerHome()
   const visibleLessons = lessons?.filter((lesson) => lesson.languages?.[lang])
   const hiddenByLang = Boolean(lessons?.length && visibleLessons?.length === 0)
+  const blocks = groupLessons(visibleLessons, lang)
 
   return (
     <LearnFrame onLogout={onLogout}>
@@ -47,31 +70,32 @@ export default function LearnerHome({ onLogout }) {
             {lessons && visibleLessons.length === 0 && (
               <p className="muted">{t(hiddenByLang ? 'В этом языке пока нет уроков.' : 'Для вашего класса пока нет уроков.')}</p>
             )}
-            {groupLessons(visibleLessons, lang).map((block) => (
-              <section className="stack" key={block.key || 'loose'}>
-                {block.title && <h2>{block.title}</h2>}
-                {block.lessons.map((lesson, index) => {
-                  const countLang = lesson.languages?.[lang] ? lang : (lesson.languages?.ru ? 'ru' : 'kk')
-                  const slides = countLang === 'kk' ? (lesson.slideCountKk ?? lesson.slideCount) : lesson.slideCount
-                  const questions = countLang === 'kk' ? (lesson.questionCountKk ?? lesson.questionCount) : lesson.questionCount
-                  const badges = [lesson.languages?.ru && 'Рус', lesson.languages?.kk && 'Қаз'].filter(Boolean).join(' · ')
+            {blocks.length === 1 && !blocks[0].title ? (
+              blocks[0].lessons.map((lesson, index) => (
+                <LessonCard key={lesson.id} lesson={lesson} index={index} />
+              ))
+            ) : blocks.length > 0 && (
+              <div className="accordion">
+                {blocks.map((block) => {
+                  const done = block.lessons.filter((lesson) => lesson.best).length
                   return (
-                    <Link className="lesson-card" key={lesson.id} to={`/learn/lessons/${lesson.id}`}>
-                      <div>
-                        <h2>{index + 1}. {pick(lang, lesson.title, lesson.titleKk)}</h2>
-                        <p className="muted">
-                          {lesson.format === 'video'
-                            ? t('Видео · {count} вопр.', { count: questions })
-                            : t('Презентация · {slides} сл. · {count} вопр.', { slides, count: questions })}
-                          {badges ? ` · ${badges}` : ''}
-                        </p>
+                    <details key={block.key || 'loose'} open={blocks.length === 1 || undefined}>
+                      <summary>
+                        <span className="summary-line">
+                          <span>{block.title || t('Без раздела')}</span>
+                          <span className="muted">{t('Пройдено: {done} из {total}', { done, total: block.lessons.length })}</span>
+                        </span>
+                      </summary>
+                      <div className="stack">
+                        {block.lessons.map((lesson, index) => (
+                          <LessonCard key={lesson.id} lesson={lesson} index={index} />
+                        ))}
                       </div>
-                      <span>{lesson.best ? t('{score} из {total}', { score: lesson.best.score, total: lesson.best.total }) : t('Открыть')}</span>
-                    </Link>
+                    </details>
                   )
                 })}
-              </section>
-            ))}
+              </div>
+            )}
           </div>
         </>
       )}

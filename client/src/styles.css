@@ -300,8 +300,10 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .accordion details { border: 1px solid var(--line); border-radius: 18px; background: var(--card); padding: 4px 16px 12px; }
 .accordion summary { cursor: pointer; padding: 12px 0; font-weight: 700; }
 .chart .accordion details { box-shadow: none; background: color-mix(in srgb, var(--bg-2) 55%, transparent); }
-.chart .accordion summary .summary-line { display: inline-flex; justify-content: space-between; align-items: baseline; gap: 8px 16px; width: calc(100% - 1.4em); vertical-align: middle; flex-wrap: wrap; }
-.chart .accordion summary .muted { font-weight: 500; }
+.accordion summary .summary-line { display: inline-flex; justify-content: space-between; align-items: baseline; gap: 8px 16px; width: calc(100% - 1.4em); vertical-align: middle; flex-wrap: wrap; }
+.accordion summary .muted { font-weight: 500; }
+.accordion details > .stack { padding-top: 12px; border-top: 1px solid var(--line); }
+.accordion details .lesson-card { box-shadow: none; background: color-mix(in srgb, var(--bg-2) 55%, transparent); }
 .chart-span { grid-column: 1 / -1; }
 .class-line { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 0; border-top: 1px solid var(--line); }
 .class-line .add-line { flex: 1; margin: 0; }
