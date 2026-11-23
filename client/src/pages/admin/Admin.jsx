@@ -3,7 +3,7 @@ import { useAdminProfile, useDashboard } from '../../state/admin/overview.js'
 import { AdminFrame } from '../../components/layout/AdminFrame.jsx'
 import { Classes, Learners } from './OrgPanels.jsx'
 import { Organizations, OrgStaff } from './RegionalPanels.jsx'
-import { LessonEditor, MaterialList, MaterialQuizEditor, MaterialQuizzes } from './Materials.jsx'
+import { LessonEditor, MaterialCatalog, MaterialList, MaterialQuizEditor, MaterialQuizzes } from './Materials.jsx'
 import { QuizLaunch } from './QuizLaunch.jsx'
 import { Regions, RegionalStaff } from './SuperPanels.jsx'
 import { DashboardView } from '../../components/admin/ui.jsx'
@@ -37,6 +37,7 @@ function tabsFor(role, t) {
   return [
     tab('/admin', 'Обзор', true),
     tab('/admin/stats', 'Статистика'),
+    tab('/admin/materials', 'Материалы'),
     tab('/admin/classes', 'Классы'),
     tab('/admin/learners', 'Тестируемые'),
     tab('/admin/quizzes', 'Квизы'),
@@ -72,7 +73,7 @@ export default function Admin({ onLogout }) {
           <>
             <Route path="materials" element={<MaterialList />} />
             <Route path="materials/new" element={<LessonEditor />} />
-            <Route path="materials/:id/play" element={<LessonView backTo="/admin/materials" />} />
+            <Route path="materials/:id/play" element={<LessonView backTo="/admin/materials" preview />} />
             <Route path="materials/:id" element={<LessonEditor />} />
             <Route path="quizzes" element={<MaterialQuizzes />} />
             <Route path="quizzes/new" element={<MaterialQuizEditor />} />
@@ -94,6 +95,8 @@ export default function Admin({ onLogout }) {
         )}
         {me.role === 'org' && (
           <>
+            <Route path="materials" element={<MaterialCatalog />} />
+            <Route path="materials/:id/play" element={<LessonView backTo="/admin/materials" preview />} />
             <Route path="classes" element={<Classes />} />
             <Route path="learners" element={<Learners />} />
             <Route path="quizzes" element={<QuizLaunch />} />

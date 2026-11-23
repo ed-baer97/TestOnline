@@ -53,6 +53,14 @@ export async function listLessonsForBand(band) {
   return db.all(`SELECT * FROM lessons WHERE ${band} = 1 ORDER BY COALESCE(sort_order, 0) ASC, created_at ASC, id ASC`)
 }
 
+export async function listLessonsForBands(bands) {
+  const valid = bands.filter((band) => GROUP_KEYS.includes(band))
+  if (valid.length === 0) return []
+  return db.all(
+    `SELECT * FROM lessons WHERE (${valid.map((band) => `${band} = 1`).join(' OR ')}) ORDER BY COALESCE(sort_order, 0) ASC, created_at ASC, id ASC`,
+  )
+}
+
 export async function nextLessonSortOrder() {
   const row = await db.get('SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM lessons')
   return Number(row?.n || 0)

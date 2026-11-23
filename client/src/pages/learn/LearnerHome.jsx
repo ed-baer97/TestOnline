@@ -1,24 +1,9 @@
 import { Link } from 'react-router-dom'
 import { LearnFrame } from '../../components/layout/LearnFrame.jsx'
+import { groupLessons } from '../../lib/lessons.js'
 import { pick, useI18n } from '../../state/i18n.jsx'
 import { useLearnerHome } from '../../state/learnerHome.js'
 import LessonView from '../lessons/LessonView.jsx'
-
-function groupLessons(lessons, lang) {
-  const blocks = []
-  const index = new Map()
-  for (const lesson of lessons || []) {
-    const key = lesson.section?.id || ''
-    if (!index.has(key)) {
-      const block = { key, title: lesson.section?.name || '', sort: lesson.section?.sortOrder ?? 9999, lessons: [] }
-      index.set(key, block)
-      blocks.push(block)
-    }
-    index.get(key).lessons.push(lesson)
-  }
-  const locale = lang === 'kk' ? 'kk' : 'ru'
-  return blocks.sort((left, right) => left.sort - right.sort || left.title.localeCompare(right.title, locale))
-}
 
 function LessonCard({ lesson, index }) {
   const { lang, t } = useI18n()

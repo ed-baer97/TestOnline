@@ -3,6 +3,7 @@ import { GROUP_KEYS } from '../../domain/structure.js'
 import { config } from '../../infrastructure/config.js'
 import * as classesRepo from '../../repositories/classes.js'
 import * as lessonsRepo from '../../repositories/lessons.js'
+import * as organizationsRepo from '../../repositories/organizations.js'
 
 export function attemptLimit() {
   return config.lessonMaxAttempts
@@ -15,8 +16,16 @@ export async function learnerBand(actor) {
   return row.band
 }
 
+export async function orgBands(actor) {
+  if (!actor.organizationId) return []
+  const org = await organizationsRepo.findOrganization(actor.organizationId)
+  if (!org) fail('Организация не найдена', 404)
+  return GROUP_KEYS.filter((key) => org.groups[key])
+}
+
 export async function canSee(actor, row) {
   if (actor.role === 'super') return true
+  if (actor.role === 'org') return (await orgBands(actor)).some((band) => Boolean(row[band]))
   if (actor.role !== 'learner') return false
   const band = await learnerBand(actor)
   return Boolean(row[band])

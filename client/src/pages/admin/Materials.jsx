@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { GroupChecks, Notice } from '../../components/admin/ui.jsx'
-import { EMPTY_GROUPS, groupLabels } from '../../lib/bands.js'
-import { blankFrame, blankQuestion, useLessonEditor, useMaterialList } from '../../state/admin/materials.js'
+import { BANDS, EMPTY_GROUPS, groupLabels } from '../../lib/bands.js'
+import { groupLessons } from '../../lib/lessons.js'
+import { blankFrame, blankQuestion, useLessonEditor, useMaterialCatalog, useMaterialList } from '../../state/admin/materials.js'
 import { useQuizList } from '../../state/host/quizzes.js'
 import { pick, useI18n } from '../../state/i18n.jsx'
 import Editor from '../host/Editor.jsx'
@@ -14,22 +15,24 @@ const TONES = [
   { id: 'earth', label: 'Земля' },
 ]
 
-function LessonRow({ lesson, index, total, prevId, nextId, sections, onMove, onReorder }) {
-  const { lang, t } = useI18n()
+function lessonSubtitle(lesson, lang, t) {
   const countLang = lesson.languages?.[lang] ? lang : (lesson.languages?.ru ? 'ru' : 'kk')
   const slides = countLang === 'kk' ? (lesson.slideCountKk ?? lesson.slideCount) : lesson.slideCount
   const questions = countLang === 'kk' ? (lesson.questionCountKk ?? lesson.questionCount) : lesson.questionCount
   const badges = [lesson.languages?.ru && 'Рус', lesson.languages?.kk && 'Қаз'].filter(Boolean).join(' · ')
+  const summary = lesson.format === 'video'
+    ? t('Видео · {count} вопр.', { count: questions })
+    : t('Презентация · {slides} сл. · {count} вопр.', { slides, count: questions })
+  return badges ? `${summary} · ${badges}` : summary
+}
+
+function LessonRow({ lesson, index, total, prevId, nextId, sections, onMove, onReorder }) {
+  const { lang, t } = useI18n()
   return (
     <article className="lesson-card">
       <div>
         <h2>{index + 1}. {pick(lang, lesson.title, lesson.titleKk)}</h2>
-        <p className="muted">
-          {lesson.format === 'video'
-            ? t('Видео · {count} вопр.', { count: questions })
-            : t('Презентация · {slides} сл. · {count} вопр.', { slides, count: questions })}
-          {badges ? ` · ${badges}` : ''}
-        </p>
+        <p className="muted">{lessonSubtitle(lesson, lang, t)}</p>
       </div>
       <div className="row-actions">
         <button className="ghost" type="button" disabled={index === 0} onClick={() => onReorder(lesson.id, -1, prevId)}>{t('Выше')}</button>
@@ -61,6 +64,79 @@ function SectionLessons({ items, sections, onMove, onReorder }) {
       onReorder={onReorder}
     />
   ))
+}
+
+function blockGroupLabels(items, t) {
+  const combined = Object.fromEntries(BANDS.map((band) => [band.id, items.some((lesson) => lesson.groups?.[band.id])]))
+  return groupLabels(combined, t)
+}
+
+function CatalogCard({ lesson, index }) {
+  const { lang, t } = useI18n()
+  const subtitle = lessonSubtitle(lesson, lang, t)
+  const groupsText = groupLabels(lesson.groups, t)
+  return (
+    <Link className="lesson-card" to={`/admin/materials/${lesson.id}/play`}>
+      <div>
+        <h2>{index + 1}. {pick(lang, lesson.title, lesson.titleKk)}</h2>
+        <p className="muted">
+          {subtitle}
+          {groupsText ? ` · ${groupsText}` : ''}
+        </p>
+      </div>
+      <span className="primary">{t('Открыть')}</span>
+    </Link>
+  )
+}
+
+export function MaterialCatalog() {
+  const { lang, t } = useI18n()
+  const { lessons, error } = useMaterialCatalog()
+  const visible = lessons?.filter((lesson) => lesson.languages?.[lang]) || []
+  const hiddenByLang = Boolean(lessons?.length && visible.length === 0)
+  const blocks = groupLessons(visible, lang)
+
+  return (
+    <section className="stack">
+      <div className="section-head">
+        <h1>{t('Материалы')}</h1>
+      </div>
+      {error && <p className="form-error">{t(error)}</p>}
+      {lessons === null && !error && <p className="muted">{t('Загрузка…')}</p>}
+      {lessons && visible.length === 0 && (
+        <p className="muted">{t(hiddenByLang ? 'В этом языке пока нет уроков.' : 'Нет уроков')}</p>
+      )}
+      {blocks.length === 1 && !blocks[0].title ? (
+        blocks[0].lessons.map((lesson, index) => (
+          <CatalogCard key={lesson.id} lesson={lesson} index={index} />
+        ))
+      ) : blocks.length > 0 && (
+        <div className="accordion">
+          {blocks.map((block) => {
+            const groupsText = blockGroupLabels(block.lessons, t)
+            return (
+              <details key={block.key || 'loose'} open={blocks.length === 1 || undefined}>
+                <summary>
+                  <span className="summary-line">
+                    <span>{block.title || t('Без раздела')}</span>
+                    <span className="muted">
+                      {t('Уроков: {count}', { count: block.lessons.length })}
+                      {groupsText ? ` · ${groupsText}` : ''}
+                    </span>
+                  </span>
+                </summary>
+                <div className="stack">
+                  {block.lessons.map((lesson, index) => (
+                    <CatalogCard key={lesson.id} lesson={lesson} index={index} />
+                  ))}
+                </div>
+              </details>
+            )
+          })}
+        </div>
+      )}
+    </section>
+  )
 }
 
 export function MaterialList() {

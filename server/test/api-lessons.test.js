@@ -36,6 +36,7 @@ async function people(base) {
   await call(base, '/api/admin/learners', { method: 'POST', cookie: orgCookie, json: { login: 'student', password: 'secret1', displayName: 'Студент', classId: group.id } })
   return {
     root,
+    regional,
     org: orgCookie,
     pupil: await login(base, 'pupil', 'secret1'),
     student: await login(base, 'student', 'secret1'),
@@ -82,7 +83,10 @@ test('уроки по HTTP: список, правка, тест, картинк
     best: null,
   }])
   const demoId = list.body.lessons[0].id
-  expectError(await call(base, '/api/lessons', { cookie: who.org }), 403, 'Недостаточно прав')
+  expectError(await call(base, '/api/lessons', { cookie: who.regional }), 403, 'Недостаточно прав')
+  const orgList = await call(base, '/api/lessons', { cookie: who.org })
+  assert.equal(orgList.status, 200)
+  assert.deepEqual(orgList.body.lessons.map((item) => item.id), [demoId])
   assert.equal((await call(base, '/api/lessons', { cookie: who.student })).body.lessons.length, 0)
 
   const demo = (await call(base, `/api/lessons/${demoId}`, { cookie: who.pupil })).body
@@ -105,8 +109,17 @@ test('уроки по HTTP: список, правка, тест, картинк
   expectError(await call(base, `/api/lessons/${demoId}`, { cookie: who.student }), 404, 'Урок не найден')
   expectError(await call(base, '/api/lessons/missing', { cookie: who.pupil }), 404, 'Урок не найден')
   assert.equal((await call(base, `/api/lessons/${demoId}`, { cookie: who.root })).body.questions[0].correctIndex, 0)
+  const orgLesson = await call(base, `/api/lessons/${demoId}`, { cookie: who.org })
+  assert.equal(orgLesson.status, 200)
+  assert.equal(orgLesson.body.attempts, null)
+  assert.equal(orgLesson.body.questions[0].correctIndex, undefined)
 
   const answers = demo.questions.map((question, index) => ({ questionId: question.id, optionIndex: index === 0 ? 1 : 0 }))
+  const orgCheck = await call(base, `/api/lessons/${demoId}/check`, { method: 'POST', cookie: who.org, json: { answers } })
+  assert.equal(orgCheck.status, 200)
+  assert.equal(orgCheck.body.score, 3)
+  assert.equal(orgCheck.body.repeated, false)
+  assert.equal(orgCheck.body.attempts, null)
   const checked = await call(base, `/api/lessons/${demoId}/check`, { method: 'POST', cookie: who.pupil, json: { answers } })
   assert.equal(checked.status, 200)
   assert.deepEqual(checked.body, {
@@ -146,7 +159,16 @@ test('уроки по HTTP: список, правка, тест, картинк
     delete process.env.LESSON_MAX_ATTEMPTS
   }
 
+  expectError(await call(base, '/api/admin/lesson-sections', { cookie: who.org }), 403, 'Недостаточно прав')
   expectError(await call(base, '/api/admin/lessons', { method: 'POST', cookie: who.org, json: {} }), 403, 'Недостаточно прав')
+  const junior = (await call(base, '/api/admin/lessons', {
+    method: 'POST',
+    cookie: who.root,
+    json: { title: 'Младшим', groups: { grades_1_4: true }, slides: [{ kind: 'frame', tone: 'orbit', kicker: '1', title: 'Тема', lines: ['Текст'] }], questions: quizPart.questions },
+  })).body
+  assert.equal((await call(base, '/api/lessons', { cookie: who.org })).body.lessons.some((item) => item.id === junior.id), false)
+  expectError(await call(base, `/api/lessons/${junior.id}`, { cookie: who.org }), 404, 'Урок не найден')
+  await call(base, `/api/admin/lessons/${junior.id}`, { method: 'DELETE', cookie: who.root })
   expectError(await call(base, '/api/admin/lessons', { method: 'POST', cookie: who.root, json: { title: 'Без групп', questions: quizPart.questions } }), 400, 'Отметьте хотя бы одну группу')
   expectError(await call(base, '/api/admin/lessons', { method: 'POST', cookie: who.root, json: { title: 'Картинка', ...quizPart, slides: [{ kind: 'image', caption: 'x' }] } }), 400, 'Слайд 1: загрузите картинку')
   expectError(await call(base, '/api/admin/lessons', { method: 'POST', cookie: who.root, json: { title: 'Картинка', ...quizPart, slides: [{ kind: 'image', dataUrl: 'data:image/gif;base64,R0lG' }] } }), 400, 'Слайд: нужна картинка PNG, JPEG или WebP')

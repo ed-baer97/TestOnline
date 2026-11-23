@@ -79,6 +79,16 @@ test('урок: презентация, тест и видимость по гр
   const adminCheck = await lessons.checkLesson(root, demoId, answers)
   assert.equal(adminCheck.attempts, null)
 
+  const orgList = await lessons.listLessons(orgAdmin)
+  assert.equal(orgList.length, 1)
+  assert.equal(orgList[0].id, demoId)
+  const orgLesson = await lessons.getLesson(orgAdmin, demoId)
+  assert.equal(orgLesson.attempts, null)
+  assert.equal(orgLesson.questions[0].correctIndex, undefined)
+  const orgCheck = await lessons.checkLesson(orgAdmin, demoId, answers)
+  assert.equal(orgCheck.score, 3)
+  assert.equal(orgCheck.attempts, null)
+
   await assert.rejects(() => lessons.createLesson(orgAdmin, {}), (error) => error.status === 403)
 
   const uploaded = await lessons.createLesson(root, {
@@ -96,6 +106,8 @@ test('урок: презентация, тест и видимость по гр
   const picture = await lessons.openLessonFile(pupil, uploaded.slides[0].fileId)
   assert.equal(picture.mime, 'image/png')
   assert.equal(fs.readFileSync(picture.path).toString('base64'), pixel.split(',')[1])
+  const orgPicture = await lessons.openLessonFile(orgAdmin, uploaded.slides[0].fileId)
+  assert.equal(orgPicture.mime, 'image/png')
   await assert.rejects(() => lessons.openLessonFile(student, uploaded.slides[0].fileId), (error) => error.status === 404)
   await assert.rejects(() => lessons.openLessonFile(pupil, '../etc/passwd'), (error) => error.status === 404)
   const hidden = await lessons.getLesson(pupil, uploaded.id)
@@ -105,6 +117,16 @@ test('урок: презентация, тест и видимость по гр
   await lessons.deleteLesson(root, uploaded.id)
   assert.equal(fs.existsSync(picture.path), false)
   await assert.rejects(() => lessons.openLessonFile(root, uploaded.slides[0].fileId), (error) => error.status === 404)
+
+  const junior = await lessons.createLesson(root, {
+    title: 'Малышам',
+    groups: { grades_1_4: true },
+    slides: [{ kind: 'frame', tone: 'orbit', kicker: '1', title: 'Бюджет', lines: ['Текст'] }],
+    questions: [{ text: 'Что?', correctIndex: 0, options: [{ text: 'Бюджет' }, { text: 'Ничего' }] }],
+  })
+  assert.equal((await lessons.listLessons(orgAdmin)).some((item) => item.id === junior.id), false)
+  await assert.rejects(() => lessons.getLesson(orgAdmin, junior.id), (error) => error.status === 404)
+  await lessons.deleteLesson(root, junior.id)
 
   const clip = await lessons.createLesson(root, {
     title: 'Ролик о планетах',

@@ -21,8 +21,8 @@ export function lessonTestState(questions, answers, currentIndex) {
   return { questionIndex, totalQuestions: total, currentQuestion, unansweredIndex, answeredCount, allAnswered }
 }
 
-// Тест открывается после всех слайдов или всего ролика; когда попытки исчерпаны, сразу виден последний результат.
-export function useLessonView(id, viewLang = 'ru') {
+// Тест открывается после всех слайдов или всего ролика; в режиме предпросмотра (preview) и после исчерпания попыток доступен сразу.
+export function useLessonView(id, viewLang = 'ru', { preview = false } = {}) {
   const [lesson, setLesson] = useState(null)
   const [error, setError] = useState('')
   const [index, setIndex] = useState(0)
@@ -109,7 +109,7 @@ export function useLessonView(id, viewLang = 'ru') {
   const slide = !isVideo ? lesson?.slides[index] : null
   const last = lesson?.slides?.length ? lesson.slides.length - 1 : 0
   const { locked, lockedLang, lockedOtherLang, sameLangResult } = lessonLockState(result, viewLang)
-  const watched = (locked && !lockedOtherLang) || (isVideo ? videoWatched : Boolean(lesson?.slides?.length) && seen.size > last)
+  const watched = preview || (locked && !lockedOtherLang) || (isVideo ? videoWatched : Boolean(lesson?.slides?.length) && seen.size > last)
   const byQuestion = new Map((sameLangResult ? result?.results || [] : []).map((item) => [item.questionId, item]))
   const attemptsLeft = result?.attempts ? result.attempts.max - result.attempts.used : lesson?.attempts ? lesson.attempts.max - lesson.attempts.used : null
   const testStep = lessonTestState(lesson?.questions, answers, questionIndex)

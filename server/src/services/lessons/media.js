@@ -11,7 +11,7 @@ import { dropLessonFiles, filePath, fileUrl, mediaFileName, mediaPath, removeVid
 import { slidesFromPptx } from './pptx.js'
 
 export async function openLessonFile(actor, fileId) {
-  assertRole(actor, 'super', 'learner')
+  assertRole(actor, 'super', 'org', 'learner')
   const target = filePath(fileId)
   const row = await lessonFilesRepo.findLessonFile(fileId)
   if (!row) fail('Файл не найден', 404)
@@ -50,7 +50,7 @@ export async function deleteLessonVideo(actor, id, lang = 'ru') {
 }
 
 export async function openLessonMedia(actor, id, lang = 'ru') {
-  assertRole(actor, 'super', 'learner')
+  assertRole(actor, 'super', 'org', 'learner')
   const row = await mustLesson(id)
   const chosen = readLang(lang)
   const mime = chosen === 'kk' ? row.video_mime_kk : row.video_mime

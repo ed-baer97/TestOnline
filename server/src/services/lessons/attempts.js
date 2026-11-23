@@ -24,7 +24,7 @@ export function presentAttempt(row, questions) {
 }
 
 export async function checkLesson(actor, id, answers, lang = 'ru') {
-  assertRole(actor, 'super', 'learner')
+  assertRole(actor, 'super', 'org', 'learner')
   const row = await mustLesson(id)
   if (!(await canSee(actor, row))) fail('Урок не найден', 404)
   const chosen = readLang(lang)

@@ -162,6 +162,21 @@ export function useMaterialList() {
   return { lessons, sections, error, createSection, saveSection, removeSection, moveLesson, reorderLesson }
 }
 
+export function useMaterialCatalog() {
+  const [lessons, setLessons] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    api.lessons()
+      .then((data) => { if (alive) setLessons(data.lessons) })
+      .catch((err) => { if (alive) setError(err.message) })
+    return () => { alive = false }
+  }, [])
+
+  return { lessons, error }
+}
+
 // Редактор урока. После первого сохранения урок обновляется по savedId, а новый адрес подменяет /new.
 export function useLessonEditor(id, navigate, initialSectionId = '') {
   const isNew = !id

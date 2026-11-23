@@ -21,7 +21,7 @@ import { cleanText, optionalLabel } from '../../domain/text.js'
 import * as lessonAttemptsRepo from '../../repositories/lessonAttempts.js'
 import * as lessonFilesRepo from '../../repositories/lessonFiles.js'
 import * as lessonsRepo from '../../repositories/lessons.js'
-import { attemptLimit, canSee, learnerBand, mustLesson } from './access.js'
+import { attemptLimit, canSee, learnerBand, mustLesson, orgBands } from './access.js'
 import { attemptsOf, presentAttempt } from './attempts.js'
 import { claimImportedFile, dropFiles, dropLessonFiles, fileUrl, removeVideoFile, storeFile } from './files.js'
 import { detachLesson, placeLesson, requireSection, sectionBrief, sectionBriefs } from './sections.js'
@@ -56,10 +56,15 @@ async function bestAttempts(userId) {
 }
 
 export async function listLessons(actor) {
-  assertRole(actor, 'super', 'learner')
+  assertRole(actor, 'super', 'org', 'learner')
   const sections = await sectionBriefs()
   if (actor.role === 'super') {
     const rows = await lessonsRepo.listAllLessons()
+    return rows.map((row) => summary(row, null, sections.get(row.id) || null))
+  }
+  if (actor.role === 'org') {
+    const bands = await orgBands(actor)
+    const rows = await lessonsRepo.listLessonsForBands(bands)
     return rows.map((row) => summary(row, null, sections.get(row.id) || null))
   }
   const band = await learnerBand(actor)
@@ -101,7 +106,7 @@ function packData(row, chosen, withKey) {
 }
 
 export async function getLesson(actor, id, lang = 'ru') {
-  assertRole(actor, 'super', 'learner')
+  assertRole(actor, 'super', 'org', 'learner')
   const row = await mustLesson(id)
   if (!(await canSee(actor, row))) fail('Урок не найден', 404)
   const chosen = readLang(lang)

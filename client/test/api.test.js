@@ -3,6 +3,7 @@ import test from 'node:test'
 import { api } from '../src/api/index.js'
 import { formatCode } from '../src/lib/format.js'
 import { newId } from '../src/lib/ids.js'
+import { groupLessons } from '../src/lib/lessons.js'
 import { lessonLockState, lessonTestState } from '../src/state/lessonView.js'
 import { forgetPlayerToken, readHostToken, readPlayerToken, saveHostToken, savePlayerToken } from '../src/state/roomTokens.js'
 
@@ -254,4 +255,25 @@ test('lessonTestState ведёт навигацию по одному вопро
     answeredCount: 3,
     allAnswered: true,
   })
+})
+
+test('groupLessons группирует уроки по разделам и переносит уроки без раздела в конец', () => {
+  const lessons = [
+    { id: 'l1', title: 'Без раздела', section: null },
+    { id: 'l2', title: 'Бюджет', section: { id: 's2', name: 'Безопасность', sortOrder: 2 } },
+    { id: 'l3', title: 'Старт', section: { id: 's1', name: 'Введение', sortOrder: 1 } },
+    { id: 'l4', title: 'Второй', section: { id: 's1', name: 'Введение', sortOrder: 1 } },
+  ]
+  assert.deepEqual(
+    groupLessons(lessons, 'ru').map((block) => ({
+      key: block.key,
+      title: block.title,
+      ids: block.lessons.map((item) => item.id),
+    })),
+    [
+      { key: 's1', title: 'Введение', ids: ['l3', 'l4'] },
+      { key: 's2', title: 'Безопасность', ids: ['l2'] },
+      { key: '', title: '', ids: ['l1'] },
+    ],
+  )
 })

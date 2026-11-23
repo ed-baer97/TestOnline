@@ -6,14 +6,14 @@ import { Slide } from '../../components/lesson/Slide.jsx'
 import { useI18n } from '../../state/i18n.jsx'
 import { useLessonView } from '../../state/lessonView.js'
 
-export default function LessonView({ backTo }) {
+export default function LessonView({ backTo, preview = false }) {
   const { lang, setLang, t } = useI18n()
   const { id } = useParams()
   const {
     lesson, available, languages, error, index, seen, answers, result, pending, setVideoWatched, showSlide, submit,
     isVideo, slide, last, locked, lockedLang, lockedOtherLang, watched, byQuestion, attemptsLeft,
     questionIndex, totalQuestions, currentQuestion, allAnswered, setQuestionIndex, chooseAnswer,
-  } = useLessonView(id, lang)
+  } = useLessonView(id, lang, { preview })
   const testRef = useRef(null)
   const [videoError, setVideoError] = useState(false)
 
