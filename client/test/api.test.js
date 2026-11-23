@@ -32,6 +32,8 @@ const cases = [
   [() => api.me(), get('/api/me')],
   [() => api.login('host', 'secret'), send('/api/login', 'POST', { login: 'host', password: 'secret' })],
   [() => api.logout(), send('/api/logout', 'POST')],
+  [() => api.registerOptions(), get('/api/register/options')],
+  [() => api.register({ role: 'org', organizationId: 'o1', firstName: 'Арман', lastName: 'Сериков', password: 'secret1' }), send('/api/register', 'POST', { role: 'org', organizationId: 'o1', firstName: 'Арман', lastName: 'Сериков', password: 'secret1' })],
   [() => api.dashboard(), get('/api/admin/dashboard')],
   [() => api.platformStats('r1'), get('/api/admin/platform-stats?regionId=r1')],
   [() => api.orgStats('o1'), get('/api/admin/org-stats?organizationId=o1')],

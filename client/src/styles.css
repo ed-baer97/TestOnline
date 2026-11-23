@@ -247,6 +247,18 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   overflow-wrap: anywhere;
 }
 .auth .primary { width: 100%; }
+.register-login-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg-2);
+}
+.register-login-box > div { display: grid; gap: 4px; min-width: 0; }
+.register-login-box strong { font-size: 1.15rem; overflow-wrap: anywhere; }
 .sheet { margin: 0 auto; padding: max(12px, env(safe-area-inset-top)) 20px 80px; }
 .topbar-slot { display: contents; }
 .topbar-slot:empty { display: none; }

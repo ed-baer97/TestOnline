@@ -16,6 +16,10 @@ export async function listDistrictRows(regionId) {
   )
 }
 
+export async function listAllDistricts() {
+  return db.all('SELECT id, region_id, name, name_kk FROM districts ORDER BY sort_order, name')
+}
+
 export async function listDistrictNames(regionId) {
   return db.all('SELECT id, name, name_kk FROM districts WHERE region_id = ?', regionId)
 }

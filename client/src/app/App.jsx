@@ -9,6 +9,7 @@ import LearnerHome, { LearnLesson } from '../pages/learn/LearnerHome.jsx'
 import Login from '../pages/Login.jsx'
 import Play from '../pages/play/Play.jsx'
 import Quizzes from '../pages/host/Quizzes.jsx'
+import Register from '../pages/Register.jsx'
 import Stats from '../pages/host/Stats.jsx'
 import { I18nProvider } from '../state/i18n.jsx'
 import { signOut } from '../state/session.js'
@@ -27,6 +28,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
       <Route path="/host/login" element={<Navigate to="/login" replace />} />
       <Route path="/host/register" element={<Navigate to="/login" replace />} />
       <Route path="/admin/*" element={<RequireAuth roles={['super', 'regional', 'org']}><Admin onLogout={logout} /></RequireAuth>} />

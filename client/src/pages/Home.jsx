@@ -42,6 +42,7 @@ export default function Home() {
         <Brand />
         <div className="top-actions">
           <EnvControls />
+          <Link className="ghost" to="/register">{t('Регистрация')}</Link>
           <Link className="ghost" to="/login">{t('Войти')}</Link>
         </div>
       </header>
@@ -54,6 +55,7 @@ export default function Home() {
             <p className="lead">{t('Короткие уроки о том, как не остаться без денег: звонок «из банка», ссылка от «друга», код из СМС. В конце пара вопросов, чтобы проверить себя.')}</p>
             <div className="home-actions">
               <Link className="primary" to="/login">{t('Войти в кабинет')}</Link>
+              <Link className="ghost" to="/register">{t('Регистрация')}</Link>
             </div>
             <form className="join-form" onSubmit={joinByCode}>
               <label>

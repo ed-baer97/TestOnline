@@ -302,3 +302,80 @@ test('ограничение неудачных попыток входа: ло�
   })
   assert.equal(afterReset.status, 401)
 })
+
+test('регистрация директора школы: варианты, автологин, вход и проверки', async (t) => {
+  const server = await startServer()
+  t.after(() => server.close())
+  const { base } = server
+  const root = await login(base, 'root', 'rootpass')
+
+  const region = (await call(base, '/api/admin/regions', {
+    method: 'POST',
+    cookie: root,
+    json: { name: 'Алматинская область', nameKk: 'Алматы облысы' },
+  })).body
+  await call(base, '/api/admin/regional-admins', {
+    method: 'POST',
+    cookie: root,
+    json: { login: 'almaty.reg', password: 'secret1', displayName: 'Серик', regionId: region.id },
+  })
+  const regCookie = await login(base, 'almaty.reg', 'secret1')
+  const district = (await call(base, '/api/admin/districts', {
+    method: 'POST',
+    cookie: regCookie,
+    json: { name: 'Карасайский район', nameKk: 'Қарасай ауданы' },
+  })).body
+  const school = (await call(base, '/api/admin/organizations', {
+    method: 'POST',
+    cookie: regCookie,
+    json: { name: 'Школа №10', nameKk: '№10 мектеп', districtId: district.id, groups: { grades_5_9: true } },
+  })).body
+
+  const options = await call(base, '/api/register/options')
+  assert.equal(options.status, 200)
+  assert.deepEqual(options.body.roles, [{ id: 'org', label: 'Директор школы' }])
+  assert.ok(options.body.regions.some((item) => item.id === region.id))
+  assert.ok(options.body.districts.some((item) => item.id === district.id))
+  assert.ok(options.body.organizations.some((item) => item.id === school.id))
+
+  const badRole = await call(base, '/api/register', {
+    method: 'POST',
+    json: { role: 'super', organizationId: school.id, firstName: 'Иван', lastName: 'Иванов', password: 'secret1' },
+  })
+  assert.equal(badRole.status, 400)
+  assert.equal(badRole.body.error, 'Сейчас доступна регистрация только для роли «Директор школы»')
+
+  const badPass = await call(base, '/api/register', {
+    method: 'POST',
+    json: { role: 'org', organizationId: school.id, firstName: 'Иван', lastName: 'Иванов', password: '123' },
+  })
+  assert.equal(badPass.status, 400)
+
+  const missingOrg = await call(base, '/api/register', {
+    method: 'POST',
+    json: { role: 'org', organizationId: 'missing', firstName: 'Иван', lastName: 'Иванов', password: 'secret1' },
+  })
+  assert.equal(missingOrg.status, 404)
+
+  const first = await call(base, '/api/register', {
+    method: 'POST',
+    json: { role: 'org', organizationId: school.id, firstName: 'Арман', lastName: 'Сериков', password: 'secret1' },
+  })
+  assert.equal(first.status, 201)
+  assert.equal(first.body.ok, true)
+  assert.equal(first.body.role, 'org')
+  assert.equal(first.body.login, 'arman.serikov')
+  assert.equal(first.body.displayName, 'Арман Сериков')
+
+  const cookie = first.headers.get('set-cookie').split(';')[0]
+  assert.equal((await call(base, '/api/admin/dashboard', { cookie })).status, 200)
+  const me = await call(base, '/api/me', { cookie })
+  assert.equal(me.body.organizationId, school.id)
+
+  const second = await call(base, '/api/register', {
+    method: 'POST',
+    json: { role: 'org', organizationId: school.id, firstName: 'Арман', lastName: 'Сериков', password: 'secret2' },
+  })
+  assert.equal(second.status, 201)
+  assert.equal(second.body.login, 'arman.serikov2')
+})

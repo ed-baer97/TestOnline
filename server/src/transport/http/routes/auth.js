@@ -1,6 +1,6 @@
 import { config } from '../../../infrastructure/config.js'
 import { SESSION_TTL_MS, readSession, signSession } from '../../../infrastructure/session.js'
-import { authenticate, profile, sessionProfile } from '../../../services/accounts.js'
+import { authenticate, profile, registerAccount, registrationOptions, sessionProfile } from '../../../services/accounts.js'
 import { route } from '../middleware.js'
 import { createRateLimiter } from '../rateLimit.js'
 
@@ -11,6 +11,7 @@ const LOGIN_ACCOUNT_MAX = 10
 const LOGIN_IP_MAX = 120
 const loginAccountLimiter = createRateLimiter({ windowMs: LOGIN_WINDOW_MS, max: LOGIN_ACCOUNT_MAX })
 const loginIpLimiter = createRateLimiter({ windowMs: LOGIN_WINDOW_MS, max: LOGIN_IP_MAX })
+const registerIpLimiter = createRateLimiter({ windowMs: LOGIN_WINDOW_MS, max: 20 })
 
 function sendSession(res, user, passwordHash, status = 200) {
   res.cookie('session', signSession(user.id, passwordHash), {
@@ -71,5 +72,20 @@ export function registerAuthRoutes(app) {
     const session = readSession(req.cookies.session)
     const user = session?.userId ? await sessionProfile(session) : null
     res.json(user ? { ok: true, ...user } : { ok: false })
+  }))
+
+  app.get('/api/register/options', route(async (_req, res) => {
+    res.json(await registrationOptions())
+  }))
+
+  app.post('/api/register', route(async (req, res) => {
+    const ip = req.ip || 'unknown'
+    if (registerIpLimiter.isBlocked(ip)) {
+      res.status(429).json({ error: 'Слишком много запросов. Попробуйте через минуту' })
+      return
+    }
+    registerIpLimiter.hit(ip)
+    const { user, passwordHash } = await registerAccount(req.body || {})
+    sendSession(res, user, passwordHash, 201)
   }))
 }

@@ -1,11 +1,15 @@
 import crypto from 'node:crypto'
-import { normalizeAccount, readPassword } from '../domain/accounts.js'
+import { allocateUniqueLogin, loginBaseFromName, normalizeAccount, readPassword } from '../domain/accounts.js'
 import { fail } from '../domain/errors.js'
 import { classCaption } from '../domain/structure.js'
+import { cleanLabel, cleanText } from '../domain/text.js'
 import { config } from '../infrastructure/config.js'
 import { hashPassword, verifyPassword } from '../infrastructure/passwords.js'
 import { sessionMatchesPassword } from '../infrastructure/session.js'
+import * as districtsRepo from '../repositories/districts.js'
+import * as organizationsRepo from '../repositories/organizations.js'
 import * as quizzesRepo from '../repositories/quizzes.js'
+import * as regionsRepo from '../repositories/regions.js'
 import * as resultsRepo from '../repositories/results.js'
 import * as usersRepo from '../repositories/users.js'
 import { addDemoQuiz } from './quizzes.js'
@@ -116,4 +120,79 @@ export async function changePassword(id, password) {
   const next = readPassword(password)
   if (!next) return
   await usersRepo.updatePasswordHash(id, await hashPassword(next))
+}
+
+export async function registrationOptions() {
+  const [regions, districts, organizations] = await Promise.all([
+    regionsRepo.listRegions(),
+    districtsRepo.listAllDistricts(),
+    organizationsRepo.listAllOrganizations(),
+  ])
+  return {
+    roles: [{ id: 'org', label: 'Директор школы' }],
+    regions: regions
+      .map((r) => ({ id: r.id, name: r.name, nameKk: r.nameKk || '' }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
+    districts: districts.map((d) => ({
+      id: d.id,
+      regionId: d.region_id,
+      name: d.name,
+      nameKk: d.name_kk || '',
+    })),
+    organizations: organizations
+      .map((o) => ({
+        id: o.id,
+        regionId: o.regionId,
+        districtId: o.districtId || null,
+        name: o.name,
+        nameKk: o.nameKk || '',
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
+  }
+}
+
+export async function registerAccount(input) {
+  const role = cleanText(input?.role ?? 'org')
+  if (role !== 'org') fail('Сейчас доступна регистрация только для роли «Директор школы»')
+  const firstName = cleanLabel(input?.firstName, 2, 40, 'Имя')
+  const lastName = cleanLabel(input?.lastName, 2, 40, 'Фамилия')
+  const password = String(input?.password ?? '')
+  if (password.length < 6 || password.length > 72) fail('Пароль от 6 до 72 символов')
+  const organizationId = typeof input?.organizationId === 'string' ? input.organizationId.trim() : ''
+  if (!organizationId) fail('Выберите организацию')
+  const org = await organizationsRepo.findOrganization(organizationId)
+  if (!org) fail('Организация не найдена', 404)
+
+  const displayName = `${firstName} ${lastName}`
+  const base = loginBaseFromName(displayName)
+  const taken = await usersRepo.findTakenLoginsByPrefixes([base])
+  const passwordHash = await hashPassword(password)
+  const createdAt = new Date().toISOString()
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const candidateBase = attempt >= 4
+      ? `${base.slice(0, 22).replace(/\.+$/, '')}${crypto.randomInt(1000, 10000)}`
+      : base
+    const login = allocateUniqueLogin(candidateBase, taken)
+    const id = crypto.randomUUID()
+    try {
+      await usersRepo.insertUser({
+        id,
+        login,
+        passwordHash,
+        createdAt,
+        role: 'org',
+        displayName,
+        regionId: null,
+        organizationId: org.id,
+        classId: null,
+      })
+      return { user: await profile(id), passwordHash }
+    } catch (error) {
+      if (usersRepo.isLoginTaken(error) && attempt < 4) continue
+      if (usersRepo.isLoginTaken(error)) fail('Не удалось подобрать свободный логин. Попробуйте снова', 409)
+      throw error
+    }
+  }
+  fail('Не удалось подобрать свободный логин. Попробуйте снова', 409)
 }

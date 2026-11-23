@@ -4,4 +4,6 @@ export const authApi = {
   me: () => request('/api/me'),
   login: (login, password) => request('/api/login', { method: 'POST', body: JSON.stringify({ login, password }) }),
   logout: () => request('/api/logout', { method: 'POST' }),
+  registerOptions: () => request('/api/register/options'),
+  register: (body) => request('/api/register', { method: 'POST', body: JSON.stringify(body) }),
 }

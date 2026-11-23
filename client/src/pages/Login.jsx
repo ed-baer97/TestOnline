@@ -38,6 +38,7 @@ export default function Login() {
         </label>
         {error && <p className="form-error">{t(error)}</p>}
         <button className="primary" type="submit" disabled={pending}>{t('Войти')}</button>
+        <Link className="text-link" to="/register">{t('Регистрация для директора школы')}</Link>
         <Link className="text-link" to="/">{t('На главную')}</Link>
       </form>
     </main>
