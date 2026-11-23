@@ -73,6 +73,7 @@ export function useRegister(navigate) {
   const [organizationId, setOrganizationId] = useState('')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
@@ -135,7 +136,7 @@ export function useRegister(navigate) {
     setError('')
     setPending(true)
     try {
-      const data = await api.register({ role, organizationId, firstName, lastName, password })
+      const data = await api.register({ role, organizationId, firstName, lastName, email, password })
       dropResource()
       registeredRef.current = true
       setCreated(data)
@@ -169,6 +170,8 @@ export function useRegister(navigate) {
     setFirstName,
     lastName,
     setLastName,
+    email,
+    setEmail,
     password,
     setPassword,
     error,

@@ -194,7 +194,7 @@ test('разбор тела запроса: лимиты и битый JSON', as
 
   const lessonBody = await call(base, '/api/admin/lessons', { method: 'POST', cookie: rootCookie, json: { title: 'x', pad: 'a'.repeat(1024 * 1024) } })
   assert.equal(lessonBody.status, 400)
-  assert.deepEqual(lessonBody.body, { error: 'Название урока: от 2 до 80 символов' })
+  assert.deepEqual(lessonBody.body, { error: 'Название урока: от 2 до 200 символов' })
 
   const anonBroken = await call(base, '/api/admin/lessons', {
     method: 'POST',
@@ -338,43 +338,73 @@ test('регистрация директора школы: варианты, а
   assert.ok(options.body.districts.some((item) => item.id === district.id))
   assert.ok(options.body.organizations.some((item) => item.id === school.id))
 
+  const missingEmail = await call(base, '/api/register', {
+    method: 'POST',
+    json: { role: 'org', organizationId: school.id, firstName: 'Иван', lastName: 'Иванов', password: 'secret1' },
+  })
+  assert.equal(missingEmail.status, 400)
+  assert.equal(missingEmail.body.error, 'Укажите корректную почту')
+
+  const badEmail = await call(base, '/api/register', {
+    method: 'POST',
+    json: { role: 'org', organizationId: school.id, firstName: 'Иван', lastName: 'Иванов', email: 'bad-email', password: 'secret1' },
+  })
+  assert.equal(badEmail.status, 400)
+  assert.equal(badEmail.body.error, 'Укажите корректную почту')
+
   const badRole = await call(base, '/api/register', {
     method: 'POST',
-    json: { role: 'super', organizationId: school.id, firstName: 'Иван', lastName: 'Иванов', password: 'secret1' },
+    json: { role: 'super', organizationId: school.id, firstName: 'Иван', lastName: 'Иванов', email: 'ivan@school.kz', password: 'secret1' },
   })
   assert.equal(badRole.status, 400)
   assert.equal(badRole.body.error, 'Сейчас доступна регистрация только для роли «Директор школы»')
 
   const badPass = await call(base, '/api/register', {
     method: 'POST',
-    json: { role: 'org', organizationId: school.id, firstName: 'Иван', lastName: 'Иванов', password: '123' },
+    json: { role: 'org', organizationId: school.id, firstName: 'Иван', lastName: 'Иванов', email: 'ivan@school.kz', password: '123' },
   })
   assert.equal(badPass.status, 400)
 
   const missingOrg = await call(base, '/api/register', {
     method: 'POST',
-    json: { role: 'org', organizationId: 'missing', firstName: 'Иван', lastName: 'Иванов', password: 'secret1' },
+    json: { role: 'org', organizationId: 'missing', firstName: 'Иван', lastName: 'Иванов', email: 'ivan@school.kz', password: 'secret1' },
   })
   assert.equal(missingOrg.status, 404)
 
   const first = await call(base, '/api/register', {
     method: 'POST',
-    json: { role: 'org', organizationId: school.id, firstName: 'Арман', lastName: 'Сериков', password: 'secret1' },
+    json: { role: 'org', organizationId: school.id, firstName: 'Арман', lastName: 'Сериков', email: 'Arman@School.KZ', password: 'secret1' },
   })
   assert.equal(first.status, 201)
   assert.equal(first.body.ok, true)
   assert.equal(first.body.role, 'org')
   assert.equal(first.body.login, 'arman.serikov')
+  assert.equal(first.body.email, 'arman@school.kz')
   assert.equal(first.body.displayName, 'Арман Сериков')
 
   const cookie = first.headers.get('set-cookie').split(';')[0]
   assert.equal((await call(base, '/api/admin/dashboard', { cookie })).status, 200)
   const me = await call(base, '/api/me', { cookie })
   assert.equal(me.body.organizationId, school.id)
+  assert.equal(me.body.email, 'arman@school.kz')
+
+  const loginByEmail = await call(base, '/api/login', {
+    method: 'POST',
+    json: { login: 'ARMAN@school.kz', password: 'secret1' },
+  })
+  assert.equal(loginByEmail.status, 200)
+  assert.equal(loginByEmail.body.login, 'arman.serikov')
+
+  const dupEmail = await call(base, '/api/register', {
+    method: 'POST',
+    json: { role: 'org', organizationId: school.id, firstName: 'Другой', lastName: 'Директор', email: 'arman@SCHOOL.kz', password: 'secret2' },
+  })
+  assert.equal(dupEmail.status, 409)
+  assert.equal(dupEmail.body.error, 'Эта почта уже зарегистрирована')
 
   const second = await call(base, '/api/register', {
     method: 'POST',
-    json: { role: 'org', organizationId: school.id, firstName: 'Арман', lastName: 'Сериков', password: 'secret2' },
+    json: { role: 'org', organizationId: school.id, firstName: 'Арман', lastName: 'Сериков', email: 'arman2@school.kz', password: 'secret2' },
   })
   assert.equal(second.status, 201)
   assert.equal(second.body.login, 'arman.serikov2')

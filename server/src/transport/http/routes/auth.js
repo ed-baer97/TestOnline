@@ -24,6 +24,7 @@ function sendSession(res, user, passwordHash, status = 200) {
   res.status(status).json({
     ok: true,
     login: user.login,
+    ...(user.email ? { email: user.email } : {}),
     role: user.role || 'host',
     displayName: user.displayName || user.login,
   })

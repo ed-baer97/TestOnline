@@ -10,6 +10,14 @@ export function normalizeAccount({ login, password }) {
   return { login: name, password: pass }
 }
 
+export function normalizeEmail(value) {
+  const email = cleanText(value).toLowerCase()
+  if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    fail('Укажите корректную почту')
+  }
+  return email
+}
+
 // Пустое значение — пароль не меняется.
 export function readPassword(value) {
   if (value == null || String(value) === '') return null

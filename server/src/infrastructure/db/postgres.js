@@ -183,6 +183,8 @@ const SCHEMA = [
    FROM ordered
    WHERE l.id = ordered.id AND l.sort_order IS NULL`,
   'ALTER TABLE lessons ALTER COLUMN sort_order SET DEFAULT 0',
+  'ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT',
+  'CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower ON users (lower(email)) WHERE email IS NOT NULL',
 ]
 
 function toPg(sql) {

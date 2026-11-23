@@ -1,5 +1,5 @@
 import crypto from 'node:crypto'
-import { allocateUniqueLogin, loginBaseFromName, normalizeAccount, readPassword } from '../domain/accounts.js'
+import { allocateUniqueLogin, loginBaseFromName, normalizeAccount, normalizeEmail, readPassword } from '../domain/accounts.js'
 import { fail } from '../domain/errors.js'
 import { classCaption } from '../domain/structure.js'
 import { cleanLabel, cleanText } from '../domain/text.js'
@@ -46,6 +46,7 @@ function presentProfile(row) {
   return {
     id: row.id,
     login: row.login,
+    ...(row.email ? { email: row.email } : {}),
     role: row.role || 'host',
     displayName: row.display_name || row.login,
     regionId: row.region_id || null,
@@ -156,12 +157,14 @@ export async function registerAccount(input) {
   if (role !== 'org') fail('Сейчас доступна регистрация только для роли «Директор школы»')
   const firstName = cleanLabel(input?.firstName, 2, 40, 'Имя')
   const lastName = cleanLabel(input?.lastName, 2, 40, 'Фамилия')
+  const email = normalizeEmail(input?.email)
   const password = String(input?.password ?? '')
   if (password.length < 6 || password.length > 72) fail('Пароль от 6 до 72 символов')
   const organizationId = typeof input?.organizationId === 'string' ? input.organizationId.trim() : ''
   if (!organizationId) fail('Выберите организацию')
   const org = await organizationsRepo.findOrganization(organizationId)
   if (!org) fail('Организация не найдена', 404)
+  if (await usersRepo.findByEmail(email)) fail('Эта почта уже зарегистрирована', 409)
 
   const displayName = `${firstName} ${lastName}`
   const base = loginBaseFromName(displayName)
@@ -186,9 +189,11 @@ export async function registerAccount(input) {
         regionId: null,
         organizationId: org.id,
         classId: null,
+        email,
       })
       return { user: await profile(id), passwordHash }
     } catch (error) {
+      if (usersRepo.isEmailTaken(error)) fail('Эта почта уже зарегистрирована', 409)
       if (usersRepo.isLoginTaken(error) && attempt < 4) continue
       if (usersRepo.isLoginTaken(error)) fail('Не удалось подобрать свободный логин. Попробуйте снова', 409)
       throw error

@@ -26,6 +26,8 @@ export default function Register() {
     setFirstName,
     lastName,
     setLastName,
+    email,
+    setEmail,
     password,
     setPassword,
     error,
@@ -137,6 +139,17 @@ export default function Register() {
             autoComplete="family-name"
             value={lastName}
             onChange={(event) => setLastName(event.target.value)}
+          />
+        </label>
+        <label>
+          {t('Почта')}
+          <input
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="name@example.com"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
           />
         </label>
         <label>

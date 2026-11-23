@@ -187,9 +187,9 @@ async function groupsForSave(input) {
 }
 
 async function saveLesson(id, input, seedKey) {
-  const title = optionalLabel(input?.title, 80, 'Название урока')
-  const titleKk = optionalLabel(input?.titleKk, 80, 'Название урока')
-  if (!title && !titleKk) fail('Название урока: от 2 до 80 символов')
+  const title = optionalLabel(input?.title, 200, 'Название урока')
+  const titleKk = optionalLabel(input?.titleKk, 200, 'Название урока')
+  if (!title && !titleKk) fail('Название урока: от 2 до 200 символов')
   const { groups, sectionId } = await groupsForSave(input)
   const format = readFormat(input)
   const hasRuQ = !isBlankQuestions(input?.questions)

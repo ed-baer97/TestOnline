@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { allocateUniqueLogin, loginBaseFromName, normalizeAccount, parseFioLines } from '../src/domain/accounts.js'
+import { allocateUniqueLogin, loginBaseFromName, normalizeAccount, normalizeEmail, parseFioLines } from '../src/domain/accounts.js'
 import { MAX_VIDEO } from '../src/domain/lesson.js'
 import { normalizeQuiz, scorePoints } from '../src/domain/quiz.js'
 
@@ -96,4 +96,11 @@ test('разбор текстового списка ФИО с номерами,
   ])
 
   assert.deepEqual(parseFioLines('ФИО'), [{ lineNumber: 1, displayName: 'ФИО' }])
+})
+
+test('проверка и нормализация почты', () => {
+  assert.equal(normalizeEmail('  Arman.Serikov@School.KZ '), 'arman.serikov@school.kz')
+  for (const bad of ['', '   ', 'not-an-email', 'a@b', 'a b@c.kz', `${'a'.repeat(250)}@x.kz`]) {
+    assert.throws(() => normalizeEmail(bad), /Укажите корректную почту/)
+  }
 })

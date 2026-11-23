@@ -3,7 +3,11 @@ import { count, countsById, placeholders } from './sql.js'
 
 // Ошибка вставки в users из-за уникального индекса по логину (без учёта регистра).
 export function isLoginTaken(error) {
-  return isUniqueViolation(error)
+  return isUniqueViolation(error) && error?.constraint !== 'users_email_lower'
+}
+
+export function isEmailTaken(error) {
+  return isUniqueViolation(error) && error?.constraint === 'users_email_lower'
 }
 
 export async function countUsers() {
@@ -22,13 +26,13 @@ export async function insertHost({ id, login, passwordHash, createdAt }) {
 }
 
 export async function findCredentials(login) {
-  return db.get('SELECT id, login, password_hash, role FROM users WHERE lower(login) = lower(?)', login)
+  return db.get('SELECT id, login, password_hash, role FROM users WHERE lower(login) = lower(?) OR lower(email) = lower(?)', login, login)
 }
 
 // Пользователь вместе с регионом, организацией, классом и курсом — для профиля и сессии.
 export async function findProfileRow(id) {
   return db.get(
-    `SELECT u.id, u.login, u.role, u.password_hash, u.display_name, u.region_id, u.organization_id, u.class_id,
+    `SELECT u.id, u.login, u.email, u.role, u.password_hash, u.display_name, u.region_id, u.organization_id, u.class_id,
             r.name AS region_name, o.name AS organization_name,
             c.name AS class_name, c.grade, c.band, t.name AS track_name
      FROM users u
@@ -49,6 +53,10 @@ export async function findByLogin(login) {
   return db.get('SELECT id FROM users WHERE lower(login) = lower(?)', login)
 }
 
+export async function findByEmail(email) {
+  return db.get('SELECT id FROM users WHERE lower(email) = lower(?)', email)
+}
+
 export async function insertSuperAdmin({ id, login, passwordHash, createdAt, displayName }) {
   await db.run(
     `INSERT INTO users (id, login, password_hash, created_at, role, display_name)
@@ -61,10 +69,10 @@ export async function insertSuperAdmin({ id, login, passwordHash, createdAt, dis
   )
 }
 
-export async function insertUser({ id, login, passwordHash, createdAt, role, displayName, regionId, organizationId, classId }) {
+export async function insertUser({ id, login, passwordHash, createdAt, role, displayName, regionId, organizationId, classId, email = null }) {
   await db.run(
-    `INSERT INTO users (id, login, password_hash, created_at, role, display_name, region_id, organization_id, class_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO users (id, login, password_hash, created_at, role, display_name, region_id, organization_id, class_id, email)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     login,
     passwordHash,
@@ -74,6 +82,7 @@ export async function insertUser({ id, login, passwordHash, createdAt, role, dis
     regionId,
     organizationId,
     classId,
+    email,
   )
 }
 
